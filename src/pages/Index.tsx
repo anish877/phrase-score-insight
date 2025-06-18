@@ -1,14 +1,15 @@
 
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DomainSubmission from '../components/DomainSubmission';
 import DomainExtraction from '../components/DomainExtraction';
 import KeywordDiscovery from '../components/KeywordDiscovery';
 import PhraseGeneration from '../components/PhraseGeneration';
 import AIQueryResults from '../components/AIQueryResults';
 import ResponseScoring from '../components/ResponseScoring';
-import Dashboard from '../components/Dashboard';
 
 const Index = () => {
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [domain, setDomain] = useState('');
   const [brandContext, setBrandContext] = useState('');
@@ -22,8 +23,7 @@ const Index = () => {
     'Keyword Discovery',
     'Phrase Generation',
     'AI Query Results',
-    'Response Scoring',
-    'Dashboard'
+    'Response Scoring'
   ];
 
   const nextStep = () => {
@@ -38,30 +38,35 @@ const Index = () => {
     }
   };
 
+  const completeAnalysis = () => {
+    // Navigate to the domain dashboard after analysis is complete
+    navigate(`/dashboard/${domain}`);
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-slate-200">
+      <header className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-slate-900">
-              AI Visibility & SEO Monitoring Platform
+            <h1 className="text-2xl font-bold text-gray-900">
+              AI Visibility Analysis
             </h1>
-            <div className="flex items-center space-x-2 text-sm text-slate-600">
+            <div className="flex items-center space-x-2 text-sm text-gray-600">
               Step {currentStep + 1} of {steps.length}
             </div>
           </div>
           
           {/* Progress Bar */}
           <div className="mt-6">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
+            <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
               {steps.map((step, index) => (
-                <span key={index} className={`font-medium ${index <= currentStep ? 'text-blue-600' : 'text-slate-400'}`}>
+                <span key={index} className={`font-medium ${index <= currentStep ? 'text-blue-600' : 'text-gray-400'}`}>
                   {step}
                 </span>
               ))}
             </div>
-            <div className="w-full bg-slate-200 rounded-full h-2">
+            <div className="w-full bg-gray-200 rounded-full h-2">
               <div 
                 className="bg-blue-600 h-2 rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
@@ -116,17 +121,7 @@ const Index = () => {
         {currentStep === 5 && (
           <ResponseScoring 
             queryResults={queryResults}
-            onNext={nextStep}
-            onPrev={prevStep}
-          />
-        )}
-        {currentStep === 6 && (
-          <Dashboard 
-            domain={domain}
-            brandContext={brandContext}
-            keywords={selectedKeywords}
-            phrases={generatedPhrases}
-            queryResults={queryResults}
+            onNext={completeAnalysis}
             onPrev={prevStep}
           />
         )}

@@ -27,7 +27,7 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({ domain, setDomain, 
   return (
     <div className="max-w-2xl mx-auto">
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold text-slate-800 mb-4">
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">
           Analyze Your Domain's AI Visibility
         </h2>
         <p className="text-lg text-slate-600">
@@ -35,17 +35,17 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({ domain, setDomain, 
         </p>
       </div>
 
-      <Card className="shadow-lg border-0 bg-white/70 backdrop-blur-sm">
-        <CardHeader className="text-center">
-          <CardTitle className="text-xl">Domain Analysis</CardTitle>
-          <CardDescription>
+      <Card className="shadow-sm border border-slate-200">
+        <CardHeader className="text-center pb-6">
+          <CardTitle className="text-xl text-slate-900">Domain Analysis</CardTitle>
+          <CardDescription className="text-slate-600">
             Start by entering the domain you want to analyze for AI visibility
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label htmlFor="domain" className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="domain" className="block text-sm font-medium text-slate-700 mb-3">
                 Domain Name
               </label>
               <Input
@@ -54,7 +54,7 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({ domain, setDomain, 
                 placeholder="example.com"
                 value={domain}
                 onChange={(e) => setDomain(e.target.value)}
-                className="text-lg py-3"
+                className="h-12 text-base border-slate-300 focus:border-blue-500 focus:ring-blue-500"
                 required
               />
               <p className="mt-2 text-sm text-slate-500">
@@ -64,7 +64,7 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({ domain, setDomain, 
             
             <Button 
               type="submit" 
-              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white py-3 text-lg"
+              className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-medium"
               disabled={isSubmitting || !domain.trim()}
             >
               {isSubmitting ? (
@@ -82,10 +82,10 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({ domain, setDomain, 
 
       <div className="mt-8 text-center">
         <p className="text-sm text-slate-500 mb-4">Trusted by leading brands</p>
-        <div className="flex justify-center space-x-8 opacity-50">
-          <div className="bg-slate-200 px-4 py-2 rounded text-slate-600 font-medium">Brand A</div>
-          <div className="bg-slate-200 px-4 py-2 rounded text-slate-600 font-medium">Brand B</div>
-          <div className="bg-slate-200 px-4 py-2 rounded text-slate-600 font-medium">Brand C</div>
+        <div className="flex justify-center space-x-6 opacity-60">
+          <div className="bg-slate-100 px-4 py-2 rounded-md text-slate-600 font-medium text-sm">Brand A</div>
+          <div className="bg-slate-100 px-4 py-2 rounded-md text-slate-600 font-medium text-sm">Brand B</div>
+          <div className="bg-slate-100 px-4 py-2 rounded-md text-slate-600 font-medium text-sm">Brand C</div>
         </div>
       </div>
     </div>

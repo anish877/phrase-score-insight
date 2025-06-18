@@ -39,12 +39,12 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <header className="bg-white shadow-sm border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+            <h1 className="text-2xl font-bold text-slate-900">
               AI Visibility & SEO Monitoring Platform
             </h1>
             <div className="flex items-center space-x-2 text-sm text-slate-600">
@@ -53,17 +53,17 @@ const Index = () => {
           </div>
           
           {/* Progress Bar */}
-          <div className="mt-4">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
+          <div className="mt-6">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
               {steps.map((step, index) => (
-                <span key={index} className={`${index <= currentStep ? 'text-purple-600 font-medium' : ''}`}>
+                <span key={index} className={`font-medium ${index <= currentStep ? 'text-blue-600' : 'text-slate-400'}`}>
                   {step}
                 </span>
               ))}
             </div>
             <div className="w-full bg-slate-200 rounded-full h-2">
               <div 
-                className="bg-gradient-to-r from-purple-600 to-blue-600 h-2 rounded-full transition-all duration-500 ease-out"
+                className="bg-blue-600 h-2 rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
               ></div>
             </div>

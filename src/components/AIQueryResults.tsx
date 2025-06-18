@@ -26,9 +26,9 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
   const [selectedModel, setSelectedModel] = useState('all');
 
   const aiModels = [
-    { name: 'GPT-4o', color: 'bg-green-100 text-green-800', latencyRange: [1.2, 3.5], costRange: [0.008, 0.024] },
-    { name: 'Claude 3', color: 'bg-blue-100 text-blue-800', latencyRange: [0.9, 2.8], costRange: [0.006, 0.018] },
-    { name: 'Gemini 1.5', color: 'bg-purple-100 text-purple-800', latencyRange: [1.1, 3.2], costRange: [0.005, 0.015] }
+    { name: 'GPT-4o', color: 'bg-blue-100 text-blue-800', latencyRange: [1.2, 3.5], costRange: [0.008, 0.024] },
+    { name: 'Claude 3', color: 'bg-green-100 text-green-800', latencyRange: [0.9, 2.8], costRange: [0.006, 0.018] },
+    { name: 'Gemini 1.5', color: 'bg-slate-100 text-slate-800', latencyRange: [1.1, 3.2], costRange: [0.005, 0.015] }
   ];
 
   useEffect(() => {
@@ -111,7 +111,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
   return (
     <div className="max-w-7xl mx-auto">
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold text-slate-800 mb-4">
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">
           AI Query Results
         </h2>
         <p className="text-lg text-slate-600">
@@ -120,12 +120,12 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
       </div>
 
       {isAnalyzing ? (
-        <Card className="shadow-lg border-0 bg-white/70 backdrop-blur-sm">
+        <Card className="shadow-sm border border-slate-200">
           <CardContent className="py-12">
             <div className="text-center space-y-6">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-200 border-t-purple-600 mx-auto"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-blue-600 mx-auto"></div>
               <div>
-                <h3 className="text-xl font-semibold text-slate-800 mb-2">Running AI Analysis...</h3>
+                <h3 className="text-xl font-semibold text-slate-900 mb-2">Running AI Analysis...</h3>
                 <p className="text-slate-600 mb-4">Currently processing: {currentPhrase}</p>
                 <div className="max-w-md mx-auto">
                   <div className="flex justify-between text-sm text-slate-500 mb-2">
@@ -134,7 +134,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
                   </div>
                   <div className="w-full bg-slate-200 rounded-full h-3">
                     <div 
-                      className="bg-gradient-to-r from-purple-600 to-blue-600 h-3 rounded-full transition-all duration-300"
+                      className="bg-blue-600 h-3 rounded-full transition-all duration-300"
                       style={{ width: `${progress}%` }}
                     ></div>
                   </div>
@@ -148,7 +148,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
           {/* Model Performance Stats */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {getModelStats().map((model) => (
-              <Card key={model.name} className="bg-white/70 backdrop-blur-sm">
+              <Card key={model.name} className="shadow-sm border border-slate-200">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between mb-3">
                     <Badge className={model.color}>{model.name}</Badge>
@@ -157,11 +157,11 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-slate-600">Avg Latency:</span>
-                      <span className="font-medium">{model.avgLatency}s</span>
+                      <span className="font-medium text-slate-900">{model.avgLatency}s</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">Total Cost:</span>
-                      <span className="font-medium">${model.totalCost}</span>
+                      <span className="font-medium text-slate-900">${model.totalCost}</span>
                     </div>
                   </div>
                 </CardContent>
@@ -170,21 +170,21 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
           </div>
 
           {/* Results Table */}
-          <Card className="shadow-lg border-0 bg-white/70 backdrop-blur-sm">
+          <Card className="shadow-sm border border-slate-200">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Query Results ({filteredResults.length})</CardTitle>
-                  <CardDescription>
+                  <CardTitle className="text-slate-900">Query Results ({filteredResults.length})</CardTitle>
+                  <CardDescription className="text-slate-600">
                     AI model responses to your generated phrases
                   </CardDescription>
                 </div>
                 <Tabs value={selectedModel} onValueChange={setSelectedModel}>
-                  <TabsList>
-                    <TabsTrigger value="all">All Models</TabsTrigger>
-                    <TabsTrigger value="GPT-4o">GPT-4o</TabsTrigger>
-                    <TabsTrigger value="Claude 3">Claude 3</TabsTrigger>
-                    <TabsTrigger value="Gemini 1.5">Gemini 1.5</TabsTrigger>
+                  <TabsList className="bg-slate-100">
+                    <TabsTrigger value="all" className="data-[state=active]:bg-white">All Models</TabsTrigger>
+                    <TabsTrigger value="GPT-4o" className="data-[state=active]:bg-white">GPT-4o</TabsTrigger>
+                    <TabsTrigger value="Claude 3" className="data-[state=active]:bg-white">Claude 3</TabsTrigger>
+                    <TabsTrigger value="Gemini 1.5" className="data-[state=active]:bg-white">Gemini 1.5</TabsTrigger>
                   </TabsList>
                 </Tabs>
               </div>
@@ -193,21 +193,21 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Phrase</TableHead>
-                      <TableHead>Model</TableHead>
-                      <TableHead>Response Preview</TableHead>
-                      <TableHead>Latency</TableHead>
-                      <TableHead>Cost</TableHead>
+                    <TableRow className="border-slate-200">
+                      <TableHead className="text-slate-700 font-medium">Phrase</TableHead>
+                      <TableHead className="text-slate-700 font-medium">Model</TableHead>
+                      <TableHead className="text-slate-700 font-medium">Response Preview</TableHead>
+                      <TableHead className="text-slate-700 font-medium">Latency</TableHead>
+                      <TableHead className="text-slate-700 font-medium">Cost</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredResults.slice(0, 20).map((result, index) => {
                       const model = aiModels.find(m => m.name === result.model);
                       return (
-                        <TableRow key={index}>
+                        <TableRow key={index} className="border-slate-100">
                           <TableCell className="font-medium max-w-xs">
-                            <div className="truncate" title={result.phrase}>
+                            <div className="truncate text-slate-900" title={result.phrase}>
                               {result.phrase}
                             </div>
                             <div className="text-xs text-slate-500">{result.keyword}</div>
@@ -221,10 +221,10 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
                             </div>
                           </TableCell>
                           <TableCell className="text-sm">
-                            <span className="font-mono">{result.latency}s</span>
+                            <span className="font-mono text-slate-700">{result.latency}s</span>
                           </TableCell>
                           <TableCell className="text-sm">
-                            <span className="font-mono">${result.cost}</span>
+                            <span className="font-mono text-slate-700">${result.cost}</span>
                           </TableCell>
                         </TableRow>
                       );
@@ -249,7 +249,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
         <Button 
           onClick={onNext}
           disabled={isAnalyzing || results.length === 0}
-          className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
         >
           Score Responses ({results.length} results)
         </Button>

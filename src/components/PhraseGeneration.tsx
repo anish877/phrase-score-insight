@@ -91,13 +91,13 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
 
   const getPhraseType = (phrase: string) => {
     if (phrase.toLowerCase().includes('what is') || phrase.toLowerCase().includes('how to')) {
-      return { type: 'Informational', color: 'bg-blue-100 text-blue-800' };
+      return { type: 'Informational', color: 'bg-slate-100 text-slate-700' };
     } else if (phrase.toLowerCase().includes('best') || phrase.toLowerCase().includes('top')) {
-      return { type: 'Commercial', color: 'bg-green-100 text-green-800' };
+      return { type: 'Commercial', color: 'bg-blue-100 text-blue-700' };
     } else if (phrase.toLowerCase().includes('reviews') || phrase.toLowerCase().includes('comparison')) {
-      return { type: 'Comparative', color: 'bg-purple-100 text-purple-800' };
+      return { type: 'Comparative', color: 'bg-green-100 text-green-700' };
     }
-    return { type: 'Generic', color: 'bg-gray-100 text-gray-800' };
+    return { type: 'Generic', color: 'bg-gray-100 text-gray-700' };
   };
 
   const totalPhrases = generatedPhrases.reduce((sum, item) => sum + item.phrases.length, 0);
@@ -105,7 +105,7 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
   return (
     <div className="max-w-6xl mx-auto">
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold text-slate-800 mb-4">
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">
           Phrase Generation
         </h2>
         <p className="text-lg text-slate-600">
@@ -114,11 +114,11 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
       </div>
 
       {isGenerating ? (
-        <Card className="shadow-lg border-0 bg-white/70 backdrop-blur-sm">
+        <Card className="shadow-sm border border-slate-200">
           <CardContent className="py-12">
             <div className="text-center space-y-4">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-200 border-t-purple-600 mx-auto"></div>
-              <h3 className="text-xl font-semibold text-slate-800">Generating Phrases...</h3>
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-blue-600 mx-auto"></div>
+              <h3 className="text-xl font-semibold text-slate-900">Generating Phrases...</h3>
               <p className="text-slate-600">Creating targeted search phrases for {keywords.length} keywords</p>
             </div>
           </CardContent>
@@ -127,27 +127,27 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
         <div className="space-y-6">
           {/* Summary Stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="bg-white/70 backdrop-blur-sm">
+            <Card className="shadow-sm border border-slate-200">
               <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-purple-600">{keywords.length}</div>
+                <div className="text-2xl font-bold text-blue-600">{keywords.length}</div>
                 <div className="text-sm text-slate-600">Keywords</div>
               </CardContent>
             </Card>
-            <Card className="bg-white/70 backdrop-blur-sm">
+            <Card className="shadow-sm border border-slate-200">
               <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-blue-600">{totalPhrases}</div>
                 <div className="text-sm text-slate-600">Total Phrases</div>
               </CardContent>
             </Card>
-            <Card className="bg-white/70 backdrop-blur-sm">
+            <Card className="shadow-sm border border-slate-200">
               <CardContent className="p-4 text-center">  
-                <div className="text-2xl font-bold text-green-600">{Math.round(totalPhrases / keywords.length)}</div>
+                <div className="text-2xl font-bold text-blue-600">{Math.round(totalPhrases / keywords.length)}</div>
                 <div className="text-sm text-slate-600">Avg per Keyword</div>
               </CardContent>
             </Card>
-            <Card className="bg-white/70 backdrop-blur-sm">
+            <Card className="shadow-sm border border-slate-200">
               <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-orange-600">{totalPhrases * 3}</div>
+                <div className="text-2xl font-bold text-blue-600">{totalPhrases * 3}</div>
                 <div className="text-sm text-slate-600">AI Queries</div>
               </CardContent>
             </Card>
@@ -156,13 +156,13 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
           {/* Generated Phrases */}
           <div className="space-y-6">
             {generatedPhrases.map((item) => (
-              <Card key={item.keyword} className="shadow-lg border-0 bg-white/70 backdrop-blur-sm">
+              <Card key={item.keyword} className="shadow-sm border border-slate-200">
                 <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
+                  <CardTitle className="flex items-center justify-between text-slate-900">
                     <span>{item.keyword}</span>
-                    <Badge variant="secondary">{item.phrases.length} phrases</Badge>
+                    <Badge variant="secondary" className="bg-slate-100 text-slate-700">{item.phrases.length} phrases</Badge>
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className="text-slate-600">
                     Search phrases generated for this keyword
                   </CardDescription>
                 </CardHeader>
@@ -173,7 +173,7 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
                       const isEditing = editingPhrase?.keyword === item.keyword && editingPhrase?.index === index;
                       
                       return (
-                        <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                        <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
                           <div className="flex items-center space-x-3 flex-1">
                             <Badge className={phraseType.color}>
                               {phraseType.type}
@@ -183,10 +183,10 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
                                 <Input
                                   value={editValue}
                                   onChange={(e) => setEditValue(e.target.value)}
-                                  className="flex-1"
+                                  className="flex-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
                                   onKeyPress={(e) => e.key === 'Enter' && saveEdit()}
                                 />
-                                <Button size="sm" onClick={saveEdit}>
+                                <Button size="sm" onClick={saveEdit} className="bg-blue-600 hover:bg-blue-700">
                                   <Save className="h-4 w-4" />
                                 </Button>
                                 <Button size="sm" variant="outline" onClick={cancelEdit}>
@@ -201,13 +201,13 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
                             <div className="flex items-center space-x-2">
                               <button
                                 onClick={() => startEditing(item.keyword, index, phrase)}
-                                className="text-slate-400 hover:text-slate-600"
+                                className="text-slate-400 hover:text-slate-600 transition-colors"
                               >
                                 <Edit2 className="h-4 w-4" />
                               </button>
                               <button
                                 onClick={() => removePhrase(item.keyword, index)}
-                                className="text-slate-400 hover:text-red-500"
+                                className="text-slate-400 hover:text-red-500 transition-colors"
                               >
                                 <X className="h-4 w-4" />
                               </button>
@@ -231,7 +231,7 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
         <Button 
           onClick={onNext}
           disabled={isGenerating || totalPhrases === 0}
-          className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
         >
           Run AI Analysis ({totalPhrases} phrases)
         </Button>

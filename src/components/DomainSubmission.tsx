@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { CheckCircle, Globe, Shield, TrendingUp, Clock } from 'lucide-react';
 
 interface DomainSubmissionProps {
   domain: string;
@@ -12,80 +14,242 @@ interface DomainSubmissionProps {
 
 const DomainSubmission: React.FC<DomainSubmissionProps> = ({ domain, setDomain, onNext }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [domainError, setDomainError] = useState('');
+
+  const validateDomain = (domain: string) => {
+    const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?:\.[a-zA-Z]{2,})+$/;
+    return domainRegex.test(domain);
+  };
+
+  const handleDomainChange = (value: string) => {
+    setDomain(value);
+    setDomainError('');
+    
+    if (value && !validateDomain(value)) {
+      setDomainError('Please enter a valid domain (e.g., example.com)');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!domain.trim()) return;
+    if (!domain.trim() || domainError) return;
     
     setIsSubmitting(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Simulate validation
+    await new Promise(resolve => setTimeout(resolve, 1500));
     setIsSubmitting(false);
     onNext();
   };
 
+  const features = [
+    {
+      icon: <TrendingUp className="h-5 w-5 text-blue-600" />,
+      title: "AI Visibility Analysis",
+      description: "Comprehensive analysis across 15+ AI models including GPT, Claude, and Gemini"
+    },
+    {
+      icon: <Shield className="h-5 w-5 text-green-600" />,
+      title: "Brand Protection",
+      description: "Monitor how AI systems represent your brand and identify potential risks"
+    },
+    {
+      icon: <Clock className="h-5 w-5 text-purple-600" />,
+      title: "Real-time Monitoring",
+      description: "Continuous tracking with automated alerts for significant changes"
+    }
+  ];
+
+  const testimonials = [
+    {
+      company: "TechCorp",
+      logo: "TC",
+      quote: "Increased our AI visibility score by 40% in just 3 months",
+      industry: "Technology"
+    },
+    {
+      company: "HealthPlus",
+      logo: "HP",
+      quote: "Essential for understanding our digital brand presence",
+      industry: "Healthcare"
+    },
+    {
+      company: "FinanceHub",
+      logo: "FH",
+      quote: "Game-changing insights for our marketing strategy",
+      industry: "Finance"
+    }
+  ];
+
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold text-slate-900 mb-4">
-          Analyze Your Domain's AI Visibility
-        </h2>
-        <p className="text-lg text-slate-600">
-          Enter your domain to discover how AI models respond to queries about your brand
+    <div className="max-w-6xl mx-auto">
+      {/* Header Section */}
+      <div className="text-center mb-12">
+        <div className="flex items-center justify-center mb-6">
+          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center">
+            <Globe className="h-8 w-8 text-white" />
+          </div>
+        </div>
+        <h1 className="text-4xl font-bold text-slate-900 mb-4">
+          AI Visibility Intelligence Platform
+        </h1>
+        <p className="text-xl text-slate-600 max-w-3xl mx-auto leading-relaxed">
+          Understand, monitor, and optimize how AI systems represent your brand. 
+          Get comprehensive insights across the AI ecosystem with enterprise-grade analytics.
         </p>
       </div>
 
-      <Card className="shadow-sm border border-slate-200">
-        <CardHeader className="text-center pb-6">
-          <CardTitle className="text-xl text-slate-900">Domain Analysis</CardTitle>
-          <CardDescription className="text-slate-600">
-            Start by entering the domain you want to analyze for AI visibility
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="domain" className="block text-sm font-medium text-slate-700 mb-3">
-                Domain Name
-              </label>
-              <Input
-                id="domain"
-                type="text"
-                placeholder="example.com"
-                value={domain}
-                onChange={(e) => setDomain(e.target.value)}
-                className="h-12 text-base border-slate-300 focus:border-blue-500 focus:ring-blue-500"
-                required
-              />
-              <p className="mt-2 text-sm text-slate-500">
-                Enter without http:// or https://
-              </p>
-            </div>
-            
-            <Button 
-              type="submit" 
-              className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-medium"
-              disabled={isSubmitting || !domain.trim()}
-            >
-              {isSubmitting ? (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Processing...
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+        {/* Main Form */}
+        <div className="lg:col-span-2">
+          <Card className="shadow-lg border-0 bg-white">
+            <CardHeader className="text-center pb-8">
+              <CardTitle className="text-2xl text-slate-900 mb-2">Start Your Analysis</CardTitle>
+              <CardDescription className="text-lg text-slate-600">
+                Enter your domain to begin comprehensive AI visibility analysis
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-8 pb-8">
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="space-y-4">
+                  <label htmlFor="domain" className="block text-sm font-semibold text-slate-700 mb-3">
+                    Domain Name
+                  </label>
+                  <div className="relative">
+                    <Input
+                      id="domain"
+                      type="text"
+                      placeholder="yourdomain.com"
+                      value={domain}
+                      onChange={(e) => handleDomainChange(e.target.value)}
+                      className={`h-14 text-lg px-4 border-2 transition-all duration-200 ${
+                        domainError 
+                          ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
+                          : 'border-slate-200 focus:border-blue-500 focus:ring-blue-500'
+                      }`}
+                      required
+                    />
+                    {domain && !domainError && (
+                      <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
+                        <CheckCircle className="h-5 w-5 text-green-500" />
+                      </div>
+                    )}
+                  </div>
+                  {domainError && (
+                    <p className="text-sm text-red-600 mt-2">{domainError}</p>
+                  )}
+                  <p className="text-sm text-slate-500">
+                    Enter without http:// or https:// (e.g., example.com)
+                  </p>
                 </div>
-              ) : (
-                'Start Analysis'
-              )}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
 
-      <div className="mt-8 text-center">
-        <p className="text-sm text-slate-500 mb-4">Trusted by leading brands</p>
-        <div className="flex justify-center space-x-6 opacity-60">
-          <div className="bg-slate-100 px-4 py-2 rounded-md text-slate-600 font-medium text-sm">Brand A</div>
-          <div className="bg-slate-100 px-4 py-2 rounded-md text-slate-600 font-medium text-sm">Brand B</div>
-          <div className="bg-slate-100 px-4 py-2 rounded-md text-slate-600 font-medium text-sm">Brand C</div>
+                {/* Analysis Preview */}
+                <div className="bg-slate-50 rounded-lg p-6 border border-slate-200">
+                  <h4 className="font-semibold text-slate-900 mb-4">What we'll analyze:</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <span className="text-slate-700">Brand mentions across AI models</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <span className="text-slate-700">Keyword performance analysis</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                      <span className="text-slate-700">Competitive positioning</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                      <span className="text-slate-700">Content recommendations</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <Button 
+                  type="submit" 
+                  className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg transition-all duration-200"
+                  disabled={isSubmitting || !domain.trim() || !!domainError}
+                >
+                  {isSubmitting ? (
+                    <div className="flex items-center">
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-3"></div>
+                      Validating Domain...
+                    </div>
+                  ) : (
+                    'Begin AI Visibility Analysis'
+                  )}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Features Sidebar */}
+        <div className="space-y-6">
+          <Card className="border-0 bg-slate-50">
+            <CardHeader>
+              <CardTitle className="text-lg text-slate-900">Platform Features</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {features.map((feature, index) => (
+                <div key={index} className="flex space-x-4">
+                  <div className="flex-shrink-0">
+                    {feature.icon}
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-900 text-sm mb-1">
+                      {feature.title}
+                    </h4>
+                    <p className="text-sm text-slate-600 leading-relaxed">
+                      {feature.description}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* Trust Indicators */}
+          <Card className="border-0 bg-blue-50">
+            <CardContent className="p-6">
+              <div className="text-center space-y-4">
+                <div className="flex justify-center space-x-2">
+                  <Badge className="bg-blue-100 text-blue-800 border-blue-200">SOC 2 Compliant</Badge>
+                  <Badge className="bg-green-100 text-green-800 border-green-200">GDPR Ready</Badge>
+                </div>
+                <p className="text-sm text-slate-600">
+                  Enterprise-grade security and compliance standards
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Customer Testimonials */}
+      <div className="border-t border-slate-200 pt-12">
+        <div className="text-center mb-8">
+          <h3 className="text-2xl font-bold text-slate-900 mb-2">Trusted by Industry Leaders</h3>
+          <p className="text-slate-600">See how organizations are optimizing their AI visibility</p>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {testimonials.map((testimonial, index) => (
+            <Card key={index} className="border border-slate-200 hover:shadow-md transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex items-center space-x-4 mb-4">
+                  <div className="w-12 h-12 bg-slate-200 rounded-lg flex items-center justify-center">
+                    <span className="font-bold text-slate-700">{testimonial.logo}</span>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-900">{testimonial.company}</h4>
+                    <Badge variant="secondary" className="text-xs">{testimonial.industry}</Badge>
+                  </div>
+                </div>
+                <p className="text-slate-600 italic">"{testimonial.quote}"</p>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     </div>

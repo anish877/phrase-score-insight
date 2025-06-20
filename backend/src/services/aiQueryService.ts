@@ -1,10 +1,13 @@
 import axios from 'axios';
 import OpenAI from 'openai';
 
-const GEMINI_API_KEY = 'AIzaSyAsZ7bQiqUZdrAn9FVW1zUUjx6h1JsPZzg'; // Replace with your Gemini API Key
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
-const OPENAI_API_KEY = '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';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not set in environment variables');
+if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not set in environment variables');
 
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 

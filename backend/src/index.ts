@@ -1,13 +1,10 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import 'dotenv/config';
 import domainRouter from './routes/domain';
 import keywordsRouter from './routes/keywords';
 import phrasesRouter from './routes/phrases';
 import aiQueriesRouter from './routes/ai-queries';
-
-// Load environment variables
-dotenv.config();
 
 const app = express();
 

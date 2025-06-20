@@ -1,8 +1,10 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 
-const GEMINI_API_KEY = 'AIzaSyAsZ7bQiqUZdrAn9FVW1zUUjx6h1JsPZzg';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+
+if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not set in environment variables');
 
 export interface GeminiExtractionResult {
   pagesScanned: number;

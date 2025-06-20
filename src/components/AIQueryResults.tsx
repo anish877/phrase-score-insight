@@ -93,7 +93,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
     const modelProgress: {[model: string]: number} = { 'GPT-4o': 0, 'Claude 3': 0, 'Gemini 1.5': 0 };
     const modelDone: {[model: string]: number} = { 'GPT-4o': 0, 'Claude 3': 0, 'Gemini 1.5': 0 };
 
-    fetchEventSource(`http://localhost:3001/api/ai-queries/${domainId}`, {
+    fetchEventSource(`https://phrase-score-insight.onrender.com/api/ai-queries/${domainId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

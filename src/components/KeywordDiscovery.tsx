@@ -65,7 +65,7 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
     setProgressMsg('Connecting to keyword engine...');
     setKeywords([]);
     const ctrl = new AbortController();
-    fetchEventSource(`http://localhost:3001/api/keywords/stream/${domainId}`, {
+    fetchEventSource(`https://phrase-score-insight.onrender.com/api/keywords/stream/${domainId}`, {
       signal: ctrl.signal,
       onopen(_response) {
         setProgressMsg('Connected. Discovering keywords...');

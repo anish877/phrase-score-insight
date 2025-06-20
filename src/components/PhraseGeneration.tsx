@@ -34,7 +34,7 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
       setGeneratedPhrases([]);
       setStats({ totalKeywords: 0, totalPhrases: 0, avgPerKeyword: 0, aiQueries: 0 });
       const phrasesMap: Record<string, string[]> = {};
-      const eventSource = new EventSource(`http://localhost:3001/api/phrases/${domainId}`);
+      const eventSource = new EventSource(`https://phrase-score-insight.onrender.com/api/phrases/${domainId}`);
 
       eventSource.addEventListener('progress', (e: MessageEvent) => {
         const data = JSON.parse(e.data);

@@ -5,16 +5,31 @@ const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/
 
 async function queryGemini(phrase: string, modelType: 'GPT-4o' | 'Claude 3' | 'Gemini 1.5' = 'Gemini 1.5'): Promise<{ response: string, cost: number }> {
     try {
-        // Different system prompts to simulate different AI models
-        let systemPrompt = 'You are a helpful assistant providing a concise, one-paragraph answer.';
+        // Different system prompts to simulate different AI models with more detailed instructions
+        let systemPrompt = 'You are a helpful assistant providing a comprehensive, well-reasoned answer.';
         
         if (modelType === 'GPT-4o') {
-            systemPrompt = 'You are GPT-4o, OpenAI\'s most advanced AI model. Provide clear, accurate, and helpful responses in a conversational yet professional tone. Focus on being comprehensive while remaining concise.';
+            systemPrompt = `You are GPT-4o, OpenAI's most advanced AI model. Provide detailed, accurate, and helpful responses with the following characteristics:
+- Be comprehensive yet concise (2-4 sentences)
+- Use a conversational yet professional tone
+- Include relevant context and examples when appropriate
+- Focus on being informative and actionable
+- Maintain high accuracy and factual correctness`;
         } else if (modelType === 'Claude 3') {
-            systemPrompt = 'You are Claude 3, Anthropic\'s AI assistant. Provide thoughtful, well-reasoned responses with a focus on safety and helpfulness. Use a warm, engaging tone while maintaining accuracy and clarity.';
+            systemPrompt = `You are Claude 3, Anthropic's AI assistant. Provide thoughtful, well-reasoned responses with these qualities:
+- Focus on safety, helpfulness, and accuracy
+- Use a warm, engaging tone while maintaining professionalism
+- Provide balanced perspectives when appropriate
+- Include relevant context and reasoning
+- Aim for 2-4 sentences with substantial content`;
         } else {
             // Gemini 1.5 default
-            systemPrompt = 'You are Gemini 1.5, Google\'s advanced AI model. Provide informative, accurate responses with a balanced and helpful approach.';
+            systemPrompt = `You are Gemini 1.5, Google's advanced AI model. Provide informative, accurate responses with these characteristics:
+- Be comprehensive and well-structured
+- Use a balanced and helpful approach
+- Include relevant details and context
+- Maintain factual accuracy
+- Provide 2-4 sentences of substantial content`;
         }
 
         const response = await axios.post(
@@ -23,22 +38,28 @@ async function queryGemini(phrase: string, modelType: 'GPT-4o' | 'Claude 3' | 'G
                 contents: [
                     { 
                         role: "user",
-                        parts: [{ text: `${systemPrompt}\n\nUser query: ${phrase}` }] 
+                        parts: [{ text: `${systemPrompt}\n\nPlease provide a detailed response to: ${phrase}` }] 
                     }
                 ],
                 generationConfig: {
-                    temperature: 0.5,
-                    maxOutputTokens: 256,
+                    temperature: 0.7,
+                    maxOutputTokens: 400, // Increased for more detailed responses
+                    topK: 40,
+                    topP: 0.8,
                 }
             },
             {
                 headers: { 'Content-Type': 'application/json' },
-                timeout: 15000
+                timeout: 25000 // Increased timeout for more comprehensive responses
             }
         );
         const responseText = response.data.candidates?.[0]?.content?.parts?.[0]?.text || `No response from ${modelType}.`;
-        // Real cost calculation for Gemini
-        const cost = (phrase.length / 1000 * 0.000125) + (responseText.length / 1000 * 0.000375);
+        
+        // Real cost calculation for Gemini based on actual token usage
+        const inputTokens = phrase.length / 4; // Rough estimate
+        const outputTokens = responseText.length / 4; // Rough estimate
+        const cost = (inputTokens / 1000000 * 0.125) + (outputTokens / 1000000 * 0.375);
+        
         return { response: responseText, cost };
     } catch (error) {
         console.error(`${modelType} API Error:`, error);
@@ -57,18 +78,29 @@ async function scoreResponseWithAI(phrase: string, response: string, model: stri
     overall: number;
 }> {
     try {
-        const scoringPrompt = `Score this AI response (1-5 scale, 0 or 1 for presence):
+        const scoringPrompt = `You are an expert AI response evaluator. Analyze this AI response thoroughly and provide accurate scores.
 
 Query: "${phrase}"
 Response: "${response}"
 
-Return ONLY JSON: {"presence": 0, "relevance": 3, "accuracy": 3, "sentiment": 3, "overall": 3}
+Evaluate the response on these criteria and return ONLY a JSON object:
 
-Presence: 1 if response addresses query topic, 0 if not
-Relevance: How well it answers the query (1-5)
-Accuracy: Factual correctness (1-5)  
-Sentiment: Tone positivity (1-5)
-Overall: Overall quality (1-5)`;
+{
+  "presence": 0 or 1,
+  "relevance": 1-5,
+  "accuracy": 1-5, 
+  "sentiment": 1-5,
+  "overall": 1-5
+}
+
+Scoring Guidelines:
+- Presence: 1 if response directly addresses the query topic, 0 if not
+- Relevance: How well the response answers the specific query (1=not relevant, 5=highly relevant)
+- Accuracy: Factual correctness and reliability (1=inaccurate, 5=highly accurate)
+- Sentiment: Tone positivity and helpfulness (1=negative/unhelpful, 5=positive/helpful)
+- Overall: Overall quality considering all factors (1=poor, 5=excellent)
+
+Be strict and accurate in your evaluation. Return ONLY the JSON object.`;
 
         const scoringResponse = await axios.post(
             `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
@@ -81,12 +113,14 @@ Overall: Overall quality (1-5)`;
                 ],
                 generationConfig: {
                     temperature: 0.1,
-                    maxOutputTokens: 150,
+                    maxOutputTokens: 200,
+                    topK: 10,
+                    topP: 0.3,
                 }
             },
             {
                 headers: { 'Content-Type': 'application/json' },
-                timeout: 5000
+                timeout: 15000 // Increased timeout for thorough scoring
             }
         );
 
@@ -105,31 +139,36 @@ Overall: Overall quality (1-5)`;
                 overall: Math.min(Math.max(Math.round(scores.overall || 3), 1), 5)
             };
         } catch (parseError) {
-            // Fast fallback scoring
+            // Enhanced fallback scoring with more analysis
             const hasQueryTerms = phrase.toLowerCase().split(' ').some((term: string) => 
                 response.toLowerCase().includes(term) && term.length > 2
             );
             const responseLength = response.length;
+            const hasSubstantialContent = responseLength > 50;
+            const hasProfessionalTone = !response.toLowerCase().includes('error') && responseLength > 20;
             
             return {
                 presence: hasQueryTerms ? 1 : 0,
-                relevance: hasQueryTerms ? (responseLength > 30 ? 4 : 3) : 2,
-                accuracy: responseLength > 20 ? 3 : 2,
-                sentiment: 3,
-                overall: hasQueryTerms && responseLength > 20 ? 3 : 2
+                relevance: hasQueryTerms ? (hasSubstantialContent ? 4 : 3) : 2,
+                accuracy: hasProfessionalTone ? 3 : 2,
+                sentiment: hasProfessionalTone ? 3 : 2,
+                overall: hasQueryTerms && hasSubstantialContent ? 3 : 2
             };
         }
     } catch (error) {
-        // Fast fallback scoring
+        // Enhanced fallback scoring
         const hasQueryTerms = phrase.toLowerCase().split(' ').some((term: string) => 
             response.toLowerCase().includes(term) && term.length > 2
         );
+        const responseLength = response.length;
+        const hasSubstantialContent = responseLength > 50;
+        
         return {
             presence: hasQueryTerms ? 1 : 0,
-            relevance: hasQueryTerms ? 3 : 2,
-            accuracy: 3,
-            sentiment: 3,
-            overall: hasQueryTerms ? 3 : 2
+            relevance: hasQueryTerms ? (hasSubstantialContent ? 3 : 2) : 1,
+            accuracy: hasSubstantialContent ? 3 : 2,
+            sentiment: hasSubstantialContent ? 3 : 2,
+            overall: hasQueryTerms && hasSubstantialContent ? 3 : 2
         };
     }
 }

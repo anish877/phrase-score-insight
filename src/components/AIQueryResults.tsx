@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 
 export interface AIQueryResult {
@@ -67,6 +69,10 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
   const [selectedModel, setSelectedModel] = useState('all');
   const resultsRef = useRef<AIQueryResult[]>([]);
   const [modelStatus, setModelStatus] = useState<{[model: string]: string}>({});
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [resultsPerPage, setResultsPerPage] = useState(25);
 
   const aiModels = [
     { name: 'GPT-4o', color: 'bg-blue-100 text-blue-800' },
@@ -87,11 +93,21 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
     setResults([]);
     setStats(null);
     setModelStatus({ 'GPT-4o': 'Waiting', 'Claude 3': 'Waiting', 'Gemini 1.5': 'Waiting' });
+    setCurrentPage(1); // Reset to first page when starting new analysis
 
     const ctrl = new AbortController();
     const totalExpected = phrases.reduce((sum, item) => sum + item.phrases.length, 0) * aiModels.length;
 
-    fetchEventSource(`https://phrase-score-insight.onrender.com/api/ai-queries/${domainId}`, {
+    // Add connection timeout
+    const connectionTimeout = setTimeout(() => {
+      if (results.length === 0) {
+        setCurrentPhrase('Connection timeout. Please try again.');
+        setIsAnalyzing(false);
+        ctrl.abort();
+      }
+    }, 30000); // 30 second connection timeout
+
+    fetchEventSource(`http://localhost:3001/api/ai-queries/${domainId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -99,6 +115,8 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
       body: JSON.stringify({ phrases }),
       signal: ctrl.signal,
       onmessage(ev) {
+        clearTimeout(connectionTimeout); // Clear timeout on first message
+        
         if (ev.event === 'complete') {
           setIsAnalyzing(false);
           setCurrentPhrase('Analysis complete!');
@@ -131,6 +149,10 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
           if (scoringMatch) {
             msg = `Scoring: "${scoringMatch[1]}"...`;
           }
+          // If the message contains batch information, show it
+          if (msg.includes('Processing') && msg.includes('batches')) {
+            msg = `Processing ${totalExpected} queries in batches...`;
+          }
           setCurrentPhrase(msg);
         } else if (ev.event === 'error') {
           try {
@@ -143,10 +165,12 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
         }
       },
       onclose() {
+        clearTimeout(connectionTimeout);
         setIsAnalyzing(false);
         ctrl.abort();
       },
       onerror(err) {
+        clearTimeout(connectionTimeout);
         setIsAnalyzing(false);
         setCurrentPhrase('An error occurred during analysis.');
         ctrl.abort();
@@ -155,6 +179,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
     });
 
     return () => {
+      clearTimeout(connectionTimeout);
       ctrl.abort();
     };
   }, [phrases, domainId, setQueryResults, setQueryStats]);
@@ -162,6 +187,12 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
   const filteredResults = selectedModel === 'all' 
     ? results 
     : results.filter(r => r.model === selectedModel);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredResults.length / resultsPerPage);
+  const startIndex = (currentPage - 1) * resultsPerPage;
+  const endIndex = startIndex + resultsPerPage;
+  const currentResults = filteredResults.slice(startIndex, endIndex);
 
   // Use stats from backend if available, otherwise fallback to local calculation
   const modelStats = stats?.models || aiModels.map(model => ({
@@ -179,6 +210,16 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
     avgSentiment: 0,
     avgOverall: 0
   };
+
+  // Pagination handlers
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+  };
+
+  const goToFirstPage = () => goToPage(1);
+  const goToLastPage = () => goToPage(totalPages);
+  const goToPreviousPage = () => goToPage(currentPage - 1);
+  const goToNextPage = () => goToPage(currentPage + 1);
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -312,7 +353,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredResults.slice(0, 50).map((result, index) => {
+                    {currentResults.map((result, index) => {
                       const model = aiModels.find(m => m.name === result.model);
                       return (
                         <TableRow key={index} className="border-slate-100">
@@ -354,9 +395,96 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
                   </TableBody>
                 </Table>
               </div>
-              {filteredResults.length > 50 && (
-                <div className="text-center mt-4 text-sm text-slate-500">
-                  Showing first 50 of {filteredResults.length} results
+
+              {/* Pagination Controls */}
+              {filteredResults.length > 0 && (
+                <div className="flex items-center justify-between mt-6">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-slate-600">Results per page:</span>
+                    <Select value={resultsPerPage.toString()} onValueChange={(value) => {
+                      setResultsPerPage(Number(value));
+                      setCurrentPage(1); // Reset to first page when changing page size
+                    }}>
+                      <SelectTrigger className="w-20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="25">25</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-slate-600">
+                      Showing {startIndex + 1} to {Math.min(endIndex, filteredResults.length)} of {filteredResults.length} results
+                    </span>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={goToFirstPage}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronsLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={goToPreviousPage}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    
+                    <div className="flex items-center space-x-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum;
+                        if (totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          pageNum = currentPage - 2 + i;
+                        }
+                        
+                        return (
+                          <Button
+                            key={pageNum}
+                            variant={currentPage === pageNum ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => goToPage(pageNum)}
+                            className="w-8 h-8"
+                          >
+                            {pageNum}
+                          </Button>
+                        );
+                      })}
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={goToNextPage}
+                      disabled={currentPage === totalPages}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={goToLastPage}
+                      disabled={currentPage === totalPages}
+                    >
+                      <ChevronsRight className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>

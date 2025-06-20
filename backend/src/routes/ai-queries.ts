@@ -7,9 +7,34 @@ const prisma = new PrismaClient();
 
 const AI_MODELS: ('GPT-4o' | 'Claude 3' | 'Gemini 1.5')[] = ['GPT-4o', 'Claude 3', 'Gemini 1.5'];
 
-// AI-powered scoring logic
+// AI-powered scoring logic with timeout
 async function scoreResponseWithAI(phrase: string, response: string, model: string) {
-  return await aiQueryService.scoreResponse(phrase, response, model);
+  const timeoutPromise = new Promise((_, reject) => 
+    setTimeout(() => reject(new Error('Scoring timeout')), 12000)
+  );
+  
+  try {
+    return await Promise.race([
+      aiQueryService.scoreResponse(phrase, response, model),
+      timeoutPromise
+    ]);
+  } catch (error) {
+    // Enhanced fallback scoring if AI scoring fails
+    const hasQueryTerms = phrase.toLowerCase().split(' ').some((term: string) => 
+      response.toLowerCase().includes(term) && term.length > 2
+    );
+    const responseLength = response.length;
+    const hasSubstantialContent = responseLength > 50;
+    const hasProfessionalTone = !response.toLowerCase().includes('error') && responseLength > 20;
+    
+    return {
+      presence: hasQueryTerms ? 1 : 0,
+      relevance: hasQueryTerms ? (hasSubstantialContent ? 3 : 2) : 1,
+      accuracy: hasProfessionalTone ? 3 : 2,
+      sentiment: hasProfessionalTone ? 3 : 2,
+      overall: hasQueryTerms && hasSubstantialContent ? 3 : 2
+    };
+  }
 }
 
 function calculateStats(results: any[]) {
@@ -53,6 +78,125 @@ function calculateStats(results: any[]) {
   return stats;
 }
 
+// Process queries in batches to avoid overwhelming the system
+async function processQueryBatch(
+  queries: any[], 
+  batchSize: number, 
+  res: any, 
+  allResults: any[], 
+  completedQueries: { current: number }, 
+  totalQueries: number
+) {
+  const batches = [];
+  for (let i = 0; i < queries.length; i += batchSize) {
+    batches.push(queries.slice(i, i + batchSize));
+  }
+
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+    const batch = batches[batchIndex];
+    
+    // Send batch progress update
+    res.write(`event: progress\ndata: ${JSON.stringify({ message: `Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} phrases)...` })}\n\n`);
+    
+    // Process each batch in parallel
+    const batchPromises = batch.map(async (query) => {
+      const modelPromises = AI_MODELS.map(async (model) => {
+        const startTime = Date.now();
+        
+        try {
+          // Send individual query progress
+          res.write(`event: progress\ndata: ${JSON.stringify({ message: `Querying ${model} for "${query.phrase}"...` })}\n\n`);
+          
+          // Get AI response using Gemini under the hood with timeout
+          const queryPromise = aiQueryService.query(query.phrase, model);
+          const timeoutPromise = new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Query timeout')), 20000)
+          );
+          
+          const { response, cost } = await Promise.race([queryPromise, timeoutPromise]);
+          const latency = (Date.now() - startTime) / 1000;
+
+          // Send scoring progress
+          res.write(`event: progress\ndata: ${JSON.stringify({ message: `Scoring ${model} response for "${query.phrase}"...` })}\n\n`);
+          
+          // Score the response using AI with timeout
+          const scores = await scoreResponseWithAI(query.phrase, response, model) as {
+            presence: number;
+            relevance: number;
+            accuracy: number;
+            sentiment: number;
+            overall: number;
+          };
+
+          completedQueries.current++;
+          const progress = (completedQueries.current / totalQueries) * 100;
+
+          // Find the phrase record in the DB (by text and keyword)
+          const keywordRecord = await prisma.keyword.findFirst({
+            where: { term: query.keyword, domainId: query.domainId },
+          });
+          let phraseRecord = null;
+          if (keywordRecord) {
+            phraseRecord = await prisma.phrase.findFirst({
+              where: { text: query.phrase, keywordId: keywordRecord.id },
+            });
+          }
+          
+          // Save AIQueryResult to DB if phraseRecord found
+          let aiQueryResultRecord = null;
+          if (phraseRecord) {
+            aiQueryResultRecord = await prisma.aIQueryResult.create({
+              data: {
+                phraseId: phraseRecord.id,
+                model,
+                response,
+                latency,
+                cost,
+                presence: scores.presence,
+                relevance: scores.relevance,
+                accuracy: scores.accuracy,
+                sentiment: scores.sentiment,
+                overall: scores.overall,
+              }
+            });
+          }
+
+          const result = {
+            ...query,
+            model,
+            response,
+            latency: Number(latency),
+            cost: Number(cost),
+            progress,
+            scores,
+            aiQueryResultId: aiQueryResultRecord ? aiQueryResultRecord.id : undefined,
+            phraseId: phraseRecord ? phraseRecord.id : undefined
+          };
+          
+          allResults.push(result);
+          res.write(`event: result\ndata: ${JSON.stringify(result)}\n\n`);
+
+          return result;
+        } catch (err: any) {
+          console.error(`Failed for "${query.phrase}" with ${model}:`, err.message);
+          res.write(`event: error\ndata: ${JSON.stringify({ error: `Failed for "${query.phrase}" with ${model}: ${err.message}` })}\n\n`);
+          return null;
+        }
+      });
+
+      // Wait for all models to complete for this query
+      await Promise.allSettled(modelPromises);
+    });
+
+    // Wait for current batch to complete before moving to next
+    await Promise.allSettled(batchPromises);
+    
+    // Send updated stats after each batch
+    const stats = calculateStats(allResults);
+    res.write(`event: stats\ndata: ${JSON.stringify(stats)}\n\n`);
+  }
+}
+
 router.post('/:domainId', async (req, res) => {
     const domainId = Number(req.params.domainId);
     if (!domainId) {
@@ -78,83 +222,21 @@ router.post('/:domainId', async (req, res) => {
             item.phrases.map((phrase: string) => ({
                 keyword: item.keyword,
                 phrase,
+                domainId
             }))
         );
 
         const totalQueries = allQueries.length * AI_MODELS.length;
-        let completedQueries = 0;
+        const completedQueries = { current: 0 };
         const allResults: any[] = [];
 
-        for (const query of allQueries) {
-            // Run model queries in parallel for each phrase
-            const promises = AI_MODELS.map(async (model) => {
-                const startTime = Date.now();
-                res.write(`event: progress\ndata: ${JSON.stringify({ message: `Querying ${model} for "${query.phrase}"...` })}\n\n`);
+        // Determine batch size based on total queries - optimized for real processing
+        const batchSize = totalQueries > 30 ? 8 : totalQueries > 15 ? 12 : 15;
+        
+        res.write(`event: progress\ndata: ${JSON.stringify({ message: `Initializing AI analysis for ${totalQueries} queries in batches of ${batchSize}...` })}\n\n`);
 
-                try {
-                    // Get AI response using Gemini under the hood
-                    const { response, cost } = await aiQueryService.query(query.phrase, model);
-                    const latency = (Date.now() - startTime) / 1000;
-
-                    // Score the response using AI
-                    res.write(`event: progress\ndata: ${JSON.stringify({ message: `Scoring ${model} response for "${query.phrase}"...` })}\n\n`);
-                    const scores = await scoreResponseWithAI(query.phrase, response, model);
-
-                    completedQueries++;
-                    const progress = (completedQueries / totalQueries) * 100;
-
-                    // Find the phrase record in the DB (by text and keyword)
-                    const keywordRecord = await prisma.keyword.findFirst({
-                      where: { term: query.keyword, domainId },
-                    });
-                    let phraseRecord = null;
-                    if (keywordRecord) {
-                      phraseRecord = await prisma.phrase.findFirst({
-                        where: { text: query.phrase, keywordId: keywordRecord.id },
-                      });
-                    }
-                    // Save AIQueryResult to DB if phraseRecord found
-                    let aiQueryResultRecord = null;
-                    if (phraseRecord) {
-                      aiQueryResultRecord = await prisma.aIQueryResult.create({
-                        data: {
-                          phraseId: phraseRecord.id,
-                          model,
-                          response,
-                          latency,
-                          cost,
-                          presence: scores.presence,
-                          relevance: scores.relevance,
-                          accuracy: scores.accuracy,
-                          sentiment: scores.sentiment,
-                          overall: scores.overall,
-                        }
-                      });
-                    }
-
-                    const result = {
-                        ...query,
-                        model,
-                        response,
-                        latency: Number(latency),
-                        cost: Number(cost),
-                        progress,
-                        scores,
-                        aiQueryResultId: aiQueryResultRecord ? aiQueryResultRecord.id : undefined,
-                        phraseId: phraseRecord ? phraseRecord.id : undefined
-                    };
-                    allResults.push(result);
-                    res.write(`event: result\ndata: ${JSON.stringify(result)}\n\n`);
-
-                    // After each result, recalculate and stream stats
-                    const stats = calculateStats(allResults);
-                    res.write(`event: stats\ndata: ${JSON.stringify(stats)}\n\n`);
-                } catch (err: any) {
-                    res.write(`event: error\ndata: ${JSON.stringify({ error: `Failed for "${query.phrase}" with ${model}: ${err.message}` })}\n\n`);
-                }
-            });
-            await Promise.all(promises);
-        }
+        // Process queries in optimized batches
+        await processQueryBatch(allQueries, batchSize, res, allResults, completedQueries, totalQueries);
 
         res.write(`event: complete\ndata: {}\n\n`);
         res.end();

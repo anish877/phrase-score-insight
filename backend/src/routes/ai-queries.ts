@@ -118,6 +118,35 @@ router.post('/:domainId', async (req, res) => {
                     // Score the response
                     const scores = scoreResponse({ ...query, model, response });
 
+                    // Find the phrase record in the DB (by text and keyword)
+                    const keywordRecord = await prisma.keyword.findFirst({
+                      where: { term: query.keyword, domainId },
+                    });
+                    let phraseRecord = null;
+                    if (keywordRecord) {
+                      phraseRecord = await prisma.phrase.findFirst({
+                        where: { text: query.phrase, keywordId: keywordRecord.id },
+                      });
+                    }
+                    // Save AIQueryResult to DB if phraseRecord found
+                    let aiQueryResultRecord = null;
+                    if (phraseRecord) {
+                      aiQueryResultRecord = await prisma.aIQueryResult.create({
+                        data: {
+                          phraseId: phraseRecord.id,
+                          model,
+                          response,
+                          latency,
+                          cost,
+                          presence: scores.presence,
+                          relevance: scores.relevance,
+                          accuracy: scores.accuracy,
+                          sentiment: scores.sentiment,
+                          overall: scores.overall,
+                        }
+                      });
+                    }
+
                     const result = {
                         ...query,
                         model,
@@ -125,7 +154,9 @@ router.post('/:domainId', async (req, res) => {
                         latency: Number(latency),
                         cost: Number(cost),
                         progress,
-                        scores
+                        scores,
+                        aiQueryResultId: aiQueryResultRecord ? aiQueryResultRecord.id : undefined,
+                        phraseId: phraseRecord ? phraseRecord.id : undefined
                     };
                     allResults.push(result);
                     res.write(`event: result\ndata: ${JSON.stringify(result)}\n\n`);

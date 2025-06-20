@@ -49,7 +49,34 @@ model Keyword {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   domain       Domain   @relation(fields: [domainId], references: [id])
+  phrases      Phrase[]
 
   @@unique([term, domainId])
   @@index([domainId])
+}
+
+model Phrase {
+  id        Int      @id @default(autoincrement())
+  text      String
+  keyword   Keyword  @relation(fields: [keywordId], references: [id])
+  keywordId Int
+  aiQueryResults AIQueryResult[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AIQueryResult {
+  id        Int      @id @default(autoincrement())
+  phrase    Phrase   @relation(fields: [phraseId], references: [id])
+  phraseId  Int
+  model     String
+  response  String   @db.Text
+  latency   Float
+  cost      Float
+  presence  Int
+  relevance Int
+  accuracy  Int
+  sentiment Int
+  overall   Float
+  createdAt DateTime @default(now())
 }

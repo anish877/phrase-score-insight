@@ -21,7 +21,7 @@ router.get('/:domainId', async (req, res) => {
     where: { domainId, isSelected: true },
     orderBy: { volume: 'desc' },
     take: 10,
-    select: { term: true }
+    select: { id: true, term: true }
   });
 
   if (!keywords.length) {
@@ -36,13 +36,20 @@ router.get('/:domainId', async (req, res) => {
   res.write(`event: stats\ndata: ${JSON.stringify({ totalKeywords: keywords.length, totalPhrases: 0, avgPerKeyword: 0, aiQueries: 0 })}\n\n`);
 
   for (let i = 0; i < keywords.length; i++) {
-    const { term } = keywords[i];
+    const { id: keywordId, term } = keywords[i];
     try {
       res.write(`event: progress\ndata: ${JSON.stringify({ message: `Generating phrases for \"${term}\" (${i+1}/${keywords.length})` })}\n\n`);
       const phrases = await geminiService.generatePhrases(term);
       phrasesPerKeyword[term] = 0;
       for (const phrase of phrases) {
-        res.write(`event: phrase\ndata: ${JSON.stringify({ keyword: term, phrase })}\n\n`);
+        // Save phrase to DB
+        const phraseRecord = await prisma.phrase.create({
+          data: {
+            text: phrase,
+            keywordId,
+          }
+        });
+        res.write(`event: phrase\ndata: ${JSON.stringify({ keyword: term, phrase: phraseRecord.text, phraseId: phraseRecord.id })}\n\n`);
         totalPhrases++;
         phrasesPerKeyword[term]++;
         const avgPerKeyword = totalPhrases / (i + 1);

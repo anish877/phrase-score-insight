@@ -1,57 +1,48 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import type { AIQueryResult, AIQueryStats } from './AIQueryResults';
 
 interface ResponseScoringProps {
-  queryResults: any[];
+  queryResults: AIQueryResult[];
+  queryStats: AIQueryStats | null;
   onNext: () => void;
   onPrev: () => void;
 }
 
 const ResponseScoring: React.FC<ResponseScoringProps> = ({
   queryResults,
+  queryStats,
   onNext,
   onPrev
 }) => {
-  const [scores, setScores] = useState<any[]>([]);
-  const [isScoring, setIsScoring] = useState(false);
   const [selectedView, setSelectedView] = useState('overview');
 
-  useEffect(() => {
-    if (scores.length === 0 && queryResults.length > 0) {
-      generateScores();
-    }
-  }, [queryResults, scores.length]);
+  // Use stats from props, fallback to local calculation if needed
+  const stats = queryStats;
+  const scores = queryResults;
 
-  const generateScores = async () => {
-    setIsScoring(true);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    const scoredResults = queryResults.map(result => ({
-      ...result,
-      scores: {
-        presence: Math.random() > 0.3 ? 1 : 0, // 70% chance of presence
-        relevance: Math.floor(Math.random() * 5) + 1,
-        accuracy: Math.floor(Math.random() * 5) + 1,
-        sentiment: Math.floor(Math.random() * 5) + 1,
-        overall: 0
-      }
-    }));
-
-    // Calculate overall score
-    scoredResults.forEach(result => {
-      const { presence, relevance, accuracy, sentiment } = result.scores;
-      result.scores.overall = presence === 0 ? 0 : 
-        Math.round((relevance + accuracy + sentiment) / 3 * 10) / 10;
-    });
-
-    setScores(scoredResults);
-    setIsScoring(false);
+  // Model stats for tabs
+  const modelStats = stats?.models || [];
+  const overallStats = stats?.overall || {
+    presenceRate: 0,
+    avgRelevance: 0,
+    avgAccuracy: 0,
+    avgSentiment: 0,
+    avgOverall: 0
   };
+
+  // Top and worst performing phrases
+  const topPhrases = scores
+    .filter(s => s.scores.presence === 1)
+    .sort((a, b) => b.scores.overall - a.scores.overall)
+    .slice(0, 10);
+  const worstPhrases = scores
+    .sort((a, b) => a.scores.overall - b.scores.overall)
+    .slice(0, 10);
 
   const getScoreColor = (score: number, maxScore: number = 5) => {
     const percentage = score / maxScore;
@@ -59,79 +50,6 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
     if (percentage >= 0.6) return 'text-yellow-600';
     return 'text-red-600';
   };
-
-  const getProgressColor = (score: number, maxScore: number = 5) => {
-    const percentage = score / maxScore;
-    if (percentage >= 0.8) return 'bg-green-500';
-    if (percentage >= 0.6) return 'bg-yellow-500';
-    return 'bg-red-500';
-  };
-
-  const calculateModelStats = () => {
-    const modelStats = scores.reduce((acc, result) => {
-      if (!acc[result.model]) {
-        acc[result.model] = {
-          total: 0,
-          presence: 0,
-          relevance: 0,
-          accuracy: 0,
-          sentiment: 0,
-          overall: 0
-        };
-      }
-      
-      acc[result.model].total++;
-      acc[result.model].presence += result.scores.presence;
-      acc[result.model].relevance += result.scores.relevance;
-      acc[result.model].accuracy += result.scores.accuracy;
-      acc[result.model].sentiment += result.scores.sentiment;
-      acc[result.model].overall += result.scores.overall;
-      
-      return acc;
-    }, {} as any);
-
-    return Object.keys(modelStats).map(model => ({
-      model,
-      presenceRate: Math.round((modelStats[model].presence / modelStats[model].total) * 100),
-      avgRelevance: Math.round((modelStats[model].relevance / modelStats[model].total) * 10) / 10,
-      avgAccuracy: Math.round((modelStats[model].accuracy / modelStats[model].total) * 10) / 10,
-      avgSentiment: Math.round((modelStats[model].sentiment / modelStats[model].total) * 10) / 10,
-      avgOverall: Math.round((modelStats[model].overall / modelStats[model].total) * 10) / 10
-    }));
-  };
-
-  const getTopPerformingPhrases = () => {
-    return scores
-      .filter(s => s.scores.presence === 1)
-      .sort((a, b) => b.scores.overall - a.scores.overall)
-      .slice(0, 10);
-  };
-
-  const getWorstPerformingPhrases = () => {
-    return scores
-      .sort((a, b) => a.scores.overall - b.scores.overall)
-      .slice(0, 10);
-  };
-
-  if (isScoring) {
-    return (
-      <div className="max-w-4xl mx-auto">
-        <Card className="shadow-lg border-0 bg-white/70 backdrop-blur-sm">
-          <CardContent className="py-12">
-            <div className="text-center space-y-4">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-200 border-t-purple-600 mx-auto"></div>
-              <h3 className="text-xl font-semibold text-slate-800">Scoring Responses...</h3>
-              <p className="text-slate-600">Analyzing {queryResults.length} AI responses for presence, relevance, accuracy, and sentiment</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  const modelStats = calculateModelStats();
-  const topPhrases = getTopPerformingPhrases();
-  const worstPhrases = getWorstPerformingPhrases();
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -158,7 +76,7 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
             <Card className="bg-white/70 backdrop-blur-sm">
               <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-purple-600">
-                  {Math.round((scores.filter(s => s.scores.presence === 1).length / scores.length) * 100)}%
+                  {overallStats.presenceRate}%
                 </div>
                 <div className="text-sm text-slate-600">Presence Rate</div>
               </CardContent>
@@ -166,7 +84,7 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
             <Card className="bg-white/70 backdrop-blur-sm">
               <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-blue-600">
-                  {Math.round((scores.reduce((sum, s) => sum + s.scores.relevance, 0) / scores.length) * 10) / 10}
+                  {overallStats.avgRelevance}
                 </div>
                 <div className="text-sm text-slate-600">Avg Relevance</div>
               </CardContent>
@@ -174,7 +92,7 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
             <Card className="bg-white/70 backdrop-blur-sm">
               <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-green-600">
-                  {Math.round((scores.reduce((sum, s) => sum + s.scores.accuracy, 0) / scores.length) * 10) / 10}
+                  {overallStats.avgAccuracy}
                 </div>
                 <div className="text-sm text-slate-600">Avg Accuracy</div>
               </CardContent>
@@ -182,7 +100,7 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
             <Card className="bg-white/70 backdrop-blur-sm">
               <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-orange-600">
-                  {Math.round((scores.reduce((sum, s) => sum + s.scores.sentiment, 0) / scores.length) * 10) / 10}
+                  {overallStats.avgSentiment}
                 </div>
                 <div className="text-sm text-slate-600">Avg Sentiment</div>
               </CardContent>

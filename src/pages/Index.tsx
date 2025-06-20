@@ -1,11 +1,10 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DomainSubmission from '../components/DomainSubmission';
 import DomainExtraction from '../components/DomainExtraction';
 import KeywordDiscovery from '../components/KeywordDiscovery';
 import PhraseGeneration from '../components/PhraseGeneration';
-import AIQueryResults from '../components/AIQueryResults';
+import AIQueryResults, { AIQueryResult, AIQueryStats } from '../components/AIQueryResults';
 import ResponseScoring from '../components/ResponseScoring';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -15,10 +14,14 @@ const Index = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [domain, setDomain] = useState('');
+  const [domainId, setDomainId] = useState<number>(0); 
   const [brandContext, setBrandContext] = useState('');
   const [selectedKeywords, setSelectedKeywords] = useState<string[]>([]);
   const [generatedPhrases, setGeneratedPhrases] = useState<Array<{keyword: string, phrases: string[]}>>([]);
-  const [queryResults, setQueryResults] = useState<any[]>([]);
+  const [queryResults, setQueryResults] = useState<AIQueryResult[]>([]);
+  const [queryStats, setQueryStats] = useState<AIQueryStats | null>(null);
+
+  console.log('Current step:', currentStep, 'Domain ID:', domainId);
 
   const steps = [
     {
@@ -112,22 +115,12 @@ const Index = () => {
                 <div className="text-sm font-medium text-slate-900">
                   {Math.round(progressPercentage)}% Complete
                 </div>
-                <div className="text-xs text-slate-500">
-                  Est. {steps[currentStep].estimatedTime} remaining
-                </div>
               </div>
             </div>
           </div>
 
           {/* Enhanced Progress Section */}
           <div className="pb-6">
-            {/* Progress Bar */}
-            <div className="mb-6">
-              <Progress 
-                value={progressPercentage} 
-                className="h-2 bg-slate-200"
-              />
-            </div>
 
             {/* Step Indicators */}
             <div className="relative">
@@ -177,19 +170,6 @@ const Index = () => {
                         `}>
                           {step.title}
                         </div>
-                        <div className="text-xs text-slate-500 leading-tight">
-                          {step.description}
-                        </div>
-                        
-                        {/* Time Estimate for Active Step */}
-                        {status === 'active' && (
-                          <Badge 
-                            variant="secondary" 
-                            className="mt-2 text-xs bg-blue-50 text-blue-700 border-blue-200"
-                          >
-                            {step.estimatedTime}
-                          </Badge>
-                        )}
                       </div>
 
                       {/* Connector Line */}
@@ -210,23 +190,26 @@ const Index = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {currentStep === 0 && (
-          <DomainSubmission 
-            domain={domain}
-            setDomain={setDomain}
-            onNext={nextStep}
-          />
-        )}
-        {currentStep === 1 && (
-          <DomainExtraction 
-            domain={domain}
-            setBrandContext={setBrandContext}
-            onNext={nextStep}
-            onPrev={prevStep}
-          />
-        )}
-        {currentStep === 2 && (
+      {currentStep === 0 && (
+        <DomainSubmission
+          domain={domain}
+          setDomain={setDomain}
+          onNext={nextStep}
+        />
+      )}
+      {currentStep === 1 && (
+        <DomainExtraction
+          domain={domain}
+          setDomainId={setDomainId}
+          domainId={domainId}
+          setBrandContext={setBrandContext}
+          onNext={nextStep}
+          onPrev={prevStep}
+        />
+      )}
+        {currentStep === 2 && domainId > 0 && (
           <KeywordDiscovery 
+            domainId={domainId}
             selectedKeywords={selectedKeywords}
             setSelectedKeywords={setSelectedKeywords}
             onNext={nextStep}
@@ -235,7 +218,7 @@ const Index = () => {
         )}
         {currentStep === 3 && (
           <PhraseGeneration 
-            keywords={selectedKeywords}
+            domainId={domainId}
             generatedPhrases={generatedPhrases}
             setGeneratedPhrases={setGeneratedPhrases}
             onNext={nextStep}
@@ -244,8 +227,10 @@ const Index = () => {
         )}
         {currentStep === 4 && (
           <AIQueryResults 
+            domainId={domainId}
             phrases={generatedPhrases}
             setQueryResults={setQueryResults}
+            setQueryStats={setQueryStats}
             onNext={nextStep}
             onPrev={prevStep}
           />
@@ -253,6 +238,7 @@ const Index = () => {
         {currentStep === 5 && (
           <ResponseScoring 
             queryResults={queryResults}
+            queryStats={queryStats}
             onNext={completeAnalysis}
             onPrev={prevStep}
           />

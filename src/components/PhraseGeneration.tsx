@@ -1,13 +1,13 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Edit2, Save, X } from 'lucide-react';
+import { apiService } from '@/services/api';
 
 interface PhraseGenerationProps {
-  keywords: string[];
+  domainId: number;
   generatedPhrases: Array<{keyword: string, phrases: string[]}>;
   setGeneratedPhrases: (phrases: Array<{keyword: string, phrases: string[]}>) => void;
   onNext: () => void;
@@ -15,40 +15,65 @@ interface PhraseGenerationProps {
 }
 
 const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
-  keywords,
+  domainId,
   generatedPhrases,
   setGeneratedPhrases,
   onNext,
   onPrev
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
+  const [progressMsg, setProgressMsg] = useState('');
   const [editingPhrase, setEditingPhrase] = useState<{keyword: string, index: number} | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [stats, setStats] = useState({ totalKeywords: 0, totalPhrases: 0, avgPerKeyword: 0, aiQueries: 0 });
 
   useEffect(() => {
-    if (generatedPhrases.length === 0 && keywords.length > 0) {
-      generatePhrases();
-    }
-  }, [keywords, generatedPhrases.length]);
+    if (domainId) {
+      setIsGenerating(true);
+      setProgressMsg('Starting phrase generation...');
+      setGeneratedPhrases([]);
+      setStats({ totalKeywords: 0, totalPhrases: 0, avgPerKeyword: 0, aiQueries: 0 });
+      const phrasesMap: Record<string, string[]> = {};
+      const eventSource = new EventSource(`http://localhost:3001/api/phrases/${domainId}`);
 
-  const generatePhrases = async () => {
-    setIsGenerating(true);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    const mockPhrases = keywords.map(keyword => ({
-      keyword,
-      phrases: [
-        `What is ${keyword}?`,
-        `Best ${keyword} for small business`,
-        `${keyword} reviews and comparison`,
-        `How to choose ${keyword}`,
-        `Top alternatives to ${keyword}`
-      ]
-    }));
-    
-    setGeneratedPhrases(mockPhrases);
-    setIsGenerating(false);
-  };
+      eventSource.addEventListener('progress', (e: MessageEvent) => {
+        const data = JSON.parse(e.data);
+        setProgressMsg(data.message);
+      });
+
+      eventSource.addEventListener('phrase', (e: MessageEvent) => {
+        const data = JSON.parse(e.data);
+        if (!phrasesMap[data.keyword]) phrasesMap[data.keyword] = [];
+        phrasesMap[data.keyword].push(data.phrase);
+        // Convert map to array for setGeneratedPhrases
+        setGeneratedPhrases(Object.entries(phrasesMap).map(([keyword, phrases]) => ({ keyword, phrases })));
+      });
+
+      eventSource.addEventListener('stats', (e: MessageEvent) => {
+        const data = JSON.parse(e.data);
+        setStats(data);
+      });
+
+      eventSource.addEventListener('error', (e: MessageEvent) => {
+        try {
+          const data = JSON.parse(e.data);
+          setProgressMsg(data.error || 'An error occurred.');
+        } catch {
+          setProgressMsg('An error occurred.');
+        }
+      });
+
+      eventSource.addEventListener('complete', () => {
+        setIsGenerating(false);
+        setProgressMsg('All phrases generated!');
+        eventSource.close();
+      });
+
+      return () => {
+        eventSource.close();
+      };
+    }
+  }, [domainId, setGeneratedPhrases]);
 
   const startEditing = (keyword: string, index: number, currentValue: string) => {
     setEditingPhrase({ keyword, index });
@@ -89,17 +114,6 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
     setGeneratedPhrases(updated);
   };
 
-  const getPhraseType = (phrase: string) => {
-    if (phrase.toLowerCase().includes('what is') || phrase.toLowerCase().includes('how to')) {
-      return { type: 'Informational', color: 'bg-slate-100 text-slate-700' };
-    } else if (phrase.toLowerCase().includes('best') || phrase.toLowerCase().includes('top')) {
-      return { type: 'Commercial', color: 'bg-blue-100 text-blue-700' };
-    } else if (phrase.toLowerCase().includes('reviews') || phrase.toLowerCase().includes('comparison')) {
-      return { type: 'Comparative', color: 'bg-green-100 text-green-700' };
-    }
-    return { type: 'Generic', color: 'bg-gray-100 text-gray-700' };
-  };
-
   const totalPhrases = generatedPhrases.reduce((sum, item) => sum + item.phrases.length, 0);
 
   return (
@@ -119,7 +133,7 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
             <div className="text-center space-y-4">
               <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-blue-600 mx-auto"></div>
               <h3 className="text-xl font-semibold text-slate-900">Generating Phrases...</h3>
-              <p className="text-slate-600">Creating targeted search phrases for {keywords.length} keywords</p>
+              <p className="text-slate-600">{progressMsg}</p>
             </div>
           </CardContent>
         </Card>
@@ -129,25 +143,25 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card className="shadow-sm border border-slate-200">
               <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-blue-600">{keywords.length}</div>
+                <div className="text-2xl font-bold text-blue-600">{stats.totalKeywords}</div>
                 <div className="text-sm text-slate-600">Keywords</div>
               </CardContent>
             </Card>
             <Card className="shadow-sm border border-slate-200">
               <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-blue-600">{totalPhrases}</div>
+                <div className="text-2xl font-bold text-blue-600">{stats.totalPhrases}</div>
                 <div className="text-sm text-slate-600">Total Phrases</div>
               </CardContent>
             </Card>
             <Card className="shadow-sm border border-slate-200">
               <CardContent className="p-4 text-center">  
-                <div className="text-2xl font-bold text-blue-600">{Math.round(totalPhrases / keywords.length)}</div>
+                <div className="text-2xl font-bold text-blue-600">{stats.totalKeywords > 0 ? Math.round(stats.avgPerKeyword) : 0}</div>
                 <div className="text-sm text-slate-600">Avg per Keyword</div>
               </CardContent>
             </Card>
             <Card className="shadow-sm border border-slate-200">
               <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-blue-600">{totalPhrases * 3}</div>
+                <div className="text-2xl font-bold text-blue-600">{stats.aiQueries}</div>
                 <div className="text-sm text-slate-600">AI Queries</div>
               </CardContent>
             </Card>
@@ -169,15 +183,11 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
                 <CardContent>
                   <div className="space-y-3">
                     {item.phrases.map((phrase, index) => {
-                      const phraseType = getPhraseType(phrase);
                       const isEditing = editingPhrase?.keyword === item.keyword && editingPhrase?.index === index;
                       
                       return (
                         <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
                           <div className="flex items-center space-x-3 flex-1">
-                            <Badge className={phraseType.color}>
-                              {phraseType.type}
-                            </Badge>
                             {isEditing ? (
                               <div className="flex-1 flex items-center space-x-2">
                                 <Input

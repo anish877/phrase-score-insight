@@ -1,359 +1,486 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, X, Check, Search, TrendingUp, Target, Brain, Filter } from 'lucide-react';
+import { Plus, X, Check, Search, Target, Brain, Loader2, AlertCircle, TrendingUp, Filter } from 'lucide-react';
+import { apiService, Keyword as ApiKeyword } from '@/services/api';
+import { useDebounce } from 'use-debounce';
+import { fetchEventSource } from '@microsoft/fetch-event-source';
+
+// We extend the API's Keyword type to include a client-side category property
+interface Keyword extends ApiKeyword {
+    category: string;
+}
 
 interface KeywordDiscoveryProps {
+  domainId: number;
   selectedKeywords: string[];
-  setSelectedKeywords: (keywords: string[]) => void;
+  setSelectedKeywords: React.Dispatch<React.SetStateAction<string[]>>;
   onNext: () => void;
   onPrev: () => void;
 }
 
-const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({
-  selectedKeywords,
-  setSelectedKeywords,
-  onNext,
-  onPrev
-}) => {
+// Category configuration for UI
+const categoryConfig: { [key: string]: { name: string; icon: React.ReactNode; description: string } } = {
+  'core-business': { name: 'Core Business', icon: <Target className="h-5 w-5 text-blue-600" />, description: 'High-intent keywords directly related to your main offerings.' },
+  'products': { name: 'Products', icon: <Brain className="h-5 w-5 text-purple-600" />, description: 'Keywords mentioning specific products or software types.' },
+  'services': { name: 'Services', icon: <TrendingUp className="h-5 w-5 text-green-600" />, description: 'Keywords related to the services you provide.' },
+  'competitive': { name: 'Competitive', icon: <Filter className="h-5 w-5 text-orange-600" />, description: 'Keywords comparing your brand or offerings against others.' },
+  'informational': { name: 'Informational', icon: <Search className="h-5 w-5 text-yellow-600" />, description: 'Broader terms indicating users are researching or learning.' },
+  'transactional': { name: 'Transactional', icon: <Check className="h-5 w-5 text-red-600" />, description: 'Keywords showing strong intent to buy or take action.' },
+  'industry': { name: 'Industry', icon: <Plus className="h-5 w-5 text-gray-600" />, description: 'General keywords related to your industry or niche.' },
+  'custom': { name: 'Custom', icon: <Plus className="h-5 w-5 text-gray-600" />, description: 'Keywords added manually.' },
+};
+
+
+const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedKeywords, setSelectedKeywords, onNext, onPrev }) => {
+  console.log('KeywordDiscovery rendered with domainId:', domainId);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [progressMsg, setProgressMsg] = useState('Connecting to keyword engine...');
   const [customKeyword, setCustomKeyword] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-
-  const keywordCategories = [
-    {
-      id: 'core-business',
-      name: 'Core Business',
-      keywords: [
-        { term: 'enterprise software solutions', volume: 2400, difficulty: 'Medium', cpc: '$4.20' },
-        { term: 'business automation platform', volume: 1800, difficulty: 'High', cpc: '$5.80' },
-        { term: 'digital transformation services', volume: 3200, difficulty: 'Medium', cpc: '$6.10' },
-        { term: 'cloud infrastructure solutions', volume: 1600, difficulty: 'High', cpc: '$7.30' }
-      ]
-    },
-    {
-      id: 'products',
-      name: 'Product Terms',
-      keywords: [
-        { term: 'project management software', volume: 5400, difficulty: 'High', cpc: '$3.90' },
-        { term: 'team collaboration tools', volume: 4200, difficulty: 'Medium', cpc: '$2.80' },
-        { term: 'workflow automation', volume: 2800, difficulty: 'Medium', cpc: '$4.50' },
-        { term: 'business intelligence platform', volume: 1900, difficulty: 'High', cpc: '$8.20' }
-      ]
-    },
-    {
-      id: 'industry',
-      name: 'Industry Focus',
-      keywords: [
-        { term: 'SaaS platform development', volume: 1500, difficulty: 'High', cpc: '$9.10' },
-        { term: 'enterprise technology consulting', volume: 1200, difficulty: 'Medium', cpc: '$12.40' },
-        { term: 'API integration services', volume: 980, difficulty: 'Medium', cpc: '$6.70' },
-        { term: 'cloud migration solutions', volume: 2100, difficulty: 'High', cpc: '$8.90' }
-      ]
-    },
-    {
-      id: 'competitive',
-      name: 'Competitive',
-      keywords: [
-        { term: 'alternative to Salesforce', volume: 890, difficulty: 'Low', cpc: '$2.30' },
-        { term: 'best CRM software', volume: 3800, difficulty: 'High', cpc: '$15.60' },
-        { term: 'enterprise software comparison', volume: 1400, difficulty: 'Medium', cpc: '$7.80' },
-        { term: 'business software reviews', volume: 2200, difficulty: 'Medium', cpc: '$4.90' }
-      ]
-    }
+  const [keywords, setKeywords] = useState<Keyword[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const loadingSteps = [
+    'Analyzing brand context...',
+    'Connecting to keyword intelligence APIs...',
+    'Fetching organic keyword metrics...',
+    'Running competitive analysis...',
+    'Categorizing keywords by user intent...',
+    'Finalizing recommendations...'
   ];
-
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case 'Low': return 'bg-green-100 text-green-800';
-      case 'Medium': return 'bg-yellow-100 text-yellow-800';
-      case 'High': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const filteredCategories = keywordCategories.map(category => ({
-    ...category,
-    keywords: category.keywords.filter(keyword =>
-      keyword.term.toLowerCase().includes(searchFilter.toLowerCase())
-    )
-  })).filter(category => 
-    selectedCategory === 'all' || category.id === selectedCategory
-  );
+  const [debouncedKeywords] = useDebounce(selectedKeywords, 1000);
 
   useEffect(() => {
-    if (selectedKeywords.length === 0) {
-      // Auto-select top performing keywords
-      const autoSelected = [
-        'enterprise software solutions',
-        'project management software',
-        'digital transformation services'
-      ];
-      setSelectedKeywords(autoSelected);
+    if (!domainId || domainId <= 0) {
+      setError('A valid domain analysis is required to discover keywords.');
+      setIsLoading(false);
+      return;
     }
-  }, [selectedKeywords.length, setSelectedKeywords]);
+    setIsLoading(true);
+    setError(null);
+    setProgressMsg('Connecting to keyword engine...');
+    setKeywords([]);
+    const ctrl = new AbortController();
+    fetchEventSource(`http://localhost:3001/api/keywords/stream/${domainId}`, {
+      signal: ctrl.signal,
+      onopen(_response) {
+        setProgressMsg('Connected. Discovering keywords...');
+        return Promise.resolve();
+      },
+      onmessage(ev) {
+        if (ev.event === 'keyword') {
+          const kw: Keyword = JSON.parse(ev.data);
+          setKeywords(prev => {
+            if (prev.some(k => k.term === kw.term)) return prev;
+            return [...prev, kw];
+          });
+        } else if (ev.event === 'progress') {
+          const data = JSON.parse(ev.data);
+          setProgressMsg(data.message);
+        } else if (ev.event === 'error') {
+          try {
+            const data = JSON.parse(ev.data);
+            setError(data.error || 'An error occurred.');
+          } catch {
+            setError('An error occurred.');
+          }
+          setIsLoading(false);
+        } else if (ev.event === 'complete') {
+          setIsLoading(false);
+          setProgressMsg('Keyword discovery complete!');
+        }
+      },
+      onclose() {
+        setIsLoading(false);
+      },
+      onerror(err) {
+        setError('An error occurred during keyword discovery.');
+        setIsLoading(false);
+        ctrl.abort();
+        throw err;
+      }
+    });
+    return () => {
+      ctrl.abort();
+    };
+  }, [domainId, setSelectedKeywords]);
+
+  useEffect(() => {
+    const saveSelection = async () => {
+      if (debouncedKeywords.length === 0 || isLoading) return;
+      setIsSaving(true);
+      try {
+        await apiService.updateKeywordSelection(domainId, debouncedKeywords as string[]);
+      } catch (err) {
+        console.error('Failed to save keyword selection:', err);
+      } finally {
+        setTimeout(() => setIsSaving(false), 500);
+      }
+    };
+    saveSelection();
+  }, [debouncedKeywords, domainId, isLoading]);
+
+  const keywordCategories = useMemo(() => {
+    const categories: { [key: string]: Keyword[] } = {};
+    keywords.forEach(kw => {
+        const cat = kw.category || 'industry';
+        if (!categories[cat]) categories[cat] = [];
+        categories[cat].push(kw);
+    });
+    return Object.keys(categoryConfig).map(catId => ({
+        id: catId,
+        ...categoryConfig[catId],
+        keywords: categories[catId] || []
+    })).filter(cat => cat.keywords.length > 0);
+  }, [keywords]);
+
+  const filteredCategories = useMemo(() => keywordCategories
+    .map(category => ({
+      ...category,
+      keywords: category.keywords.filter(keyword =>
+        keyword.term.toLowerCase().includes(searchFilter.toLowerCase())
+      )
+    }))
+    .filter(category => (selectedCategory === 'all' || category.id === selectedCategory) && category.keywords.length > 0), 
+    [keywordCategories, searchFilter, selectedCategory]);
 
   const addCustomKeyword = () => {
-    if (customKeyword.trim() && !selectedKeywords.includes(customKeyword.trim())) {
-      setSelectedKeywords([...selectedKeywords, customKeyword.trim()]);
+    const newKeyword = customKeyword.trim().toLowerCase();
+    if (newKeyword && !selectedKeywords.includes(newKeyword)) {
+      setSelectedKeywords([...selectedKeywords, newKeyword]);
+      if (!keywords.some(k => k.term.toLowerCase() === newKeyword)) {
+        const newKw: Keyword = {
+            id: -1, 
+            term: newKeyword,
+            volume: 0,
+            difficulty: 'N/A',
+            cpc: 0,
+            category: 'custom',
+            isSelected: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        };
+        setKeywords([...keywords, newKw]);
+      }
       setCustomKeyword('');
     }
   };
 
   const removeKeyword = (keyword: string) => {
-    setSelectedKeywords(selectedKeywords.filter(k => k !== keyword));
+    setSelectedKeywords(selectedKeywords.filter(k => k.toLowerCase() !== keyword.toLowerCase()));
   };
 
   const toggleKeyword = (keyword: string) => {
-    if (selectedKeywords.includes(keyword)) {
+    const lowerKeyword = keyword.toLowerCase();
+    if (selectedKeywords.map(k => k.toLowerCase()).includes(lowerKeyword)) {
       removeKeyword(keyword);
     } else {
       setSelectedKeywords([...selectedKeywords, keyword]);
     }
   };
 
-  const totalVolume = selectedKeywords.reduce((sum, keyword) => {
-    const found = keywordCategories
-      .flatMap(cat => cat.keywords)
-      .find(k => k.term === keyword);
-    return sum + (found?.volume || 0);
-  }, 0);
+  const totalVolume = useMemo(() => keywords
+    .filter(kw => selectedKeywords.includes(kw.term))
+    .reduce((sum, kw) => sum + kw.volume, 0), [keywords, selectedKeywords]);
+  
+  const avgDifficultyScore = useMemo(() => {
+    const selected = keywords.filter(kw => selectedKeywords.includes(kw.term) && kw.difficulty !== 'N/A');
+    if (selected.length === 0) return 0;
+    const total = selected.reduce((sum, kw) => {
+        return sum + (kw.difficulty === 'Low' ? 20 : kw.difficulty === 'Medium' ? 50 : 80);
+    }, 0);
+    return total / selected.length;
+  }, [keywords, selectedKeywords]);
+
+  const getAvgDifficultyLabel = (score: number) => {
+      if (score < 35) return 'Low';
+      if (score < 65) return 'Medium';
+      return 'High';
+  }
+
+  if (isLoading) return <LoadingState step={progressMsg} count={keywords.length} />;
+  if (error) return <ErrorState error={error} onPrev={onPrev} />;
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="text-center mb-8">
-        <div className="flex items-center justify-center mb-4">
-          <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
-            <Search className="h-6 w-6 text-white" />
-          </div>
-        </div>
-        <h2 className="text-3xl font-bold text-slate-900 mb-4">
-          Strategic Keyword Discovery
-        </h2>
-        <p className="text-lg text-slate-600 max-w-3xl mx-auto">
-          AI-powered keyword recommendations based on your brand context. Select keywords that best represent your business for comprehensive visibility analysis.
-        </p>
-      </div>
-
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card className="border border-slate-200">
-          <CardContent className="p-6 text-center">
-            <div className="text-2xl font-bold text-blue-600 mb-1">{selectedKeywords.length}</div>
-            <div className="text-sm text-slate-600">Selected Keywords</div>
-          </CardContent>
-        </Card>
-        <Card className="border border-slate-200">
-          <CardContent className="p-6 text-center">
-            <div className="text-2xl font-bold text-green-600 mb-1">{totalVolume.toLocaleString()}</div>
-            <div className="text-sm text-slate-600">Total Search Volume</div>
-          </CardContent>
-        </Card>
-        <Card className="border border-slate-200">
-          <CardContent className="p-6 text-center">
-            <div className="text-2xl font-bold text-purple-600 mb-1">{keywordCategories.length}</div>
-            <div className="text-sm text-slate-600">Categories Available</div>
-          </CardContent>
-        </Card>
-        <Card className="border border-slate-200">
-          <CardContent className="p-6 text-center">
-            <div className="text-2xl font-bold text-orange-600 mb-1">96%</div>
-            <div className="text-sm text-slate-600">Relevance Score</div>
-          </CardContent>
-        </Card>
-      </div>
+       <Header />
+       <StatsCards 
+         selectedCount={selectedKeywords.length} 
+         totalVolume={totalVolume}
+         categoryCount={keywordCategories.length}
+         avgDifficulty={getAvgDifficultyLabel(avgDifficultyScore)}
+         isSaving={isSaving}
+       />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        {/* Keyword Categories */}
         <div className="lg:col-span-3">
-          {/* Filters */}
-          <div className="flex gap-4 mb-6">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
-              <Input
-                placeholder="Search keywords..."
-                value={searchFilter}
-                onChange={(e) => setSearchFilter(e.target.value)}
-                className="pl-10 border-slate-300"
-              />
-            </div>
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-4 py-2 border border-slate-300 rounded-md text-sm bg-white"
-            >
-              <option value="all">All Categories</option>
-              {keywordCategories.map(category => (
-                <option key={category.id} value={category.id}>{category.name}</option>
-              ))}
-            </select>
-          </div>
+          <FilterControls 
+            searchFilter={searchFilter}
+            setSearchFilter={setSearchFilter}
+            selectedCategory={selectedCategory}
+            setSelectedCategory={setSelectedCategory}
+            categories={keywordCategories.map(c => ({id: c.id, name: c.name, icon: c.icon}))}
+          />
 
-          {/* Keywords by Category */}
           <div className="space-y-6">
-            {filteredCategories.map((category) => (
-              <Card key={category.id} className="border border-slate-200">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <Target className="h-5 w-5 text-blue-600" />
-                      <div>
-                        <CardTitle className="text-lg text-slate-900">{category.name}</CardTitle>
-                        <CardDescription className="text-slate-600">
-                          {category.keywords.length} keywords available
-                        </CardDescription>
-                      </div>
-                    </div>
-                    <Badge variant="secondary">
-                      {category.keywords.filter(k => selectedKeywords.includes(k.term)).length} selected
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {category.keywords.map((keyword) => (
-                      <div 
-                        key={keyword.term}
-                        className={`flex items-center justify-between p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                          selectedKeywords.includes(keyword.term) 
-                            ? 'border-blue-500 bg-blue-50' 
-                            : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                        }`}
-                        onClick={() => toggleKeyword(keyword.term)}
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-3">
-                            <span className="font-medium text-slate-900">{keyword.term}</span>
-                            {selectedKeywords.includes(keyword.term) && (
-                              <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                                <Check className="w-3 h-3 text-white" />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-4 text-sm">
-                          <div className="text-center">
-                            <div className="font-semibold text-slate-700">{keyword.volume.toLocaleString()}</div>
-                            <div className="text-xs text-slate-500">Volume/month</div>
-                          </div>
-                          <Badge className={getDifficultyColor(keyword.difficulty)}>
-                            {keyword.difficulty}
-                          </Badge>
-                          <div className="text-center">
-                            <div className="font-semibold text-slate-700">{keyword.cpc}</div>
-                            <div className="text-xs text-slate-500">CPC</div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+            {filteredCategories.length > 0 ? filteredCategories.map((category) => (
+              <KeywordCategoryCard 
+                key={category.id}
+                category={category}
+                selectedKeywords={selectedKeywords}
+                toggleKeyword={toggleKeyword}
+              />
+            )) : <NoResultsCard />}
           </div>
         </div>
 
-        {/* Selected Keywords Panel */}
         <div className="space-y-6">
-          <Card className="border border-slate-200 sticky top-6">
-            <CardHeader>
-              <CardTitle className="text-lg text-slate-900 flex items-center">
-                <Brain className="h-5 w-5 mr-2 text-blue-600" />
-                Selected Keywords ({selectedKeywords.length})
-              </CardTitle>
-              <CardDescription className="text-slate-600">
-                Keywords chosen for AI visibility analysis
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Custom keyword input */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">Add Custom Keyword</label>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Enter keyword..."
-                    value={customKeyword}
-                    onChange={(e) => setCustomKeyword(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && addCustomKeyword()}
-                    className="flex-1 border-slate-300"
-                  />
-                  <Button onClick={addCustomKeyword} size="sm" className="px-3 bg-blue-600 hover:bg-blue-700">
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Selected keywords list */}
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                <div className="text-sm font-medium text-slate-700 mb-2">Selected Keywords:</div>
-                {selectedKeywords.map((keyword, index) => (
-                  <div 
-                    key={keyword}
-                    className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-100"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs text-blue-600 font-medium">#{index + 1}</span>
-                      <span className="text-slate-700 font-medium text-sm">{keyword}</span>
-                    </div>
-                    <button
-                      onClick={() => removeKeyword(keyword)}
-                      className="text-slate-400 hover:text-red-500 transition-colors"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              {selectedKeywords.length === 0 && (
-                <div className="text-center py-8 text-slate-500">
-                  <Target className="h-8 w-8 mx-auto mb-2 text-slate-300" />
-                  <p className="text-sm">Select keywords to begin analysis</p>
-                </div>
-              )}
-
-              {/* Analysis Preview */}
-              {selectedKeywords.length > 0 && (
-                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                  <h4 className="font-semibold text-slate-900 text-sm mb-3">Analysis Preview:</h4>
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Phrases to generate:</span>
-                      <span className="font-medium text-slate-900">~{selectedKeywords.length * 8}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">AI models queried:</span>
-                      <span className="font-medium text-slate-900">15+</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Estimated time:</span>
-                      <span className="font-medium text-slate-900">3-5 minutes</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <SelectedKeywordsPanel
+            selectedKeywords={selectedKeywords}
+            customKeyword={customKeyword}
+            setCustomKeyword={setCustomKeyword}
+            addCustomKeyword={addCustomKeyword}
+            removeKeyword={removeKeyword}
+          />
         </div>
       </div>
 
-      <div className="flex gap-4 mt-8">
-        <Button variant="outline" onClick={onPrev} className="px-8">
-          Previous Step
-        </Button>
-        <Button 
-          onClick={onNext}
-          disabled={selectedKeywords.length === 0}
-          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-12 font-semibold"
-        >
-          Generate AI Query Phrases ({selectedKeywords.length} keywords)
-        </Button>
-      </div>
+      <Footer onPrev={onPrev} onNext={onNext} isSaving={isSaving} selectedCount={selectedKeywords.length} />
     </div>
   );
 };
+
+// Sub-components for cleaner structure
+const LoadingState = ({ step, count }: { step: string, count: number }) => (
+    <div className="max-w-6xl mx-auto flex items-center justify-center min-h-[600px]">
+        <div className="text-center max-w-md">
+            <div className="relative mb-6">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600 mx-auto"></div>
+            <div className="absolute inset-0 flex items-center justify-center text-blue-600"><Search/></div>
+            </div>
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">Discovering Keywords</h2>
+            <p className="text-slate-600 mb-4 font-medium">{step}</p>
+            <div className="w-full bg-slate-200 rounded-full h-2">
+                <div className="bg-blue-600 h-2 rounded-full animate-pulse" style={{width: `${Math.min(100, count * 10)}%`}}></div>
+            </div>
+            <div className="text-xs text-slate-500 mt-2">{count} keywords found</div>
+        </div>
+    </div>
+);
+
+const ErrorState = ({ error, onPrev }: { error: string, onPrev: () => void }) => (
+    <div className="max-w-6xl mx-auto text-center p-8">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-8 max-w-lg mx-auto">
+            <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">Error Loading Keywords</h2>
+            <p className="text-red-700 mb-6">{error}</p>
+            <Button onClick={onPrev} variant="outline">Go Back</Button>
+        </div>
+    </div>
+);
+
+const Header = () => (
+    <div className="text-center mb-8">
+        <div className="flex items-center justify-center mb-4">
+            <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
+                <Search className="h-6 w-6 text-white" />
+            </div>
+        </div>
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">Strategic Keyword Discovery</h2>
+        <p className="text-lg text-slate-600 max-w-3xl mx-auto">
+            Select high-impact keywords based on your brand context to guide the AI phrase generation.
+        </p>
+    </div>
+);
+
+interface StatsCardsProps {
+    selectedCount: number;
+    totalVolume: number;
+    categoryCount: number;
+    avgDifficulty: string;
+    isSaving: boolean;
+}
+const StatsCards: React.FC<StatsCardsProps> = ({ selectedCount, totalVolume, categoryCount, avgDifficulty, isSaving }) => (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+        <Card>
+            <CardContent className="p-4 text-center">
+                <div className="text-2xl font-bold text-blue-600 mb-1">{selectedCount}</div>
+                <div className="text-sm text-slate-600">Selected Keywords</div>
+                {isSaving && <Loader2 className="w-4 h-4 animate-spin text-blue-500 mx-auto mt-1" />}
+            </CardContent>
+        </Card>
+        <Card>
+            <CardContent className="p-4 text-center">
+                <div className="text-2xl font-bold text-green-600 mb-1">{totalVolume.toLocaleString()}</div>
+                <div className="text-sm text-slate-600">Total Search Volume</div>
+            </CardContent>
+        </Card>
+        <Card>
+            <CardContent className="p-4 text-center">
+                <div className="text-2xl font-bold text-purple-600 mb-1">{categoryCount}</div>
+                <div className="text-sm text-slate-600">Categories</div>
+            </CardContent>
+        </Card>
+        <Card>
+            <CardContent className="p-4 text-center">
+                <div className={`text-2xl font-bold mb-1 ${avgDifficulty === 'Low' ? 'text-green-600' : avgDifficulty === 'Medium' ? 'text-yellow-600' : 'text-red-600'}`}>{avgDifficulty}</div>
+                <div className="text-sm text-slate-600">Avg. Difficulty</div>
+            </CardContent>
+        </Card>
+    </div>
+);
+
+interface FilterControlsProps {
+    searchFilter: string;
+    setSearchFilter: (value: string) => void;
+    selectedCategory: string;
+    setSelectedCategory: (value: string) => void;
+    categories: {id: string; name: string; icon: React.ReactNode}[];
+}
+const FilterControls: React.FC<FilterControlsProps> = ({ searchFilter, setSearchFilter, selectedCategory, setSelectedCategory, categories }) => (
+    <div className="flex flex-col md:flex-row gap-4 mb-6">
+        <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
+            <Input placeholder="Search keywords..." value={searchFilter} onChange={(e) => setSearchFilter(e.target.value)} className="pl-10" />
+        </div>
+        <div className="flex items-center gap-2 overflow-x-auto pb-2">
+            <Button variant={selectedCategory === 'all' ? 'default' : 'outline'} onClick={() => setSelectedCategory('all')}>All</Button>
+            {categories.map((c) => (
+                <Button key={c.id} variant={selectedCategory === c.id ? 'default' : 'outline'} onClick={() => setSelectedCategory(c.id)} className="flex-shrink-0">
+                    {c.icon} <span className="ml-2">{c.name}</span>
+                </Button>
+            ))}
+        </div>
+    </div>
+);
+
+interface KeywordCategoryCardProps {
+    category: {
+        id: string;
+        name: string;
+        icon: React.ReactNode;
+        description: string;
+        keywords: Keyword[];
+    };
+    selectedKeywords: string[];
+    toggleKeyword: (keyword: string) => void;
+}
+const KeywordCategoryCard: React.FC<KeywordCategoryCardProps> = ({ category, selectedKeywords, toggleKeyword }) => {
+    const getDifficultyColor = (difficulty: string) => {
+        if (difficulty === 'Low') return 'bg-green-100 text-green-800';
+        if (difficulty === 'Medium') return 'bg-yellow-100 text-yellow-800';
+        if (difficulty === 'High') return 'bg-red-100 text-red-800';
+        return 'bg-gray-100 text-gray-800';
+    };
+    
+    return (
+        <Card key={category.id}>
+            <CardHeader>
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center space-x-3">
+                        {category.icon}
+                        <div>
+                            <CardTitle className="text-lg">{category.name}</CardTitle>
+                            <CardDescription>{category.description}</CardDescription>
+                        </div>
+                    </div>
+                    <Badge variant="secondary">{category.keywords.filter((k) => selectedKeywords.includes(k.term)).length} / {category.keywords.length}</Badge>
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+                {category.keywords.map((keyword: Keyword) => (
+                    <div
+                        key={keyword.term}
+                        className={`flex items-center justify-between p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedKeywords.includes(keyword.term) ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
+                        onClick={() => toggleKeyword(keyword.term)}
+                    >
+                        <div className="flex items-center space-x-3">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center ${selectedKeywords.includes(keyword.term) ? 'bg-blue-500' : 'bg-slate-200'}`}>
+                                {selectedKeywords.includes(keyword.term) && <Check className="w-4 h-4 text-white" />}
+                            </div>
+                            <span className="font-medium text-slate-800">{keyword.term}</span>
+                        </div>
+                        <div className="flex items-center space-x-4 text-sm text-right">
+                            <div className="w-20">
+                                <div className="font-semibold text-slate-700">{keyword.volume.toLocaleString()}</div>
+                                <div className="text-xs text-slate-500">Volume</div>
+                            </div>
+                            <Badge className={`w-16 justify-center ${getDifficultyColor(keyword.difficulty)}`}>{keyword.difficulty}</Badge>
+                        </div>
+                    </div>
+                ))}
+            </CardContent>
+        </Card>
+    );
+};
+
+const NoResultsCard = () => (
+    <div className="text-center py-16 px-6 border-2 border-dashed rounded-lg">
+        <Search className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+        <h3 className="text-lg font-semibold text-slate-700">No Keywords Found</h3>
+        <p className="text-slate-500">Try adjusting your search or category filters.</p>
+    </div>
+);
+
+interface SelectedKeywordsPanelProps {
+    selectedKeywords: string[];
+    customKeyword: string;
+    setCustomKeyword: (value: string) => void;
+    addCustomKeyword: () => void;
+    removeKeyword: (keyword: string) => void;
+}
+const SelectedKeywordsPanel: React.FC<SelectedKeywordsPanelProps> = ({ selectedKeywords, customKeyword, setCustomKeyword, addCustomKeyword, removeKeyword }) => (
+    <Card className="sticky top-6">
+        <CardHeader>
+            <CardTitle className="flex items-center text-sm">
+                <Brain className="h-5 w-5 mr-2 text-blue-600 text-sm" />
+                Selected Keywords ({selectedKeywords.length})
+            </CardTitle>
+            <CardDescription>Keywords to guide AI analysis</CardDescription>
+        </CardHeader>
+        <CardContent>
+            <div className="space-y-4">
+                <div className="flex gap-2">
+                    <Input placeholder="Add a custom keyword..." value={customKeyword} onChange={(e) => setCustomKeyword(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addCustomKeyword()} />
+                    <Button onClick={addCustomKeyword} size="icon"><Plus className="h-4 w-4" /></Button>
+                </div>
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-2">
+                    {selectedKeywords.length > 0 ? selectedKeywords.map((keyword) => (
+                        <div key={keyword} className="flex items-center justify-between p-2 bg-slate-50 rounded-md">
+                            <span className="text-slate-700 text-sm font-medium truncate pr-2">{keyword}</span>
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeKeyword(keyword)}>
+                                <X className="h-4 w-4 text-slate-400" />
+                            </Button>
+                        </div>
+                    )) : (
+                        <div className="text-center py-8 text-slate-500">
+                            <Target className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+                            <p className="text-sm">Select or add keywords to begin</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </CardContent>
+    </Card>
+);
+
+interface FooterProps {
+    onPrev: () => void;
+    onNext: () => void;
+    isSaving: boolean;
+    selectedCount: number;
+}
+const Footer: React.FC<FooterProps> = ({ onPrev, onNext, isSaving, selectedCount }) => (
+    <div className="flex gap-4 mt-8">
+        <Button variant="outline" onClick={onPrev} className="px-8">Previous Step</Button>
+        <Button onClick={onNext} disabled={selectedCount === 0 || isSaving} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-12 font-semibold">
+            {isSaving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Saving...</> : `Continue with ${selectedCount} Keywords`}
+        </Button>
+    </div>
+);
 
 export default KeywordDiscovery;

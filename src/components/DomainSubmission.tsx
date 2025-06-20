@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,8 +11,11 @@ interface DomainSubmissionProps {
   onNext: () => void;
 }
 
-const DomainSubmission: React.FC<DomainSubmissionProps> = ({ domain, setDomain, onNext }) => {
-  const [isSubmitting, setIsSubmitting] = useState(false);
+const DomainSubmission: React.FC<DomainSubmissionProps> = ({ 
+  domain, 
+  setDomain, 
+  onNext 
+}) => {
   const [domainError, setDomainError] = useState('');
 
   const validateDomain = (domain: string) => {
@@ -30,14 +32,9 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({ domain, setDomain, 
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!domain.trim() || domainError) return;
-    
-    setIsSubmitting(true);
-    // Simulate validation
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsSubmitting(false);
+    if (!domain.trim() || !!domainError) return;
     onNext();
   };
 
@@ -168,16 +165,9 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({ domain, setDomain, 
                 <Button 
                   type="submit" 
                   className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg transition-all duration-200"
-                  disabled={isSubmitting || !domain.trim() || !!domainError}
+                  disabled={!domain.trim() || !!domainError}
                 >
-                  {isSubmitting ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-3"></div>
-                      Validating Domain...
-                    </div>
-                  ) : (
-                    'Begin AI Visibility Analysis'
-                  )}
+                  Begin AI Visibility Analysis
                 </Button>
               </form>
             </CardContent>
@@ -210,46 +200,6 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({ domain, setDomain, 
           </Card>
 
           {/* Trust Indicators */}
-          <Card className="border-0 bg-blue-50">
-            <CardContent className="p-6">
-              <div className="text-center space-y-4">
-                <div className="flex justify-center space-x-2">
-                  <Badge className="bg-blue-100 text-blue-800 border-blue-200">SOC 2 Compliant</Badge>
-                  <Badge className="bg-green-100 text-green-800 border-green-200">GDPR Ready</Badge>
-                </div>
-                <p className="text-sm text-slate-600">
-                  Enterprise-grade security and compliance standards
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Customer Testimonials */}
-      <div className="border-t border-slate-200 pt-12">
-        <div className="text-center mb-8">
-          <h3 className="text-2xl font-bold text-slate-900 mb-2">Trusted by Industry Leaders</h3>
-          <p className="text-slate-600">See how organizations are optimizing their AI visibility</p>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {testimonials.map((testimonial, index) => (
-            <Card key={index} className="border border-slate-200 hover:shadow-md transition-shadow">
-              <CardContent className="p-6">
-                <div className="flex items-center space-x-4 mb-4">
-                  <div className="w-12 h-12 bg-slate-200 rounded-lg flex items-center justify-center">
-                    <span className="font-bold text-slate-700">{testimonial.logo}</span>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-slate-900">{testimonial.company}</h4>
-                    <Badge variant="secondary" className="text-xs">{testimonial.industry}</Badge>
-                  </div>
-                </div>
-                <p className="text-slate-600 italic">"{testimonial.quote}"</p>
-              </CardContent>
-            </Card>
-          ))}
         </div>
       </div>
     </div>

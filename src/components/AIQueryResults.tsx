@@ -90,8 +90,6 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
 
     const ctrl = new AbortController();
     const totalExpected = phrases.reduce((sum, item) => sum + item.phrases.length, 0) * aiModels.length;
-    const modelProgress: {[model: string]: number} = { 'GPT-4o': 0, 'Claude 3': 0, 'Gemini 1.5': 0 };
-    const modelDone: {[model: string]: number} = { 'GPT-4o': 0, 'Claude 3': 0, 'Gemini 1.5': 0 };
 
     fetchEventSource(`https://phrase-score-insight.onrender.com/api/ai-queries/${domainId}`, {
       method: 'POST',
@@ -115,7 +113,6 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
           resultsRef.current.push(data);
           setResults(prev => [...prev, data]);
           setProgress(Math.round((resultsRef.current.length / totalExpected) * 100));
-          modelProgress[data.model] = (modelProgress[data.model] || 0) + 1;
           setModelStatus(prev => ({ ...prev, [data.model]: 'Querying...' }));
         } else if (ev.event === 'stats') {
           const data: AIQueryStats = JSON.parse(ev.data);
@@ -128,6 +125,11 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
           const match = msg.match(/Querying [^ ]+ for "(.+?)"/);
           if (match) {
             msg = `Querying: "${match[1]}"...`;
+          }
+          // If the message matches 'Scoring [model] response for "phrase"...', show 'Scoring: "phrase"...'
+          const scoringMatch = msg.match(/Scoring [^ ]+ response for "(.+?)"/);
+          if (scoringMatch) {
+            msg = `Scoring: "${scoringMatch[1]}"...`;
           }
           setCurrentPhrase(msg);
         } else if (ev.event === 'error') {
@@ -216,7 +218,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
             <div className="text-center space-y-6">
               <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-blue-600 mx-auto"></div>
               <div>
-                <h3 className="text-xl font-semibold text-slate-900">Running AI Analysis...</h3>
+                <h3 className="text-xl font-semibold text-slate-900">Running Analysis...</h3>
                 <p className="text-slate-600 mb-4">{currentPhrase || 'Connecting to analysis engine...'}</p>
                 <div className="w-full bg-slate-200 rounded-full h-1.5 mt-4 max-w-md mx-auto">
                   <div 

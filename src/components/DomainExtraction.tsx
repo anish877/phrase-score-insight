@@ -209,7 +209,7 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
                       {isLoading ? phases[currentPhase]?.name : 'Analysis Complete'}
                     </CardTitle>
                     <CardDescription className="text-slate-600">
-                      {isLoading ? 'Processing your domain with real-time AI analysis' : `Brand context successfully extracted in ${responseTime}s`}
+                      {isLoading ? 'Processing your domain with AI analysis' : `Brand context successfully extracted in ${responseTime}s`}
                     </CardDescription>
                   </div>
                 </div>
@@ -386,7 +386,7 @@ const StatCard = ({ title, value, color, isLoading = false }: { title: string, v
             <div className={`text-2xl font-bold ${c.text} transition-all duration-500`}>
                 {value}
                 {isLoading && Number(value) > 0 && (
-                  <span className={`text-xs ${c.text} opacity-70 ml-1 animate-pulse`}>+</span>
+                  <span className={`text-xs ${c.text} opacity-70 ml-1 animate-pulse`}></span>
                 )}
             </div>
             <div className="text-xs text-slate-600">{title}</div>

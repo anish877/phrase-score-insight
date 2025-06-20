@@ -262,12 +262,15 @@ const LoadingState = ({ step, count }: { step: string, count: number }) => (
             <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600 mx-auto"></div>
             <div className="absolute inset-0 flex items-center justify-center text-blue-600"><Search/></div>
             </div>
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">Discovering Keywords</h2>
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">AI Keyword Discovery</h2>
             <p className="text-slate-600 mb-4 font-medium">{step}</p>
             <div className="w-full bg-slate-200 rounded-full h-2">
-                <div className="bg-blue-600 h-2 rounded-full animate-pulse" style={{width: `${Math.min(100, count * 10)}%`}}></div>
+                <div className="bg-blue-600 h-2 rounded-full transition-all duration-300" style={{width: `${Math.min(100, Math.max(10, count * 2))}%`}}></div>
             </div>
-            <div className="text-xs text-slate-500 mt-2">{count} keywords found</div>
+            <div className="text-xs text-slate-500 mt-2">{count} AI-generated keywords found</div>
+            <div className="mt-2 text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded-full inline-block">
+                AI Analysis
+            </div>
         </div>
     </div>
 );
@@ -290,9 +293,11 @@ const Header = () => (
                 <Search className="h-6 w-6 text-white" />
             </div>
         </div>
-        <h2 className="text-3xl font-bold text-slate-900 mb-4">Strategic Keyword Discovery</h2>
-        <p className="text-lg text-slate-600 max-w-3xl mx-auto">
-            Select high-impact keywords based on your brand context to guide the AI phrase generation.
+        <h2 className="text-3xl font-bold text-slate-900 mb-4">
+            Keyword Discovery
+        </h2>
+        <p className="text-lg text-slate-600">
+            AI Analysis
         </p>
     </div>
 );
@@ -316,19 +321,19 @@ const StatsCards: React.FC<StatsCardsProps> = ({ selectedCount, totalVolume, cat
         <Card>
             <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-green-600 mb-1">{totalVolume.toLocaleString()}</div>
-                <div className="text-sm text-slate-600">Total Search Volume</div>
+                <div className="text-sm text-slate-600">AI-Estimated Volume</div>
             </CardContent>
         </Card>
         <Card>
             <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-purple-600 mb-1">{categoryCount}</div>
-                <div className="text-sm text-slate-600">Categories</div>
+                <div className="text-sm text-slate-600">AI-Categorized</div>
             </CardContent>
         </Card>
         <Card>
             <CardContent className="p-4 text-center">
                 <div className={`text-2xl font-bold mb-1 ${avgDifficulty === 'Low' ? 'text-green-600' : avgDifficulty === 'Medium' ? 'text-yellow-600' : 'text-red-600'}`}>{avgDifficulty}</div>
-                <div className="text-sm text-slate-600">Avg. Difficulty</div>
+                <div className="text-sm text-slate-600">AI-Assessed Difficulty</div>
             </CardContent>
         </Card>
     </div>

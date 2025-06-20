@@ -8,8 +8,26 @@ import aiQueriesRouter from './routes/ai-queries';
 
 const app = express();
 
+// Load environment variables
+import 'dotenv/config';
+
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://phrase-score-insight-lxkj.vercel.app'
+];
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Routes

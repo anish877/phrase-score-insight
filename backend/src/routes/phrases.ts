@@ -16,52 +16,91 @@ router.get('/:domainId', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  // Fetch selected keywords from DB, sorted by volume, limit N
-  const keywords = await prisma.keyword.findMany({
-    where: { domainId, isSelected: true },
-    orderBy: { volume: 'desc' },
-    take: 10,
-    select: { id: true, term: true }
-  });
+  const sendEvent = (event: string, data: any) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
 
-  if (!keywords.length) {
-    res.write(`event: error\ndata: ${JSON.stringify({ error: 'No selected keywords found' })}\n\n`);
-    res.end();
-    return;
-  }
+  try {
+    // Fetch selected keywords from DB, sorted by volume
+    const keywords = await prisma.keyword.findMany({
+      where: { domainId, isSelected: true },
+      orderBy: { volume: 'desc' },
+      select: { id: true, term: true }
+    });
 
-  // Send initial stats
-  let totalPhrases = 0;
-  let phrasesPerKeyword: Record<string, number> = {};
-  res.write(`event: stats\ndata: ${JSON.stringify({ totalKeywords: keywords.length, totalPhrases: 0, avgPerKeyword: 0, aiQueries: 0 })}\n\n`);
-
-  for (let i = 0; i < keywords.length; i++) {
-    const { id: keywordId, term } = keywords[i];
-    try {
-      res.write(`event: progress\ndata: ${JSON.stringify({ message: `Generating phrases for \"${term}\" (${i+1}/${keywords.length})` })}\n\n`);
-      const phrases = await geminiService.generatePhrases(term);
-      phrasesPerKeyword[term] = 0;
-      for (const phrase of phrases) {
-        // Save phrase to DB
-        const phraseRecord = await prisma.phrase.create({
-          data: {
-            text: phrase,
-            keywordId,
-          }
-        });
-        res.write(`event: phrase\ndata: ${JSON.stringify({ keyword: term, phrase: phraseRecord.text, phraseId: phraseRecord.id })}\n\n`);
-        totalPhrases++;
-        phrasesPerKeyword[term]++;
-        const avgPerKeyword = totalPhrases / (i + 1);
-        res.write(`event: stats\ndata: ${JSON.stringify({ totalKeywords: keywords.length, totalPhrases, avgPerKeyword, aiQueries: totalPhrases * 3 })}\n\n`);
-      }
-    } catch (err: any) {
-      res.write(`event: error\ndata: ${JSON.stringify({ error: `Failed for \"${term}\": ${err.message}` })}\n\n`);
+    if (!keywords.length) {
+      sendEvent('error', { error: 'No selected keywords found' });
+      res.end();
+      return;
     }
-  }
 
-  res.write(`event: complete\ndata: {}\n\n`);
-  res.end();
+    // Send initial stats
+    let totalPhrases = 0;
+    let totalAIQueries = 0;
+    let phrasesPerKeyword: Record<string, number> = {};
+    
+    sendEvent('progress', { message: 'Initializing AI phrase generation...' });
+    sendEvent('stats', { 
+      totalKeywords: keywords.length, 
+      totalPhrases: 0, 
+      avgPerKeyword: 0, 
+      aiQueries: 0 
+    });
+
+    for (let i = 0; i < keywords.length; i++) {
+      const { id: keywordId, term } = keywords[i];
+      try {
+        sendEvent('progress', { message: `AI generating phrases for "${term}" (${i+1}/${keywords.length})` });
+        
+        // Generate phrases using AI
+        const phrases = await geminiService.generatePhrases(term);
+        totalAIQueries += 1; // Count each AI call
+        
+        phrasesPerKeyword[term] = 0;
+        for (const phrase of phrases) {
+          // Save phrase to DB
+          const phraseRecord = await prisma.phrase.create({
+            data: {
+              text: phrase,
+              keywordId,
+            }
+          });
+          
+          sendEvent('phrase', { 
+            keyword: term, 
+            phrase: phraseRecord.text, 
+            phraseId: phraseRecord.id 
+          });
+          
+          totalPhrases++;
+          phrasesPerKeyword[term]++;
+          
+          // Calculate real-time stats
+          const avgPerKeyword = totalPhrases / (i + 1);
+          sendEvent('stats', { 
+            totalKeywords: keywords.length, 
+            totalPhrases, 
+            avgPerKeyword: Math.round(avgPerKeyword * 10) / 10, 
+            aiQueries: totalAIQueries 
+          });
+        }
+        
+        sendEvent('progress', { message: `Generated ${phrases.length} phrases for "${term}"` });
+        
+      } catch (err: any) {
+        console.error(`Failed to generate phrases for "${term}":`, err);
+        sendEvent('error', { error: `Failed for "${term}": ${err.message}` });
+      }
+    }
+
+    sendEvent('progress', { message: `AI phrase generation complete! Generated ${totalPhrases} phrases from ${totalAIQueries} AI queries.` });
+    sendEvent('complete', {});
+    res.end();
+  } catch (err: any) {
+    console.error('Phrase generation error:', err);
+    sendEvent('error', { error: err.message });
+    res.end();
+  }
 });
 
 export default router; 

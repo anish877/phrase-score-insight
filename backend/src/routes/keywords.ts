@@ -64,11 +64,12 @@ router.get('/:domainId', async (req: Request, res: Response) => {
       ...kw,
       category: determineCategory(kw.term, kw.volume)
     }));
-    const topKeywords = categorizedKeywords.slice(0, 10);
+    // Use all AI-generated keywords, not just top 10
+    const allKeywords = categorizedKeywords;
 
     // Save keywords to database
     const savedKeywords = await Promise.all(
-      topKeywords.map(kw =>
+      allKeywords.map(kw =>
         prisma.keyword.create({
           data: {
             ...kw,
@@ -133,6 +134,10 @@ router.get('/stream/:domainId', async (req: Request, res: Response) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
+  const sendEvent = (event: string, data: any) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
   try {
     // Get domain first
     const domain = await prisma.domain.findUnique({
@@ -141,48 +146,68 @@ router.get('/stream/:domainId', async (req: Request, res: Response) => {
     });
 
     if (!domain) {
-      res.write(`event: error\ndata: ${JSON.stringify({ error: 'Domain not found' })}\n\n`);
+      sendEvent('error', { error: 'Domain not found' });
       res.end();
       return;
     }
 
     // If we already have keywords, stream them
     if (domain.keywords.length > 0) {
+      sendEvent('progress', { message: 'Loading existing keywords...' });
       for (const kw of domain.keywords) {
-        res.write(`event: keyword\ndata: ${JSON.stringify(kw)}\n\n`);
+        sendEvent('keyword', kw);
       }
-      res.write(`event: complete\ndata: {}\n\n`);
+      sendEvent('complete', {});
       res.end();
       return;
     }
 
-    // Otherwise, generate keywords using Gemini and stream as we process
+    // Otherwise, generate keywords using AI and stream as we process
+    sendEvent('progress', { message: 'Analyzing brand context for keyword discovery...' });
+    
     let context = domain.context;
     if (!context) {
+      sendEvent('progress', { message: 'Extracting brand context with AI...' });
       const extraction = await crawlAndExtractWithGemini(domain.url);
       context = extraction.extractedContext;
       await prisma.domain.update({ where: { id: domain.id }, data: { context } });
     }
+
+    sendEvent('progress', { message: 'Generating keywords with AI analysis...' });
     const geminiKeywords = await generateKeywordsForDomain(domain.url, context);
+    
+    sendEvent('progress', { message: 'Categorizing keywords by user intent...' });
     const categorizedKeywords = geminiKeywords.map(kw => ({
       ...kw,
       category: determineCategory(kw.term, kw.volume)
     }));
-    const topKeywords = categorizedKeywords.slice(0, 10);
+    
+    // Use all AI-generated keywords, not just top 10
+    const allKeywords = categorizedKeywords;
 
-    for (const kw of topKeywords) {
+    sendEvent('progress', { message: `Saving ${allKeywords.length} AI-generated keywords...` });
+
+    for (let i = 0; i < allKeywords.length; i++) {
+      const kw = allKeywords[i];
       // Save to DB
       const saved = await prisma.keyword.create({
         data: { ...kw, domainId }
       });
       // Stream to client
-      res.write(`event: keyword\ndata: ${JSON.stringify(saved)}\n\n`);
+      sendEvent('keyword', saved);
+      
+      // Update progress
+      if (i % 5 === 0) {
+        sendEvent('progress', { message: `Processed ${i + 1}/${allKeywords.length} keywords...` });
+      }
     }
 
-    res.write(`event: complete\ndata: {}\n\n`);
+    sendEvent('progress', { message: 'Keyword discovery complete!' });
+    sendEvent('complete', {});
     res.end();
   } catch (err: any) {
-    res.write(`event: error\ndata: ${JSON.stringify({ error: err.message })}\n\n`);
+    console.error('Keyword streaming error:', err);
+    sendEvent('error', { error: err.message });
     res.end();
   }
 });

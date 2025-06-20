@@ -51,7 +51,12 @@ async function crawlWebsiteWithProgress(
     stats
   });
 
-  await delay(800);
+  // Real validation check
+  try {
+    await axios.get(`https://${domain}`, { timeout: 5000 });
+  } catch (error) {
+    throw new Error(`Domain ${domain} is not accessible`);
+  }
 
   onProgress?.({
     phase: 'discovery',
@@ -60,16 +65,12 @@ async function crawlWebsiteWithProgress(
     stats
   });
 
-  await delay(1200);
-
   onProgress?.({
     phase: 'discovery',
     step: 'Mapping content structure...',
     progress: 15,
     stats
   });
-
-  await delay(1000);
 
   // Phase 2: Content Analysis
   onProgress?.({
@@ -160,7 +161,7 @@ async function crawlWebsiteWithProgress(
 
       stats.contentBlocks = contentBlocks.length;
 
-      // Update progress
+      // Update progress based on real crawling progress
       const currentProgress = 20 + (visited.size * progressIncrement);
       onProgress?.({
         phase: 'content',
@@ -200,11 +201,12 @@ async function crawlWebsiteWithProgress(
         }
       });
 
-      await delay(500 + Math.random() * 1000); // Realistic delay between requests
+      // Small delay to be respectful to the server
+      await delay(300);
 
     } catch (error) {
       console.error(`Failed to crawl ${url}:`, error);
-      await delay(300);
+      await delay(200);
     }
   }
 
@@ -214,8 +216,6 @@ async function crawlWebsiteWithProgress(
     progress: 75,
     stats
   });
-
-  await delay(800);
 
   return { contentBlocks, urls: discoveredUrls };
 }
@@ -249,12 +249,10 @@ export async function crawlAndExtractWithGemini(
 
     onProgress?.({
       phase: 'ai_processing',
-      step: 'Running GPT-4o analysis...',
+      step: 'Running AI analysis...',
       progress: 80,
       stats
     });
-
-    await delay(1500);
 
     // Prepare content for analysis
     const siteContent = contentBlocks
@@ -348,8 +346,6 @@ Again, your entire response must be ONLY the raw JSON object. Do not wrap it in 
       stats
     });
 
-    await delay(1000);
-
     // Clean and parse response
     text = text.trim();
     const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -366,8 +362,8 @@ Again, your entire response must be ONLY the raw JSON object. Do not wrap it in 
       throw new Error('Could not parse valid JSON from API response.');
     }
 
-    // Phase 4: Validation
-    // Sum of all entities found
+    // Phase 4: Validation - Calculate real stats from AI analysis
+    // Sum of all entities found from AI analysis
     const totalEntities = Object.values(result.keyEntities || {}).reduce((sum: number, arr: unknown) => sum + (Array.isArray(arr) ? arr.length : 0), 0);
     stats.keyEntities = totalEntities;
     stats.confidenceScore = result.confidenceScore || 0;
@@ -379,16 +375,12 @@ Again, your entire response must be ONLY the raw JSON object. Do not wrap it in 
       stats
     });
 
-    await delay(600);
-
     onProgress?.({
       phase: 'validation',
       step: 'Quality assurance checks...',
       progress: 98,
       stats
     });
-
-    await delay(500);
 
     onProgress?.({
       phase: 'validation',
@@ -397,14 +389,12 @@ Again, your entire response must be ONLY the raw JSON object. Do not wrap it in 
       stats
     });
 
-    await delay(400);
-
-    // Validate and normalize the result
+    // Validate and normalize the result using real AI-generated data
     const finalResult: GeminiExtractionResult = {
-      pagesScanned: Math.max(1, Math.min(urls.length, 25)),
-      contentBlocks: Math.max(1, Math.min(contentBlocks.length, 200)),
-      keyEntities: Math.max(0, Math.min(totalEntities, 50)),
-      confidenceScore: Math.min(100, Math.max(0, result.confidenceScore || 75)),
+      pagesScanned: urls.length,
+      contentBlocks: contentBlocks.length,
+      keyEntities: totalEntities,
+      confidenceScore: result.confidenceScore || 75,
       extractedContext: result.extractedContext || 
         `${cleanDomain} is a business website offering various services and solutions. The site contains information about their offerings and approach to serving their target market.`
     };

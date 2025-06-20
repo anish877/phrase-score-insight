@@ -7,18 +7,9 @@ const prisma = new PrismaClient();
 
 const AI_MODELS: ('GPT-4o' | 'Claude 3' | 'Gemini 1.5')[] = ['GPT-4o', 'Claude 3', 'Gemini 1.5'];
 
-// Scoring logic (same as frontend)
-function scoreResponse(result: any) {
-  // Simulate presence: 70% chance of presence
-  const presence = Math.random() > 0.3 ? 1 : 0;
-  const relevance = Math.floor(Math.random() * 5) + 1;
-  const accuracy = Math.floor(Math.random() * 5) + 1;
-  const sentiment = Math.floor(Math.random() * 5) + 1;
-  let overall = 0;
-  if (presence === 1) {
-    overall = Math.round((relevance + accuracy + sentiment) / 3 * 10) / 10;
-  }
-  return { presence, relevance, accuracy, sentiment, overall };
+// AI-powered scoring logic
+async function scoreResponseWithAI(phrase: string, response: string, model: string) {
+  return await aiQueryService.scoreResponse(phrase, response, model);
 }
 
 function calculateStats(results: any[]) {
@@ -98,25 +89,19 @@ router.post('/:domainId', async (req, res) => {
             // Run model queries in parallel for each phrase
             const promises = AI_MODELS.map(async (model) => {
                 const startTime = Date.now();
-                res.write(`event: progress\ndata: ${JSON.stringify({ message: `Querying: \"${query.phrase}\"...` })}\n\n`);
+                res.write(`event: progress\ndata: ${JSON.stringify({ message: `Querying ${model} for "${query.phrase}"...` })}\n\n`);
 
                 try {
-                    // Model routing:
-                    // 'GPT-4o' -> GPT-4o
-                    // 'Claude 3' -> GPT-4o (stand-in)
-                    // 'Gemini 1.5' -> Gemini 1.5
-                    let modelToUse: 'GPT-4o' | 'Gemini 1.5';
-                    if (model === 'GPT-4o') modelToUse = 'GPT-4o';
-                    else if (model === 'Claude 3') modelToUse = 'GPT-4o';
-                    else modelToUse = 'Gemini 1.5';
-                    const { response, cost } = await aiQueryService.query(query.phrase, modelToUse);
+                    // Get AI response using Gemini under the hood
+                    const { response, cost } = await aiQueryService.query(query.phrase, model);
                     const latency = (Date.now() - startTime) / 1000;
+
+                    // Score the response using AI
+                    res.write(`event: progress\ndata: ${JSON.stringify({ message: `Scoring ${model} response for "${query.phrase}"...` })}\n\n`);
+                    const scores = await scoreResponseWithAI(query.phrase, response, model);
 
                     completedQueries++;
                     const progress = (completedQueries / totalQueries) * 100;
-
-                    // Score the response
-                    const scores = scoreResponse({ ...query, model, response });
 
                     // Find the phrase record in the DB (by text and keyword)
                     const keywordRecord = await prisma.keyword.findFirst({
@@ -165,7 +150,7 @@ router.post('/:domainId', async (req, res) => {
                     const stats = calculateStats(allResults);
                     res.write(`event: stats\ndata: ${JSON.stringify(stats)}\n\n`);
                 } catch (err: any) {
-                    res.write(`event: error\ndata: ${JSON.stringify({ error: `Failed for \"${query.phrase}\" with ${model}: ${err.message}` })}\n\n`);
+                    res.write(`event: error\ndata: ${JSON.stringify({ error: `Failed for "${query.phrase}" with ${model}: ${err.message}` })}\n\n`);
                 }
             });
             await Promise.all(promises);

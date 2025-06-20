@@ -6,7 +6,8 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@microsoft/fetch-event-source": "^2.0.1",
@@ -23,7 +24,7 @@
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/node": "^24.0.3",
-    "prisma": "6.10.1",
+    "prisma": "^5.0.0",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.8.3"
   }

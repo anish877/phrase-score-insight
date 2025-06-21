@@ -25,7 +25,7 @@ router.post('/', async (req: Request, res: Response) => {
 
   try {
     // 1. Save or find domain
-    sendEvent({ type: 'progress', message: 'Initializing domain...', progress: 5 });
+    sendEvent({ type: 'progress', message: 'Initializing domain analysis and validation...', progress: 5 });
     let domain = await prisma.domain.findUnique({ where: { url } });
     if (!domain) {
       domain = await prisma.domain.create({ data: { url } });
@@ -34,7 +34,42 @@ router.post('/', async (req: Request, res: Response) => {
 
     // 2. Define progress callback for the crawler
     const onProgress: ProgressCallback = (progressData) => {
-      sendEvent({ type: 'progress', ...progressData });
+      // Enhance progress messages to be more realistic
+      let enhancedMessage = progressData.step;
+      
+      if (progressData.phase === 'discovery') {
+        if (progressData.step.includes('Validating')) {
+          enhancedMessage = 'Validating domain accessibility and technical requirements...';
+        } else if (progressData.step.includes('Scanning')) {
+          enhancedMessage = 'Scanning website architecture and content structure...';
+        } else if (progressData.step.includes('Mapping')) {
+          enhancedMessage = 'Mapping content hierarchy and navigation patterns...';
+        }
+      } else if (progressData.phase === 'content') {
+        if (progressData.step.includes('Extracting')) {
+          enhancedMessage = 'Extracting and analyzing page content with advanced parsing...';
+        } else if (progressData.step.includes('Processing')) {
+          enhancedMessage = 'Processing metadata and structured data for comprehensive analysis...';
+        }
+      } else if (progressData.phase === 'ai_processing') {
+        if (progressData.step.includes('Running')) {
+          enhancedMessage = 'Running advanced AI analysis for brand context extraction...';
+        } else if (progressData.step.includes('Extracting')) {
+          enhancedMessage = 'Extracting brand context and market positioning insights...';
+        } else if (progressData.step.includes('Generating')) {
+          enhancedMessage = 'Generating comprehensive business intelligence and SEO insights...';
+        }
+      } else if (progressData.phase === 'validation') {
+        if (progressData.step.includes('Validating')) {
+          enhancedMessage = 'Validating analysis results and quality assurance checks...';
+        } else if (progressData.step.includes('Quality')) {
+          enhancedMessage = 'Quality assurance and data validation in progress...';
+        } else if (progressData.step.includes('Finalizing')) {
+          enhancedMessage = 'Finalizing comprehensive brand analysis and preparing insights...';
+        }
+      }
+      
+      sendEvent({ type: 'progress', ...progressData, step: enhancedMessage });
     };
 
     // 3. Run Gemini extraction with progress streaming

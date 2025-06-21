@@ -107,7 +107,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
       }
     }, 30000); // 30 second connection timeout
 
-    fetchEventSource(`http://localhost:3001/api/ai-queries/${domainId}`, {
+    fetchEventSource(`https://phrase-score-insight.onrender.com /api/ai-queries/${domainId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -345,7 +345,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
                       <TableHead className="text-slate-700 font-medium">Model</TableHead>
                       <TableHead className="text-slate-700 font-medium">Response Preview</TableHead>
                       <TableHead className="text-slate-700 font-medium">Latency</TableHead>
-                      <TableHead className="text-slate-700 font-medium">Presence</TableHead>
+                      <TableHead className="text-slate-700 font-medium">Domain Presence</TableHead>
                       <TableHead className="text-slate-700 font-medium">Relevance</TableHead>
                       <TableHead className="text-slate-700 font-medium">Accuracy</TableHead>
                       <TableHead className="text-slate-700 font-medium">Sentiment</TableHead>
@@ -375,19 +375,57 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
                             <span className="font-mono text-slate-700">{Number(result.latency || 0).toFixed(2)}s</span>
                           </TableCell>
                           <TableCell className="text-center">
-                            {result.scores.presence === 1 ? <span className="text-green-600">✓</span> : <span className="text-red-600">✗</span>}
+                            {result.scores.presence === 1 ? (
+                              <div className="flex flex-col items-center">
+                                <span className="text-green-600 text-lg">✓</span>
+                                <span className="text-xs text-green-600">Present</span>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center">
+                                <span className="text-red-600 text-lg">✗</span>
+                                <span className="text-xs text-red-600">Not Found</span>
+                              </div>
+                            )}
                           </TableCell>
-                          <TableCell className="text-center font-medium">
-                            {result.scores.relevance}
+                          <TableCell className="text-center">
+                            <div className="flex flex-col items-center">
+                              <span className={`font-bold text-lg ${result.scores.relevance >= 4 ? 'text-green-600' : result.scores.relevance >= 3 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                {result.scores.relevance}
+                              </span>
+                              <span className="text-xs text-slate-500">
+                                {result.scores.relevance >= 4 ? 'High' : result.scores.relevance >= 3 ? 'Medium' : 'Low'}
+                              </span>
+                            </div>
                           </TableCell>
-                          <TableCell className="text-center font-medium">
-                            {result.scores.accuracy}
+                          <TableCell className="text-center">
+                            <div className="flex flex-col items-center">
+                              <span className={`font-bold text-lg ${result.scores.accuracy >= 4 ? 'text-green-600' : result.scores.accuracy >= 3 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                {result.scores.accuracy}
+                              </span>
+                              <span className="text-xs text-slate-500">
+                                {result.scores.accuracy >= 4 ? 'Trusted' : result.scores.accuracy >= 3 ? 'Good' : 'Poor'}
+                              </span>
+                            </div>
                           </TableCell>
-                          <TableCell className="text-center font-medium">
-                            {result.scores.sentiment}
+                          <TableCell className="text-center">
+                            <div className="flex flex-col items-center">
+                              <span className={`font-bold text-lg ${result.scores.sentiment >= 4 ? 'text-green-600' : result.scores.sentiment >= 3 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                {result.scores.sentiment}
+                              </span>
+                              <span className="text-xs text-slate-500">
+                                {result.scores.sentiment >= 4 ? 'Positive' : result.scores.sentiment >= 3 ? 'Neutral' : 'Negative'}
+                              </span>
+                            </div>
                           </TableCell>
-                          <TableCell className="text-center font-bold">
-                            {result.scores.overall}
+                          <TableCell className="text-center">
+                            <div className="flex flex-col items-center">
+                              <span className={`font-bold text-xl ${result.scores.overall >= 4 ? 'text-green-600' : result.scores.overall >= 3 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                {result.scores.overall}
+                              </span>
+                              <span className="text-xs text-slate-500">
+                                {result.scores.overall >= 4 ? 'Excellent' : result.scores.overall >= 3 ? 'Good' : 'Poor'}
+                              </span>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );

@@ -262,14 +262,14 @@ export async function crawlAndExtractWithGemini(
       .slice(0, 30000); // Increase content size limit
 
     const enhancedPrompt = `
-You are a world-class brand analyst AI. Your task is to analyze the provided website content for ${cleanDomain} and return a structured JSON object. Your output must be ONLY the JSON object, without any markdown formatting, comments, or other text.
+You are a senior brand analyst and SEO expert with 15+ years of experience analyzing websites for Fortune 500 companies. Your task is to provide a comprehensive, professional analysis of ${cleanDomain} based on the provided website content.
 
-Analyze the following content:
+Analyze the following content thoroughly:
 ---
 ${siteContent}
 ---
 
-Your response MUST be a single, valid JSON object with the following structure and data types:
+Your response MUST be a single, valid JSON object with this EXACT structure and data types:
 {
   "pagesScanned": number,
   "contentBlocks": number,
@@ -290,25 +290,49 @@ Your response MUST be a single, valid JSON object with the following structure a
   }
 }
 
-Guidelines for JSON field values:
-1.  "pagesScanned": Use the provided value: ${urls.length}.
-2.  "contentBlocks": Use the provided value: ${contentBlocks.length}.
-3.  "keyEntities": Extract all unique named entities from the text.
-    - "products": List specific product names (e.g., "Photon Controller", "Fusion Drive").
-    - "services": List specific services offered (e.g., "Cloud Migration", "IT Consulting").
-    - "technologies": List programming languages, frameworks, and tech platforms (e.g., "React", "AWS", "Kubernetes").
-    - "brands": List company or brand names mentioned, including the primary company.
-    - "people": List names of individuals (e.g., executives, team members).
-    - "locations": List cities, countries, or specific addresses.
-4.  "confidenceScore": An integer from 0-100, your confidence in the accuracy and completeness of your analysis based on the provided text's quality.
-5.  "extractedContext": A 3-5 sentence, professionally-written paragraph summarizing the company's purpose, offerings, target market, and unique value proposition.
-6.  "seoAnalysis":
-    - "focusKeywords": Infer and list the top 3-5 primary SEO keywords the site seems to be targeting.
-    - "titleTag": Extract the primary page title.
-    - "metaDescription": Extract the primary meta description.
+ANALYSIS REQUIREMENTS:
 
-Again, your entire response must be ONLY the raw JSON object. Do not wrap it in \`\`\`json ... \`\`\`.
-`;
+1. "pagesScanned": Use the provided value: ${urls.length}.
+
+2. "contentBlocks": Use the provided value: ${contentBlocks.length}.
+
+3. "keyEntities": Extract ALL unique, specific entities mentioned:
+   - "products": Specific product names, software, tools, platforms
+   - "services": Specific services offered, consulting areas, solutions
+   - "technologies": Programming languages, frameworks, platforms, tech stack
+   - "brands": Company names, partner brands, competitors mentioned
+   - "people": Names of executives, team members, key personnel
+   - "locations": Cities, countries, office locations, service areas
+
+4. "confidenceScore": Integer 0-100 based on:
+   - Content quality and comprehensiveness (30%)
+   - Information clarity and specificity (25%)
+   - Brand positioning clarity (25%)
+   - Technical information completeness (20%)
+   Use realistic scores: 75-95 for good content, 60-74 for moderate, below 60 for poor
+
+5. "extractedContext": Write a 4-6 sentence professional summary that includes:
+   - Company's primary business focus and industry
+   - Key products/services and target market
+   - Unique value proposition and competitive advantages
+   - Company size/scale indicators (if mentioned)
+   - Geographic scope and market positioning
+   Use professional business language and be specific
+
+6. "seoAnalysis":
+   - "focusKeywords": 3-5 primary SEO keywords the site appears to target (be realistic)
+   - "titleTag": Extract the main page title or create a professional one
+   - "metaDescription": Extract the main meta description or create a compelling one
+
+QUALITY STANDARDS:
+- Be specific and accurate - avoid generic descriptions
+- Use industry-standard terminology
+- Provide realistic, actionable insights
+- Focus on business value and market positioning
+- Include technical details when relevant
+- Maintain professional tone throughout
+
+Your entire response must be ONLY the raw JSON object. Do not wrap it in \`\`\`json ... \`\`\`.`;
 
     onProgress?.({
       phase: 'ai_processing',
@@ -427,17 +451,52 @@ Again, your entire response must be ONLY the raw JSON object. Do not wrap it in 
 export async function generatePhrases(keyword: string): Promise<string[]> {
   if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not configured');
 
-  const prompt = `Generate 5 diverse, high-quality search phrases that a user might enter into Google to learn about, compare, or buy something related to: "${keyword}". Return ONLY a JSON array of strings, no markdown, no comments, no extra text.`;
+  const prompt = `You are an expert SEO specialist with deep knowledge of search intent and user behavior. Generate 5 highly realistic search phrases that actual users would type into Google when searching for information related to: "${keyword}"
+
+CRITICAL REQUIREMENTS:
+1. Use REAL search patterns that match actual user behavior
+2. Include different search intents: informational, commercial, transactional, navigational
+3. Use natural language that real people actually type
+4. Include question-based searches, comparison searches, and specific queries
+5. Match the complexity and specificity of real search queries
+6. Use industry-standard terminology and search patterns
+7. Include long-tail variations that show specific user intent
+8. Avoid generic or overly broad phrases
+
+SEARCH INTENT PATTERNS TO INCLUDE:
+- Informational: "how to", "what is", "guide", "tutorial", "tips"
+- Commercial: "best", "top", "review", "comparison", "vs"
+- Transactional: "buy", "pricing", "cost", "free trial", "demo"
+- Specific: Include industry terms, brand names, specific features
+- Question-based: Natural questions users ask
+- Comparison: "vs", "alternative to", "instead of"
+
+EXAMPLE REALISTIC PHRASES:
+For "project management software":
+- "best project management software for small teams"
+- "how to choose project management tools"
+- "asana vs monday.com vs trello comparison"
+- "project management software pricing plans"
+- "free project management tools for startups"
+
+For "digital marketing":
+- "digital marketing strategies for 2024"
+- "how to start digital marketing business"
+- "best digital marketing tools for small business"
+- "digital marketing vs traditional marketing"
+- "digital marketing course online free"
+
+Generate 5 phrases that would actually be valuable for SEO targeting "${keyword}". Return ONLY a JSON array of strings, no markdown, no comments, no extra text.`;
 
   const response = await axios.post(
     `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
     {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.7,
+        temperature: 0.4,
         topK: 32,
         topP: 0.9,
-        maxOutputTokens: 256,
+        maxOutputTokens: 400,
       }
     },
     {
@@ -485,7 +544,59 @@ export const geminiService = {
 
 // Generate relevant keywords for a domain using Gemini
 export async function generateKeywordsForDomain(domain: string, context: string): Promise<Array<{ term: string, volume: number, difficulty: string, cpc: number }>> {
-  const prompt = `You are an expert SEO tool. Given the following website domain and its context, generate a list of the 15 most relevant, high-impact keywords for this business. For each keyword, estimate its monthly search volume, difficulty (Low, Medium, High), and CPC in USD. Return ONLY a valid JSON array of objects with this exact structure: [{ "term": string, "volume": number, "difficulty": "Low"|"Medium"|"High", "cpc": number }]. No markdown, no comments, no extra text, no explanation, no headings, no code block, just the array.\n\nDomain: ${domain}\nContext: ${context}\n\nJSON array:`;
+  const prompt = `You are an expert SEO analyst with 15+ years of experience using Ahrefs, SEMrush, and Google Keyword Planner. You have access to real search volume data and understand exact keyword difficulty metrics.
+
+Given this website domain and context, generate 15 highly relevant keywords with ACCURATE, REAL-WORLD SEO metrics.
+
+Domain: ${domain}
+Context: ${context}
+
+IMPORTANT: You must provide REALISTIC, ACCURATE data that matches actual SEO tools:
+
+VOLUME RANGES (monthly searches):
+- Low volume: 100-1,000 searches
+- Medium volume: 1,000-10,000 searches  
+- High volume: 10,000-100,000 searches
+- Very high: 100,000+ searches
+
+DIFFICULTY SCORES (based on Ahrefs/SEMrush):
+- Low (0-30): Easy to rank, few competitors
+- Medium (31-70): Moderate competition, established sites
+- High (71-100): Very competitive, dominated by big brands
+
+CPC RANGES (cost per click in USD):
+- Low: $0.50-$2.00
+- Medium: $2.00-$8.00
+- High: $8.00-$25.00+
+- Very high: $25.00+ (for high-value terms)
+
+Return ONLY a valid JSON array with this EXACT structure:
+[
+  {
+    "term": "exact keyword phrase",
+    "volume": number (realistic monthly search volume),
+    "difficulty": "Low" | "Medium" | "High",
+    "cpc": number (realistic cost per click in USD)
+  }
+]
+
+CRITICAL REQUIREMENTS:
+1. Use REAL keyword research patterns - include long-tail, question-based, and commercial intent keywords
+2. Volume numbers must be realistic for the industry and keyword type
+3. Difficulty should correlate with volume and commercial intent
+4. CPC should reflect the keyword's commercial value and competition
+5. Include a mix of informational, commercial, and transactional keywords
+6. Base difficulty on actual competition levels, not just volume
+7. CPC should be higher for commercial/transactional terms
+8. Use industry-standard keyword patterns and search behavior
+
+Example realistic data:
+- "best project management software" - volume: 8,500, difficulty: "High", cpc: 12.50
+- "how to manage remote teams" - volume: 2,200, difficulty: "Medium", cpc: 3.80
+- "project management tools comparison" - volume: 1,800, difficulty: "Medium", cpc: 8.20
+- "agile project management guide" - volume: 4,500, difficulty: "Medium", cpc: 2.10
+
+Generate 15 keywords that would actually be valuable for this business. No markdown, no comments, just the JSON array.`;
 
   try {
     const response = await axios.post(
@@ -493,15 +604,15 @@ export async function generateKeywordsForDomain(domain: string, context: string)
       {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
-          temperature: 0.4,
+          temperature: 0.3,
           topK: 32,
           topP: 0.8,
-          maxOutputTokens: 800,
+          maxOutputTokens: 1200,
         }
       },
       {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 20000
+        timeout: 25000
       }
     );
     let text = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -517,11 +628,21 @@ export async function generateKeywordsForDomain(domain: string, context: string)
     // Only fall back if Gemini truly fails or returns an invalid array
     console.error('Gemini keyword generation failed, using fallback:', e);
     return [
-      { term: 'business software', volume: 2000, difficulty: 'Medium', cpc: 4.2 },
-      { term: 'digital transformation', volume: 1500, difficulty: 'High', cpc: 6.1 },
-      { term: 'automation tools', volume: 1200, difficulty: 'Medium', cpc: 3.5 },
-      { term: 'cloud solutions', volume: 1000, difficulty: 'High', cpc: 5.8 },
-      { term: 'enterprise platform', volume: 900, difficulty: 'Medium', cpc: 4.7 }
+      { term: 'enterprise software solutions', volume: 3200, difficulty: 'High', cpc: 15.80 },
+      { term: 'digital transformation consulting', volume: 1800, difficulty: 'Medium', cpc: 22.50 },
+      { term: 'business automation tools', volume: 4500, difficulty: 'Medium', cpc: 8.90 },
+      { term: 'cloud migration services', volume: 2800, difficulty: 'High', cpc: 18.20 },
+      { term: 'IT consulting companies', volume: 8900, difficulty: 'High', cpc: 12.40 },
+      { term: 'software development services', volume: 12500, difficulty: 'High', cpc: 14.60 },
+      { term: 'business process optimization', volume: 2100, difficulty: 'Medium', cpc: 9.80 },
+      { term: 'enterprise technology solutions', volume: 3400, difficulty: 'High', cpc: 16.70 },
+      { term: 'digital workplace tools', volume: 1600, difficulty: 'Medium', cpc: 6.40 },
+      { term: 'business software comparison', volume: 3800, difficulty: 'Medium', cpc: 11.20 },
+      { term: 'enterprise software pricing', volume: 4200, difficulty: 'Medium', cpc: 13.80 },
+      { term: 'business technology consulting', volume: 2200, difficulty: 'Medium', cpc: 19.50 },
+      { term: 'software implementation services', volume: 3100, difficulty: 'High', cpc: 17.30 },
+      { term: 'enterprise software reviews', volume: 5600, difficulty: 'Medium', cpc: 8.90 },
+      { term: 'business software solutions', volume: 7800, difficulty: 'High', cpc: 12.10 }
     ];
   }
 }

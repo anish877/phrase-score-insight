@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = 'https://phrase-score-insight.onrender.com /api';
 
 export interface DomainResponse {
   domain: {

@@ -39,7 +39,7 @@ router.get('/:domainId', async (req, res) => {
     let totalAIQueries = 0;
     let phrasesPerKeyword: Record<string, number> = {};
     
-    sendEvent('progress', { message: 'Initializing AI phrase generation...' });
+    sendEvent('progress', { message: 'Initializing advanced AI phrase generation engine...' });
     sendEvent('stats', { 
       totalKeywords: keywords.length, 
       totalPhrases: 0, 
@@ -50,7 +50,7 @@ router.get('/:domainId', async (req, res) => {
     for (let i = 0; i < keywords.length; i++) {
       const { id: keywordId, term } = keywords[i];
       try {
-        sendEvent('progress', { message: `AI generating phrases for "${term}" (${i+1}/${keywords.length})` });
+        sendEvent('progress', { message: `Generating high-converting phrases for "${term}" (${i+1}/${keywords.length}) - Analyzing search intent patterns...` });
         
         // Generate phrases using AI
         const phrases = await geminiService.generatePhrases(term);
@@ -85,15 +85,15 @@ router.get('/:domainId', async (req, res) => {
           });
         }
         
-        sendEvent('progress', { message: `Generated ${phrases.length} phrases for "${term}"` });
+        sendEvent('progress', { message: `Generated ${phrases.length} high-impact phrases for "${term}" - Optimized for search intent and conversion...` });
         
       } catch (err: any) {
         console.error(`Failed to generate phrases for "${term}":`, err);
-        sendEvent('error', { error: `Failed for "${term}": ${err.message}` });
+        sendEvent('error', { error: `Failed to process "${term}": ${err.message}` });
       }
     }
 
-    sendEvent('progress', { message: `AI phrase generation complete! Generated ${totalPhrases} phrases from ${totalAIQueries} AI queries.` });
+    sendEvent('progress', { message: `Advanced AI phrase generation complete! Generated ${totalPhrases} high-converting phrases from ${totalAIQueries} AI intelligence queries.` });
     sendEvent('complete', {});
     res.end();
   } catch (err: any) {

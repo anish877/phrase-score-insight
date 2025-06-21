@@ -78,7 +78,8 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
                 <div className="text-2xl font-bold text-purple-600">
                   {overallStats.presenceRate}%
                 </div>
-                <div className="text-sm text-slate-600">Presence Rate</div>
+                <div className="text-sm text-slate-600">Domain Presence Rate</div>
+                <div className="text-xs text-slate-500 mt-1">Queries where domain appears</div>
               </CardContent>
             </Card>
             <Card className="bg-white/70 backdrop-blur-sm">
@@ -86,7 +87,8 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
                 <div className="text-2xl font-bold text-blue-600">
                   {overallStats.avgRelevance}
                 </div>
-                <div className="text-sm text-slate-600">Avg Relevance</div>
+                <div className="text-sm text-slate-600">Avg Search Relevance</div>
+                <div className="text-xs text-slate-500 mt-1">How well content matches queries</div>
               </CardContent>
             </Card>
             <Card className="bg-white/70 backdrop-blur-sm">
@@ -94,7 +96,8 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
                 <div className="text-2xl font-bold text-green-600">
                   {overallStats.avgAccuracy}
                 </div>
-                <div className="text-sm text-slate-600">Avg Accuracy</div>
+                <div className="text-sm text-slate-600">Avg Content Accuracy</div>
+                <div className="text-xs text-slate-500 mt-1">Factual correctness & trust</div>
               </CardContent>
             </Card>
             <Card className="bg-white/70 backdrop-blur-sm">
@@ -102,7 +105,8 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
                 <div className="text-2xl font-bold text-orange-600">
                   {overallStats.avgSentiment}
                 </div>
-                <div className="text-sm text-slate-600">Avg Sentiment</div>
+                <div className="text-sm text-slate-600">Avg Brand Sentiment</div>
+                <div className="text-xs text-slate-500 mt-1">Tone impact on brand</div>
               </CardContent>
             </Card>
           </div>
@@ -110,8 +114,8 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
           {/* Model Performance Summary */}
           <Card className="shadow-lg border-0 bg-white/70 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle>Model Performance Summary</CardTitle>
-              <CardDescription>Comparative performance across all metrics</CardDescription>
+              <CardTitle>Domain Visibility Analysis Summary</CardTitle>
+              <CardDescription>How well your domain would rank across different AI models for the analyzed queries</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -119,23 +123,23 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
                   <div key={stat.model} className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Badge className="bg-blue-100 text-blue-800">{stat.model}</Badge>
-                      <span className="text-sm font-medium">Overall: {stat.avgOverall}/5</span>
+                      <span className="text-sm font-medium">Overall Score: {stat.avgOverall}/5</span>
                     </div>
                     <div className="grid grid-cols-4 gap-2 text-sm">
                       <div>
-                        <div className="text-slate-600">Presence</div>
+                        <div className="text-slate-600">Domain Presence</div>
                         <div className="font-medium">{stat.presenceRate}%</div>
                       </div>
                       <div>
-                        <div className="text-slate-600">Relevance</div>
+                        <div className="text-slate-600">Search Relevance</div>
                         <div className="font-medium">{stat.avgRelevance}/5</div>
                       </div>
                       <div>
-                        <div className="text-slate-600">Accuracy</div>
+                        <div className="text-slate-600">Content Accuracy</div>
                         <div className="font-medium">{stat.avgAccuracy}/5</div>
                       </div>
                       <div>
-                        <div className="text-slate-600">Sentiment</div>
+                        <div className="text-slate-600">Brand Sentiment</div>
                         <div className="font-medium">{stat.avgSentiment}/5</div>
                       </div>
                     </div>
@@ -159,28 +163,28 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
                 <CardContent className="space-y-4">
                   <div>
                     <div className="flex justify-between mb-1">
-                      <span className="text-sm">Presence Rate</span>
+                      <span className="text-sm">Domain Presence Rate</span>
                       <span className="text-sm font-medium">{stat.presenceRate}%</span>
                     </div>
                     <Progress value={stat.presenceRate} className="h-2" />
                   </div>
                   <div>
                     <div className="flex justify-between mb-1">
-                      <span className="text-sm">Relevance</span>
+                      <span className="text-sm">Search Relevance</span>
                       <span className="text-sm font-medium">{stat.avgRelevance}/5</span>
                     </div>
                     <Progress value={(stat.avgRelevance / 5) * 100} className="h-2" />
                   </div>
                   <div>
                     <div className="flex justify-between mb-1">
-                      <span className="text-sm">Accuracy</span>
+                      <span className="text-sm">Content Accuracy</span>
                       <span className="text-sm font-medium">{stat.avgAccuracy}/5</span>
                     </div>
                     <Progress value={(stat.avgAccuracy / 5) * 100} className="h-2" />
                   </div>
                   <div>
                     <div className="flex justify-between mb-1">
-                      <span className="text-sm">Sentiment</span>
+                      <span className="text-sm">Brand Sentiment</span>
                       <span className="text-sm font-medium">{stat.avgSentiment}/5</span>
                     </div>
                     <Progress value={(stat.avgSentiment / 5) * 100} className="h-2" />
@@ -196,8 +200,8 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
             {/* Top Performing */}
             <Card className="shadow-lg border-0 bg-white/70 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="text-green-600">Top Performing Phrases</CardTitle>
-                <CardDescription>Phrases with highest overall scores</CardDescription>
+                <CardTitle className="text-green-600">High Visibility Phrases</CardTitle>
+                <CardDescription>Phrases where your domain would rank well in search results</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -208,6 +212,9 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
                         <Badge className="bg-blue-100 text-blue-800">{phrase.model}</Badge>
                         <span className="font-medium">Score: {phrase.scores.overall}/5</span>
                       </div>
+                      <div className="text-xs text-green-600 mt-1">
+                        {phrase.scores.presence === 1 ? '✓ Domain Present' : '✗ Domain Not Found'}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -217,8 +224,8 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
             {/* Worst Performing */}
             <Card className="shadow-lg border-0 bg-white/70 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="text-red-600">Improvement Opportunities</CardTitle>
-                <CardDescription>Phrases needing attention</CardDescription>
+                <CardTitle className="text-red-600">Visibility Improvement Opportunities</CardTitle>
+                <CardDescription>Phrases where your domain needs better content or optimization</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -228,8 +235,11 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
                       <div className="flex items-center justify-between text-xs text-slate-600">
                         <Badge className="bg-blue-100 text-blue-800">{phrase.model}</Badge>
                         <span className="font-medium">
-                          {phrase.scores.presence === 0 ? 'Not Present' : `Score: ${phrase.scores.overall}/5`}
+                          {phrase.scores.presence === 0 ? 'Domain Not Found' : `Score: ${phrase.scores.overall}/5`}
                         </span>
+                      </div>
+                      <div className="text-xs text-red-600 mt-1">
+                        {phrase.scores.presence === 1 ? '✓ Domain Present' : '✗ Domain Not Found'}
                       </div>
                     </div>
                   ))}
@@ -242,8 +252,8 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
         <TabsContent value="detailed" className="space-y-6">
           <Card className="shadow-lg border-0 bg-white/70 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle>Detailed Score Breakdown</CardTitle>
-              <CardDescription>Individual scores for all phrases and models</CardDescription>
+              <CardTitle>Detailed Domain Visibility Analysis</CardTitle>
+              <CardDescription>Individual scores for all phrases and models - showing domain presence and ranking potential</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
@@ -252,11 +262,11 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
                     <tr className="border-b">
                       <th className="text-left p-2">Phrase</th>
                       <th className="text-left p-2">Model</th>
-                      <th className="text-center p-2">Presence</th>
-                      <th className="text-center p-2">Relevance</th>
-                      <th className="text-center p-2">Accuracy</th>
-                      <th className="text-center p-2">Sentiment</th>
-                      <th className="text-center p-2">Overall</th>
+                      <th className="text-center p-2">Domain Presence</th>
+                      <th className="text-center p-2">Search Relevance</th>
+                      <th className="text-center p-2">Content Accuracy</th>
+                      <th className="text-center p-2">Brand Sentiment</th>
+                      <th className="text-center p-2">Overall Score</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -268,8 +278,8 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
                         </td>
                         <td className="p-2 text-center">
                           {score.scores.presence === 1 ? 
-                            <span className="text-green-600">✓</span> : 
-                            <span className="text-red-600">✗</span>
+                            <span className="text-green-600 font-bold">✓ Present</span> : 
+                            <span className="text-red-600 font-bold">✗ Not Found</span>
                           }
                         </td>
                         <td className={`p-2 text-center font-medium ${getScoreColor(score.scores.relevance)}`}>
@@ -291,7 +301,7 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
               </div>
               {scores.length > 20 && (
                 <div className="text-center mt-4 text-sm text-slate-500">
-                  Showing first 20 of {scores.length} scored responses
+                  Showing first 20 of {scores.length} analyzed responses
                 </div>
               )}
             </CardContent>

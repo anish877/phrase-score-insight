@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import type { AIQueryResult, AIQueryStats } from './AIQueryResults';
 
 interface ResponseScoringProps {
@@ -20,6 +22,9 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
   onPrev
 }) => {
   const [selectedView, setSelectedView] = useState('overview');
+  const [selectedModel, setSelectedModel] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [resultsPerPage, setResultsPerPage] = useState(25);
 
   // Use stats from props, fallback to local calculation if needed
   const stats = queryStats;
@@ -35,6 +40,17 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
     avgOverall: 0
   };
 
+  // Filter scores by selected model
+  const filteredScores = selectedModel === 'all' 
+    ? scores 
+    : scores.filter(s => s.model === selectedModel);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredScores.length / resultsPerPage);
+  const startIndex = (currentPage - 1) * resultsPerPage;
+  const endIndex = startIndex + resultsPerPage;
+  const currentScores = filteredScores.slice(startIndex, endIndex);
+
   // Top and worst performing phrases
   const topPhrases = scores
     .filter(s => s.scores.presence === 1)
@@ -49,6 +65,22 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
     if (percentage >= 0.8) return 'text-green-600';
     if (percentage >= 0.6) return 'text-yellow-600';
     return 'text-red-600';
+  };
+
+  // Pagination handlers
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+  };
+
+  const goToFirstPage = () => goToPage(1);
+  const goToLastPage = () => goToPage(totalPages);
+  const goToPreviousPage = () => goToPage(currentPage - 1);
+  const goToNextPage = () => goToPage(currentPage + 1);
+
+  // Reset to first page when changing model filter
+  const handleModelChange = (model: string) => {
+    setSelectedModel(model);
+    setCurrentPage(1);
   };
 
   return (
@@ -252,8 +284,45 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
         <TabsContent value="detailed" className="space-y-6">
           <Card className="shadow-lg border-0 bg-white/70 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle>Detailed Domain Visibility Analysis</CardTitle>
-              <CardDescription>Individual scores for all phrases and models - showing domain presence and ranking potential</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Detailed Domain Visibility Analysis</CardTitle>
+                  <CardDescription>Individual scores for all phrases and models - showing domain presence and ranking potential</CardDescription>
+                </div>
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-slate-600">Filter by model:</span>
+                    <Select value={selectedModel} onValueChange={handleModelChange}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Models</SelectItem>
+                        <SelectItem value="GPT-4o">GPT-4o</SelectItem>
+                        <SelectItem value="Claude 3">Claude 3</SelectItem>
+                        <SelectItem value="Gemini 1.5">Gemini 1.5</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-slate-600">Results per page:</span>
+                    <Select value={resultsPerPage.toString()} onValueChange={(value) => {
+                      setResultsPerPage(Number(value));
+                      setCurrentPage(1);
+                    }}>
+                      <SelectTrigger className="w-20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="25">25</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
@@ -261,18 +330,25 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
                   <thead>
                     <tr className="border-b">
                       <th className="text-left p-2">Phrase</th>
+                      <th className="text-left p-2">Keyword</th>
                       <th className="text-left p-2">Model</th>
                       <th className="text-center p-2">Domain Presence</th>
                       <th className="text-center p-2">Search Relevance</th>
                       <th className="text-center p-2">Content Accuracy</th>
                       <th className="text-center p-2">Brand Sentiment</th>
                       <th className="text-center p-2">Overall Score</th>
+                      <th className="text-center p-2">Latency</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {scores.slice(0, 20).map((score, index) => (
+                    {currentScores.map((score, index) => (
                       <tr key={index} className="border-b hover:bg-slate-50">
-                        <td className="p-2 max-w-xs truncate">{score.phrase}</td>
+                        <td className="p-2 max-w-xs">
+                          <div className="truncate" title={score.phrase}>{score.phrase}</div>
+                        </td>
+                        <td className="p-2">
+                          <div className="text-xs text-slate-500">{score.keyword}</div>
+                        </td>
                         <td className="p-2">
                           <Badge className="bg-blue-100 text-blue-800">{score.model}</Badge>
                         </td>
@@ -294,14 +370,92 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
                         <td className={`p-2 text-center font-bold ${getScoreColor(score.scores.overall)}`}>
                           {score.scores.overall}
                         </td>
+                        <td className="p-2 text-center text-xs text-slate-500">
+                          {Number(score.latency || 0).toFixed(2)}s
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              {scores.length > 20 && (
-                <div className="text-center mt-4 text-sm text-slate-500">
-                  Showing first 20 of {scores.length} analyzed responses
+
+              {/* Pagination Controls */}
+              {filteredScores.length > 0 && (
+                <div className="flex items-center justify-between mt-6">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-slate-600">
+                      Showing {startIndex + 1} to {Math.min(endIndex, filteredScores.length)} of {filteredScores.length} results
+                    </span>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={goToFirstPage}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronsLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={goToPreviousPage}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    
+                    <div className="flex items-center space-x-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum;
+                        if (totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          pageNum = currentPage - 2 + i;
+                        }
+                        
+                        return (
+                          <Button
+                            key={pageNum}
+                            variant={currentPage === pageNum ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => goToPage(pageNum)}
+                            className="w-8 h-8"
+                          >
+                            {pageNum}
+                          </Button>
+                        );
+                      })}
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={goToNextPage}
+                      disabled={currentPage === totalPages}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={goToLastPage}
+                      disabled={currentPage === totalPages}
+                    >
+                      <ChevronsRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {filteredScores.length === 0 && (
+                <div className="text-center py-8 text-slate-500">
+                  No results found for the selected model.
                 </div>
               )}
             </CardContent>

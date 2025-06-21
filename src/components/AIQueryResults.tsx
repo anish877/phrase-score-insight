@@ -107,7 +107,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
       }
     }, 30000); // 30 second connection timeout
 
-    fetchEventSource(`https://phrase-score-insight.onrender.com /api/ai-queries/${domainId}`, {
+    fetchEventSource(`https://phrase-score-insight.onrender.com/api/ai-queries/${domainId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -5,6 +5,8 @@ import domainRouter from './routes/domain';
 import keywordsRouter from './routes/keywords';
 import phrasesRouter from './routes/phrases';
 import aiQueriesRouter from './routes/ai-queries';
+import competitorRouter from './routes/competitor';
+import dashboardRouter from './routes/dashboard';
 
 const app = express();
 
@@ -35,6 +37,8 @@ app.use('/api/domain', domainRouter);
 app.use('/api/keywords', keywordsRouter);
 app.use('/api/phrases', phrasesRouter);
 app.use('/api/ai-queries', aiQueriesRouter);
+app.use('/api/competitor', competitorRouter);
+app.use('/api/dashboard', dashboardRouter);
 
 // Health check endpoint
 app.get('/api/health', (req: Request, res: Response) => {

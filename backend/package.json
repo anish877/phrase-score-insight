@@ -10,6 +10,7 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@microsoft/fetch-event-source": "^2.0.1",
     "@prisma/client": "6.10.1",
     "@types/cheerio": "^1.0.0",

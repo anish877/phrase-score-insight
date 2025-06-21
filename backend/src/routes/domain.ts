@@ -111,6 +111,31 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
+// GET /domain/search - search domain by URL
+router.get('/search', async (req: Request, res: Response) => {
+  const { url } = req.query;
+  if (!url) { 
+    res.status(400).json({ error: 'URL parameter is required' }); 
+    return; 
+  }
+  
+  try {
+    const domain = await prisma.domain.findUnique({ 
+      where: { url: url as string }
+    });
+    
+    if (!domain) { 
+      res.status(404).json({ error: 'Domain not found' }); 
+      return; 
+    }
+    
+    res.json({ domain });
+  } catch (err: any) {
+    console.error('Domain search error:', err);
+    res.status(500).json({ error: 'Failed to search domain', details: err.message });
+  }
+});
+
 // GET /domain/:id - get domain and extraction data
 router.get('/:id', async (req: Request, res: Response) => {
   const id = Number(req.params.id);

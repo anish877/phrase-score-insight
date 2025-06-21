@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,14 +6,85 @@ import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
+import { Loader2, TrendingUp, TrendingDown, Target, Users, Globe, AlertCircle } from 'lucide-react';
+import { fetchEventSource } from '@microsoft/fetch-event-source';
 
 interface DashboardProps {
   domain: string;
   brandContext: string;
   keywords: string[];
   phrases: Array<{keyword: string, phrases: string[]}>;
-  queryResults: any[];
+  queryResults: Array<{
+    id: number;
+    model: string;
+    response: string;
+    latency: number;
+    cost: number;
+    presence: number;
+    relevance: number;
+    accuracy: number;
+    sentiment: number;
+    overall: number;
+    phraseId: number;
+  }>;
   onPrev: () => void;
+}
+
+interface DomainData {
+  id: number;
+  url: string;
+  context: string;
+  crawlResults: Array<{
+    pagesScanned: number;
+    contentBlocks: number;
+    keyEntities: number;
+    confidenceScore: number;
+    extractedContext: string;
+  }>;
+  keywords: Array<{
+    id: number;
+    term: string;
+    volume: number;
+    difficulty: string;
+    cpc: number;
+    category: string;
+    isSelected: boolean;
+  }>;
+  phrases: Array<{
+    id: number;
+    text: string;
+    keywordId: number;
+  }>;
+  aiQueryResults: Array<{
+    id: number;
+    model: string;
+    response: string;
+    latency: number;
+    cost: number;
+    presence: number;
+    relevance: number;
+    accuracy: number;
+    sentiment: number;
+    overall: number;
+    phraseId: number;
+  }>;
+}
+
+interface CompetitorAnalysis {
+  domain: string;
+  visibilityScore: number;
+  mentionRate: number;
+  avgRelevance: number;
+  avgAccuracy: number;
+  avgSentiment: number;
+  keyStrengths: string[];
+  keyWeaknesses: string[];
+  recommendations: string[];
+  comparison: {
+    better: string[];
+    worse: string[];
+    similar: string[];
+  };
 }
 
 const Dashboard: React.FC<DashboardProps> = ({
@@ -25,39 +95,110 @@ const Dashboard: React.FC<DashboardProps> = ({
   queryResults,
   onPrev
 }) => {
+  const [domainData, setDomainData] = useState<DomainData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [competitorDomain, setCompetitorDomain] = useState('');
+  const [isAnalyzingCompetitor, setIsAnalyzingCompetitor] = useState(false);
+  const [competitorAnalysis, setCompetitorAnalysis] = useState<CompetitorAnalysis | null>(null);
+  const [competitorError, setCompetitorError] = useState<string | null>(null);
 
-  // Calculate AI Visibility Score
+  // Fetch domain data from database
+  useEffect(() => {
+    const fetchDomainData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Get domain ID from the current domain
+        const domainResponse = await fetch(`https://phrase-score-insight.onrender.com/api/domain/search?url=${encodeURIComponent(domain)}`);
+        if (!domainResponse.ok) throw new Error('Failed to fetch domain data');
+        
+        const domainInfo = await domainResponse.json();
+        const domainId = domainInfo.domain?.id;
+        
+        if (!domainId) throw new Error('Domain not found in database');
+
+        // Fetch comprehensive domain data
+        const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}`);
+        if (!response.ok) throw new Error('Failed to fetch dashboard data');
+        
+        const data = await response.json();
+        setDomainData(data);
+      } catch (error) {
+        console.error('Error fetching domain data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDomainData();
+  }, [domain]);
+
+  // Calculate real AI Visibility Score from actual data
   const calculateVisibilityScore = () => {
-    if (!queryResults.length) return 0;
+    if (!domainData?.aiQueryResults?.length) return 0;
     
-    const totalResponses = queryResults.length;
-    const mentionedResponses = queryResults.filter(r => Math.random() > 0.4).length; // Mock presence
-    const avgQuality = 3.2 + Math.random() * 1.5; // Mock quality score
+    const totalResponses = domainData.aiQueryResults.length;
+    const mentionedResponses = domainData.aiQueryResults.filter(r => r.presence === 1).length;
+    const avgQuality = domainData.aiQueryResults.reduce((sum, r) => sum + r.overall, 0) / totalResponses;
     
     return Math.round(((mentionedResponses / totalResponses) * 100 * (avgQuality / 5)) * 10) / 10;
   };
 
   const visibilityScore = calculateVisibilityScore();
 
-  // Mock data for charts
-  const modelPerformanceData = [
-    { model: 'GPT-4o', score: 78, responses: 45, mentions: 32 },
-    { model: 'Claude 3', score: 85, responses: 45, mentions: 38 },
-    { model: 'Gemini 1.5', score: 72, responses: 45, mentions: 29 }
-  ];
+  // Real data for charts
+  const modelPerformanceData = domainData?.aiQueryResults ? 
+    Object.entries(
+      domainData.aiQueryResults.reduce((acc, result) => {
+        if (!acc[result.model]) {
+          acc[result.model] = { responses: 0, mentions: 0, totalScore: 0 };
+        }
+        acc[result.model].responses++;
+        if (result.presence === 1) acc[result.model].mentions++;
+        acc[result.model].totalScore += result.overall;
+        return acc;
+      }, {} as Record<string, { responses: number; mentions: number; totalScore: number }>)
+    ).map(([model, data]) => ({
+      model,
+      score: Math.round((data.mentions / data.responses) * 100),
+      responses: data.responses,
+      mentions: data.mentions,
+      avgScore: Math.round((data.totalScore / data.responses) * 10) / 10
+    })) : [];
 
-  const keywordPerformanceData = keywords.slice(0, 8).map(keyword => ({
-    keyword: keyword.length > 15 ? keyword.substring(0, 15) + '...' : keyword,
-    visibility: Math.floor(Math.random() * 40) + 40,
-    mentions: Math.floor(Math.random() * 20) + 5,
-    sentiment: Math.random() * 2 + 3
-  }));
+  const keywordPerformanceData = domainData?.keywords?.slice(0, 8).map(keyword => {
+    const keywordResults = domainData.aiQueryResults?.filter(r => {
+      const phrase = domainData.phrases?.find(p => p.id === r.phraseId);
+      return phrase && phrase.text.toLowerCase().includes(keyword.term.toLowerCase());
+    }) || [];
+    
+    const visibility = keywordResults.length > 0 ? 
+      (keywordResults.filter(r => r.presence === 1).length / keywordResults.length) * 100 : 0;
+    const avgSentiment = keywordResults.length > 0 ? 
+      keywordResults.reduce((sum, r) => sum + r.sentiment, 0) / keywordResults.length : 0;
+    
+    return {
+      keyword: keyword.term.length > 15 ? keyword.term.substring(0, 15) + '...' : keyword.term,
+      visibility: Math.round(visibility),
+      mentions: keywordResults.filter(r => r.presence === 1).length,
+      sentiment: Math.round(avgSentiment * 10) / 10,
+      volume: keyword.volume,
+      difficulty: keyword.difficulty
+    };
+  }) || [];
 
-  const pieData = [
-    { name: 'Mentioned', value: 68, color: '#10b981' },
-    { name: 'Not Mentioned', value: 32, color: '#ef4444' }
-  ];
+  const pieData = domainData?.aiQueryResults ? [
+    { 
+      name: 'Domain Present', 
+      value: domainData.aiQueryResults.filter(r => r.presence === 1).length,
+      color: '#10b981' 
+    },
+    { 
+      name: 'Domain Not Found', 
+      value: domainData.aiQueryResults.filter(r => r.presence === 0).length,
+      color: '#ef4444' 
+    }
+  ] : [];
 
   const trendData = [
     { month: 'Jan', score: 45 },
@@ -68,17 +209,101 @@ const Dashboard: React.FC<DashboardProps> = ({
     { month: 'Jun', score: visibilityScore }
   ];
 
-  const topPhrases = phrases.flatMap(p => p.phrases).slice(0, 5).map(phrase => ({
-    phrase,
-    score: Math.floor(Math.random() * 30) + 70,
-    mentions: Math.floor(Math.random() * 15) + 5
-  }));
+  const topPhrases = domainData?.aiQueryResults
+    ?.filter(r => r.presence === 1)
+    ?.sort((a, b) => b.overall - a.overall)
+    ?.slice(0, 5)
+    ?.map(result => {
+      const phrase = domainData.phrases?.find(p => p.id === result.phraseId);
+      return {
+        phrase: phrase?.text || 'Unknown phrase',
+        score: Math.round(result.overall * 20), // Convert 1-5 to 0-100
+        mentions: result.presence === 1 ? 1 : 0,
+        model: result.model,
+        relevance: result.relevance,
+        accuracy: result.accuracy
+      };
+    }) || [];
 
-  const improvementOpportunities = phrases.flatMap(p => p.phrases).slice(5, 10).map(phrase => ({
-    phrase,
-    score: Math.floor(Math.random() * 40) + 20,
-    mentions: Math.floor(Math.random() * 5) + 1
-  }));
+  const improvementOpportunities = domainData?.aiQueryResults
+    ?.filter(r => r.presence === 0 || r.overall < 3)
+    ?.sort((a, b) => a.overall - b.overall)
+    ?.slice(0, 5)
+    ?.map(result => {
+      const phrase = domainData.phrases?.find(p => p.id === result.phraseId);
+      return {
+        phrase: phrase?.text || 'Unknown phrase',
+        score: Math.round(result.overall * 20),
+        mentions: result.presence === 1 ? 1 : 0,
+        model: result.model,
+        issue: result.presence === 0 ? 'Domain not found' : 'Low quality response'
+      };
+    }) || [];
+
+  // Competitor analysis function
+  const analyzeCompetitor = async () => {
+    if (!competitorDomain.trim()) {
+      setCompetitorError('Please enter a competitor domain');
+      return;
+    }
+
+    setIsAnalyzingCompetitor(true);
+    setCompetitorError(null);
+    setCompetitorAnalysis(null);
+
+    try {
+      const ctrl = new AbortController();
+      
+      fetchEventSource(`https://phrase-score-insight.onrender.com/api/competitor/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          targetDomain: domain,
+          competitorDomain: competitorDomain.trim(),
+          context: brandContext,
+          keywords: keywords,
+          phrases: phrases.flatMap(p => p.phrases)
+        }),
+        signal: ctrl.signal,
+        onmessage(ev) {
+          if (ev.event === 'analysis') {
+            const data = JSON.parse(ev.data);
+            setCompetitorAnalysis(data);
+          } else if (ev.event === 'error') {
+            const data = JSON.parse(ev.data);
+            setCompetitorError(data.error || 'Analysis failed');
+          }
+        },
+        onclose() {
+          setIsAnalyzingCompetitor(false);
+          ctrl.abort();
+        },
+        onerror(err) {
+          setCompetitorError('Failed to analyze competitor');
+          setIsAnalyzingCompetitor(false);
+          ctrl.abort();
+          throw err;
+        }
+      });
+    } catch (error) {
+      setCompetitorError('Failed to start competitor analysis');
+      setIsAnalyzingCompetitor(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto flex items-center justify-center min-h-[600px]">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">Loading Dashboard</h2>
+          <p className="text-slate-600">Fetching real-time data from database...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -87,7 +312,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           AI Visibility Dashboard
         </h2>
         <p className="text-lg text-slate-600">
-          Comprehensive insights into your brand's AI visibility performance
+          Real-time insights into your brand's AI visibility performance
         </p>
       </div>
 
@@ -98,7 +323,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             <div className="text-6xl font-bold mb-4">{visibilityScore}</div>
             <div className="text-xl opacity-90 mb-2">AI Visibility Score</div>
             <div className="text-sm opacity-75">
-              Based on analysis of {queryResults.length} AI responses across {keywords.length} keywords
+              Based on analysis of {domainData?.aiQueryResults?.length || 0} AI responses across {domainData?.keywords?.length || 0} keywords
             </div>
             <div className="flex justify-center mt-6">
               <div className="w-64">
@@ -126,26 +351,36 @@ const Dashboard: React.FC<DashboardProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card className="bg-white/70 backdrop-blur-sm">
               <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-green-600">68%</div>
-                <div className="text-sm text-slate-600">Mention Rate</div>
+                <div className="text-2xl font-bold text-green-600">
+                  {domainData?.aiQueryResults ? 
+                    Math.round((domainData.aiQueryResults.filter(r => r.presence === 1).length / domainData.aiQueryResults.length) * 100) : 0}%
+                </div>
+                <div className="text-sm text-slate-600">Domain Presence Rate</div>
               </CardContent>
             </Card>
             <Card className="bg-white/70 backdrop-blur-sm">
               <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-blue-600">3.4/5</div>
-                <div className="text-sm text-slate-600">Avg Relevance</div>
+                <div className="text-2xl font-bold text-blue-600">
+                  {domainData?.aiQueryResults ? 
+                    Math.round((domainData.aiQueryResults.reduce((sum, r) => sum + r.relevance, 0) / domainData.aiQueryResults.length) * 10) / 10 : 0}/5
+                </div>
+                <div className="text-sm text-slate-600">Avg Search Relevance</div>
               </CardContent>
             </Card>
             <Card className="bg-white/70 backdrop-blur-sm">
               <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-purple-600">89</div>
-                <div className="text-sm text-slate-600">Total Phrases</div>
+                <div className="text-2xl font-bold text-purple-600">
+                  {domainData?.phrases?.length || 0}
+                </div>
+                <div className="text-sm text-slate-600">Total Phrases Analyzed</div>
               </CardContent>
             </Card>
             <Card className="bg-white/70 backdrop-blur-sm">
               <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-orange-600">+12%</div>
-                <div className="text-sm text-slate-600">vs Last Month</div>
+                <div className="text-2xl font-bold text-orange-600">
+                  {domainData?.keywords?.filter(k => k.isSelected).length || 0}
+                </div>
+                <div className="text-sm text-slate-600">Selected Keywords</div>
               </CardContent>
             </Card>
           </div>
@@ -173,8 +408,8 @@ const Dashboard: React.FC<DashboardProps> = ({
             {/* Mention Distribution */}
             <Card className="shadow-lg border-0 bg-white/70 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle>Mention Distribution</CardTitle>
-                <CardDescription>Brand mentions across AI responses</CardDescription>
+                <CardTitle>Domain Presence Distribution</CardTitle>
+                <CardDescription>Brand presence across AI responses</CardDescription>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={200}>
@@ -197,11 +432,15 @@ const Dashboard: React.FC<DashboardProps> = ({
                 <div className="flex justify-center space-x-4 mt-4">
                   <div className="flex items-center">
                     <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-                    <span className="text-sm">Mentioned (68%)</span>
+                    <span className="text-sm">
+                      Present ({pieData[0]?.value || 0} responses)
+                    </span>
                   </div>
                   <div className="flex items-center">
                     <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
-                    <span className="text-sm">Not Mentioned (32%)</span>
+                    <span className="text-sm">
+                      Not Found ({pieData[1]?.value || 0} responses)
+                    </span>
                   </div>
                 </div>
               </CardContent>
@@ -244,8 +483,12 @@ const Dashboard: React.FC<DashboardProps> = ({
                     <span className="font-medium">{model.responses}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-600">Brand Mentions:</span>
+                    <span className="text-slate-600">Domain Mentions:</span>
                     <span className="font-medium">{model.mentions}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Avg Quality:</span>
+                    <span className="font-medium">{model.avgScore}/5</span>
                   </div>
                   <Progress value={model.score} className="h-2" />
                 </CardContent>
@@ -279,8 +522,8 @@ const Dashboard: React.FC<DashboardProps> = ({
             {/* Top Performing Phrases */}
             <Card className="shadow-lg border-0 bg-white/70 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="text-green-600">Top Performing Phrases</CardTitle>
-                <CardDescription>Phrases with highest AI visibility</CardDescription>
+                <CardTitle className="text-green-600">High Visibility Phrases</CardTitle>
+                <CardDescription>Phrases where your domain appears in AI responses</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -288,7 +531,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                     <div key={index} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
                       <div className="flex-1">
                         <div className="font-medium text-sm mb-1">{phrase.phrase}</div>
-                        <div className="text-xs text-slate-600">{phrase.mentions} mentions</div>
+                        <div className="text-xs text-slate-600">
+                          {phrase.model} • Relevance: {phrase.relevance}/5 • Accuracy: {phrase.accuracy}/5
+                        </div>
                       </div>
                       <Badge className="bg-green-100 text-green-800">
                         {phrase.score}%
@@ -303,7 +548,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             <Card className="shadow-lg border-0 bg-white/70 backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="text-red-600">Improvement Opportunities</CardTitle>
-                <CardDescription>Phrases needing attention</CardDescription>
+                <CardDescription>Phrases where your domain needs better visibility</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -311,7 +556,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                     <div key={index} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
                       <div className="flex-1">
                         <div className="font-medium text-sm mb-1">{phrase.phrase}</div>
-                        <div className="text-xs text-slate-600">{phrase.mentions} mentions</div>
+                        <div className="text-xs text-slate-600">
+                          {phrase.model} • {phrase.issue}
+                        </div>
                       </div>
                       <Badge className="bg-red-100 text-red-800">
                         {phrase.score}%
@@ -328,7 +575,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           <Card className="shadow-lg border-0 bg-white/70 backdrop-blur-sm">
             <CardHeader>
               <CardTitle>Competitor Analysis</CardTitle>
-              <CardDescription>Compare your AI visibility with competitors</CardDescription>
+              <CardDescription>Compare your AI visibility with competitors using AI analysis</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex gap-4">
@@ -339,32 +586,106 @@ const Dashboard: React.FC<DashboardProps> = ({
                   className="flex-1"
                 />
                 <Button 
-                  onClick={() => alert('Competitor analysis would be implemented here')}
+                  onClick={analyzeCompetitor}
+                  disabled={isAnalyzingCompetitor}
                   className="bg-gradient-to-r from-purple-600 to-blue-600"
                 >
-                  Analyze Competitor
+                  {isAnalyzingCompetitor ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    'Analyze Competitor'
+                  )}
                 </Button>
               </div>
 
-              {/* Mock competitor comparison */}
-              <div className="bg-slate-50 rounded-lg p-6">
-                <h3 className="font-semibold mb-4">Sample Competitor Comparison</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <div className="text-sm text-slate-600 mb-2">Your Domain ({domain})</div>
-                    <div className="text-2xl font-bold text-purple-600 mb-2">{visibilityScore}%</div>
-                    <Progress value={visibilityScore} className="h-3" />
-                  </div>
-                  <div>
-                    <div className="text-sm text-slate-600 mb-2">Competitor Example</div>
-                    <div className="text-2xl font-bold text-blue-600 mb-2">62%</div>
-                    <Progress value={62} className="h-3" />
+              {competitorError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+                    <span className="text-red-700">{competitorError}</span>
                   </div>
                 </div>
-                <div className="mt-4 text-sm text-green-600 font-medium">
-                  ↑ You're performing {visibilityScore - 62}% better than this competitor
+              )}
+
+              {competitorAnalysis && (
+                <div className="space-y-6">
+                  {/* Competitor Overview */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-slate-50 rounded-lg p-6">
+                      <h3 className="font-semibold mb-4">Your Domain ({domain})</h3>
+                      <div className="text-2xl font-bold text-purple-600 mb-2">{visibilityScore}%</div>
+                      <Progress value={visibilityScore} className="h-3" />
+                      <div className="text-sm text-slate-600 mt-2">
+                        {domainData?.aiQueryResults?.filter(r => r.presence === 1).length || 0} mentions out of {domainData?.aiQueryResults?.length || 0} queries
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-6">
+                      <h3 className="font-semibold mb-4">Competitor ({competitorAnalysis.domain})</h3>
+                      <div className="text-2xl font-bold text-blue-600 mb-2">{competitorAnalysis.visibilityScore}%</div>
+                      <Progress value={competitorAnalysis.visibilityScore} className="h-3" />
+                      <div className="text-sm text-slate-600 mt-2">
+                        {competitorAnalysis.mentionRate}% mention rate
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Comparison Summary */}
+                  <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6">
+                    <h3 className="font-semibold mb-4">AI Analysis Summary</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <h4 className="font-medium text-green-600 mb-2">Your Strengths</h4>
+                        <ul className="text-sm space-y-1">
+                          {competitorAnalysis.comparison.better.map((item, index) => (
+                            <li key={index} className="flex items-center">
+                              <TrendingUp className="w-4 h-4 text-green-600 mr-2" />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-red-600 mb-2">Areas to Improve</h4>
+                        <ul className="text-sm space-y-1">
+                          {competitorAnalysis.comparison.worse.map((item, index) => (
+                            <li key={index} className="flex items-center">
+                              <TrendingDown className="w-4 h-4 text-red-600 mr-2" />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-blue-600 mb-2">Similar Performance</h4>
+                        <ul className="text-sm space-y-1">
+                          {competitorAnalysis.comparison.similar.map((item, index) => (
+                            <li key={index} className="flex items-center">
+                              <Target className="w-4 h-4 text-blue-600 mr-2" />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* AI Recommendations */}
+                  <div className="bg-white border border-slate-200 rounded-lg p-6">
+                    <h3 className="font-semibold mb-4">AI Recommendations</h3>
+                    <div className="space-y-3">
+                      {competitorAnalysis.recommendations.map((rec, index) => (
+                        <div key={index} className="flex items-start">
+                          <div className="w-2 h-2 bg-blue-600 rounded-full mt-2 mr-3 flex-shrink-0"></div>
+                          <p className="text-sm text-slate-700">{rec}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

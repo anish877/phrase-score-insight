@@ -69,6 +69,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
   const [selectedModel, setSelectedModel] = useState('all');
   const resultsRef = useRef<AIQueryResult[]>([]);
   const [modelStatus, setModelStatus] = useState<{[model: string]: string}>({});
+  const [error, setError] = useState<string | null>(null);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -80,32 +81,47 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
     { name: 'Gemini 1.5', color: 'bg-slate-100 text-slate-800' }
   ];
 
+  // Calculate exact expected results
+  const totalPhrases = phrases.reduce((sum, item) => sum + item.phrases.length, 0);
+  const totalExpected = totalPhrases * aiModels.length;
+
   useEffect(() => {
     if (phrases.length === 0) {
       setIsAnalyzing(false);
       setCurrentPhrase("No phrases found to analyze.");
       return;
     }
+
+    // Reset all state
     setIsAnalyzing(true);
     setProgress(0);
     setCurrentPhrase('Initializing analysis...');
+    setError(null);
     resultsRef.current = [];
     setResults([]);
     setStats(null);
     setModelStatus({ 'GPT-4o': 'Waiting', 'Claude 3': 'Waiting', 'Gemini 1.5': 'Waiting' });
-    setCurrentPage(1); // Reset to first page when starting new analysis
+    setCurrentPage(1);
 
     const ctrl = new AbortController();
-    const totalExpected = phrases.reduce((sum, item) => sum + item.phrases.length, 0) * aiModels.length;
 
     // Add connection timeout
     const connectionTimeout = setTimeout(() => {
-      if (results.length === 0) {
-        setCurrentPhrase('Connection timeout. Please try again.');
+      if (resultsRef.current.length === 0) {
+        setError('Connection timeout. Please try again.');
         setIsAnalyzing(false);
         ctrl.abort();
       }
     }, 30000); // 30 second connection timeout
+
+    // Add overall timeout for large datasets
+    const overallTimeout = setTimeout(() => {
+      if (isAnalyzing) {
+        setError(`Analysis timeout. Processed ${resultsRef.current.length}/${totalExpected} queries.`);
+        setIsAnalyzing(false);
+        ctrl.abort();
+      }
+    }, Math.max(300000, totalExpected * 2000)); // 5 minutes minimum, or 2 seconds per query
 
     fetchEventSource(`https://phrase-score-insight.onrender.com/api/ai-queries/${domainId}`, {
       method: 'POST',
@@ -118,8 +134,9 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
         clearTimeout(connectionTimeout); // Clear timeout on first message
         
         if (ev.event === 'complete') {
+          clearTimeout(overallTimeout);
           setIsAnalyzing(false);
-          setCurrentPhrase('Analysis complete!');
+          setCurrentPhrase(`Analysis complete! Processed ${resultsRef.current.length} queries.`);
           setQueryResults(resultsRef.current);
           if (setQueryStats && stats) setQueryStats(stats);
           setModelStatus({ 'GPT-4o': 'Done', 'Claude 3': 'Done', 'Gemini 1.5': 'Done' });
@@ -128,10 +145,28 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
         }
         if (ev.event === 'result') {
           const data: AIQueryResult = JSON.parse(ev.data);
-          resultsRef.current.push(data);
-          setResults(prev => [...prev, data]);
-          setProgress(Math.round((resultsRef.current.length / totalExpected) * 100));
-          setModelStatus(prev => ({ ...prev, [data.model]: 'Querying...' }));
+          
+          // Prevent duplicate results
+          const isDuplicate = resultsRef.current.some(r => 
+            r.model === data.model && r.phrase === data.phrase && r.keyword === data.keyword
+          );
+          
+          if (!isDuplicate) {
+            resultsRef.current.push(data);
+            setResults(prev => [...prev, data]);
+            
+            // Calculate accurate progress
+            const currentProgress = Math.min(100, Math.round((resultsRef.current.length / totalExpected) * 100));
+            setProgress(currentProgress);
+            
+            // Update model status
+            setModelStatus(prev => ({ ...prev, [data.model]: 'Querying...' }));
+            
+            // Check if we've exceeded expected results
+            if (resultsRef.current.length > totalExpected) {
+              console.warn(`Exceeded expected results: ${resultsRef.current.length}/${totalExpected}`);
+            }
+          }
         } else if (ev.event === 'stats') {
           const data: AIQueryStats = JSON.parse(ev.data);
           setStats(data);
@@ -139,40 +174,46 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
         } else if (ev.event === 'progress') {
           const data = JSON.parse(ev.data);
           let msg = data.message;
-          // If the message matches 'Querying [model] for "phrase"...', show 'Querying: "phrase"...'
+          
+          // Enhanced message parsing
           const match = msg.match(/Querying [^ ]+ for "(.+?)"/);
           if (match) {
             msg = `Querying: "${match[1]}"...`;
           }
-          // If the message matches 'Scoring [model] response for "phrase"...', show 'Scoring: "phrase"...'
+          
           const scoringMatch = msg.match(/Scoring [^ ]+ response for "(.+?)"/);
           if (scoringMatch) {
             msg = `Scoring: "${scoringMatch[1]}"...`;
           }
-          // If the message contains batch information, show it
+          
           if (msg.includes('Processing') && msg.includes('batches')) {
             msg = `Processing ${totalExpected} queries in batches...`;
           }
+          
           setCurrentPhrase(msg);
         } else if (ev.event === 'error') {
+          clearTimeout(overallTimeout);
           try {
             const data = JSON.parse(ev.data);
-            setCurrentPhrase(data.error || 'An error occurred.');
+            setError(data.error || 'An error occurred during analysis.');
           } catch {
-            setCurrentPhrase('An error occurred.');
+            setError('An error occurred during analysis.');
           }
           setIsAnalyzing(false);
+          ctrl.abort();
         }
       },
       onclose() {
         clearTimeout(connectionTimeout);
+        clearTimeout(overallTimeout);
         setIsAnalyzing(false);
         ctrl.abort();
       },
       onerror(err) {
         clearTimeout(connectionTimeout);
+        clearTimeout(overallTimeout);
         setIsAnalyzing(false);
-        setCurrentPhrase('An error occurred during analysis.');
+        setError('Connection error. Please try again.');
         ctrl.abort();
         throw err;
       }
@@ -180,9 +221,10 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
 
     return () => {
       clearTimeout(connectionTimeout);
+      clearTimeout(overallTimeout);
       ctrl.abort();
     };
-  }, [phrases, domainId, setQueryResults, setQueryStats]);
+  }, [phrases, domainId, setQueryResults, setQueryStats, totalExpected]);
 
   const filteredResults = selectedModel === 'all' 
     ? results 
@@ -221,6 +263,44 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
   const goToPreviousPage = () => goToPage(currentPage - 1);
   const goToNextPage = () => goToPage(currentPage + 1);
 
+  // Show error state if there's an error
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-slate-900 mb-4">
+            AI Query Results
+          </h2>
+        </div>
+        <Card className="shadow-sm border border-red-200">
+          <CardContent className="py-12">
+            <div className="text-center space-y-6">
+              <div className="text-red-600 text-6xl">⚠️</div>
+              <div>
+                <h3 className="text-xl font-semibold text-red-900">Analysis Error</h3>
+                <p className="text-red-700 mb-4">{error}</p>
+                <div className="text-sm text-slate-600 mb-6">
+                  Processed: {results.length} / {totalExpected} queries
+                </div>
+                <div className="flex gap-4 justify-center">
+                  <Button variant="outline" onClick={onPrev}>
+                    Go Back
+                  </Button>
+                  <Button 
+                    onClick={() => window.location.reload()}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    Retry Analysis
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto">
       <div className="text-center mb-8">
@@ -247,7 +327,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
               )}
             </span>
             <span className="text-xs text-slate-500 mt-1">
-              {results.filter(r => r.model === model.name).length} / {phrases.reduce((sum, item) => sum + item.phrases.length, 0)}
+              {results.filter(r => r.model === model.name).length} / {totalPhrases}
             </span>
           </div>
         ))}
@@ -267,7 +347,14 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
                     style={{ width: `${progress}%` }}
                   ></div>
                 </div>
-                <div className="text-xs text-slate-500 mt-2">{results.length} / {phrases.reduce((sum, item) => sum + item.phrases.length, 0) * aiModels.length} results</div>
+                <div className="text-xs text-slate-500 mt-2">
+                  {results.length} / {totalExpected} results ({progress}%)
+                </div>
+                {results.length > totalExpected && (
+                  <div className="text-xs text-orange-600 mt-1">
+                    ⚠️ Exceeded expected count
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>
@@ -317,7 +404,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
                 <div>
                   <CardTitle className="text-slate-900">Query Results ({filteredResults.length})</CardTitle>
                   <CardDescription className="text-slate-600">
-                    {isAnalyzing ? currentPhrase : 'All queries complete.'}
+                    {isAnalyzing ? currentPhrase : `Analysis complete. Processed ${results.length}/${totalExpected} queries.`}
                   </CardDescription>
                 </div>
                 <Tabs value={selectedModel} onValueChange={setSelectedModel}>

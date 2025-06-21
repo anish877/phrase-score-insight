@@ -7,6 +7,20 @@ const prisma = new PrismaClient();
 
 const AI_MODELS: ('GPT-4o' | 'Claude 3' | 'Gemini 1.5')[] = ['GPT-4o', 'Claude 3', 'Gemini 1.5'];
 
+// Rate limiting: track active requests per domain with cleanup
+const activeRequests = new Map<number, number>();
+const MAX_CONCURRENT_REQUESTS = 2;
+
+// Cleanup old entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [domainId, count] of activeRequests.entries()) {
+    if (count === 0) {
+      activeRequests.delete(domainId);
+    }
+  }
+}, 5 * 60 * 1000);
+
 // AI-powered scoring logic with timeout
 async function scoreResponseWithAI(phrase: string, response: string, model: string, domain?: string) {
   const timeoutPromise = new Promise((_, reject) => 
@@ -102,6 +116,9 @@ async function processQueryBatch(
     batches.push(queries.slice(i, i + batchSize));
   }
 
+  // Track processed queries to prevent duplicates
+  const processedQueries = new Set<string>();
+
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
     const batch = batches[batchIndex];
     
@@ -112,6 +129,15 @@ async function processQueryBatch(
     const batchPromises = batch.map(async (query) => {
       const modelPromises = AI_MODELS.map(async (model) => {
         const startTime = Date.now();
+        
+        // Create unique identifier for this query to prevent duplicates
+        const queryId = `${query.phrase}-${model}-${query.keyword}`;
+        
+        // Check if already processed
+        if (processedQueries.has(queryId)) {
+          console.warn(`Duplicate query detected: ${queryId}`);
+          return null;
+        }
         
         try {
           // Send individual query progress with realistic messaging
@@ -183,6 +209,9 @@ async function processQueryBatch(
             phraseId: phraseRecord ? phraseRecord.id : undefined
           };
           
+          // Mark as processed
+          processedQueries.add(queryId);
+          
           allResults.push(result);
           res.write(`event: result\ndata: ${JSON.stringify(result)}\n\n`);
 
@@ -219,6 +248,16 @@ router.post('/:domainId', async (req, res) => {
         return;
     }
 
+    // Check rate limiting
+    const currentRequests = activeRequests.get(domainId) || 0;
+    if (currentRequests >= MAX_CONCURRENT_REQUESTS) {
+        res.status(429).json({ error: 'Too many concurrent requests for this domain. Please wait for the current analysis to complete.' });
+        return;
+    }
+
+    // Increment active requests
+    activeRequests.set(domainId, currentRequests + 1);
+
     // Set up SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -233,11 +272,27 @@ router.post('/:domainId', async (req, res) => {
             return;
         }
 
+        // Validate input size to prevent overwhelming the system
+        const totalPhrases = phrases.reduce((sum, item) => sum + item.phrases.length, 0);
+        const totalQueries = totalPhrases * AI_MODELS.length;
+        
+        if (totalQueries > 1000) {
+            res.write(`event: error\ndata: ${JSON.stringify({ error: `Too many queries requested: ${totalQueries}. Maximum allowed is 1000.` })}\n\n`);
+            res.end();
+            return;
+        }
+
         // Get domain information for context
         const domain = await prisma.domain.findUnique({
             where: { id: domainId },
             select: { url: true }
         });
+
+        if (!domain) {
+            res.write(`event: error\ndata: ${JSON.stringify({ error: 'Domain not found' })}\n\n`);
+            res.end();
+            return;
+        }
 
         const allQueries = phrases.flatMap((item: any) =>
             item.phrases.map((phrase: string) => ({
@@ -247,12 +302,11 @@ router.post('/:domainId', async (req, res) => {
             }))
         );
 
-        const totalQueries = allQueries.length * AI_MODELS.length;
         const completedQueries = { current: 0 };
         const allResults: any[] = [];
 
         // Determine batch size based on total queries - optimized for realistic processing
-        const batchSize = totalQueries > 30 ? 6 : totalQueries > 15 ? 8 : 10;
+        const batchSize = totalQueries > 100 ? 4 : totalQueries > 50 ? 6 : totalQueries > 20 ? 8 : 10;
         
         res.write(`event: progress\ndata: ${JSON.stringify({ message: `Initializing AI analysis engine - Processing ${totalQueries} queries across ${AI_MODELS.length} AI models for domain visibility analysis...` })}\n\n`);
 
@@ -266,6 +320,12 @@ router.post('/:domainId', async (req, res) => {
         console.error('AI Query streaming error:', err);
         res.write(`event: error\ndata: ${JSON.stringify({ error: `An unexpected error occurred: ${err.message}` })}\n\n`);
         res.end();
+    } finally {
+        // Decrement active requests
+        const currentRequests = activeRequests.get(domainId) || 0;
+        if (currentRequests > 0) {
+            activeRequests.set(domainId, currentRequests - 1);
+        }
     }
 });
 

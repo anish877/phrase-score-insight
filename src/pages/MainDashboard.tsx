@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Search, Plus, TrendingUp, Calendar, Globe, BarChart3, Sparkles, Target, Zap, ArrowUpRight, Filter, SortDesc } from 'lucide-react';
+import { Search, Plus, TrendingUp, Calendar, Globe, BarChart3, Sparkles, Target, Zap, ArrowUpRight, Filter, SortDesc, Clock, Play } from 'lucide-react';
+import { onboardingService } from '@/services/onboardingService';
 
 interface DashboardDomain {
   id: number;
@@ -19,29 +20,46 @@ interface DashboardDomain {
   industry?: string;
 }
 
+interface ActiveOnboardingSession {
+  domain: {
+    id: number;
+    url: string;
+    context?: string;
+    industry?: string;
+  };
+  currentStep: number;
+  lastActivity: string;
+}
+
 const ProfessionalDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [domains, setDomains] = useState<DashboardDomain[]>([]);
+  const [activeSessions, setActiveSessions] = useState<ActiveOnboardingSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchDomains = async () => {
+    const fetchData = async () => {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch('https://phrase-score-insight.onrender.com/api/dashboard/all');
-        if (!response.ok) throw new Error('Failed to fetch dashboard analyses');
-        const data = await response.json();
-        setDomains(data.domains || []);
+        // Fetch completed domains
+        const domainsResponse = await fetch('http://localhost:3002/api/dashboard/all');
+        if (!domainsResponse.ok) throw new Error('Failed to fetch dashboard analyses');
+        const domainsData = await domainsResponse.json();
+        setDomains(domainsData.domains || []);
+
+        // Fetch active onboarding sessions
+        const sessionsResponse = await onboardingService.getActiveSessions();
+        setActiveSessions(sessionsResponse.activeSessions);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load dashboard analyses');
+        setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
       } finally {
         setLoading(false);
       }
     };
-    fetchDomains();
+    fetchData();
   }, []);
 
   const filteredDomains = domains.filter(domain =>
@@ -68,6 +86,18 @@ const ProfessionalDashboard = () => {
       return <Badge className="bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 border-emerald-200 hover:from-emerald-100 hover:to-teal-100 transition-all duration-200">Analyzed</Badge>;
     }
     return <Badge className="bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border-blue-200 animate-pulse">Processing</Badge>;
+  };
+
+  const getStepName = (step: number) => {
+    const steps = [
+      'Domain Submission',
+      'Context Extraction', 
+      'Keyword Discovery',
+      'Phrase Generation',
+      'AI Query Results',
+      'Response Scoring'
+    ];
+    return steps[step] || 'Unknown Step';
   };
 
   const totalDomains = domains.length;
@@ -266,8 +296,120 @@ const ProfessionalDashboard = () => {
           </div>
         </div>
 
-        {/* Premium Domain Cards Grid */}
+        {/* Premium Domain Cards Grid - Combined with Active Sessions */}
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
+          {/* Active Sessions Cards */}
+          {activeSessions.map((session) => {
+            const domain = session.domain;
+            const currentStepName = getStepName(session.currentStep);
+            const progressPercentage = Math.round(((session.currentStep + 1) / 6) * 100);
+            const industry = domain.industry ?? 'General';
+            const contextPreview = domain.context
+              ? domain.context.split(' ').slice(0, 28).join(' ') + (domain.context.split(' ').length > 28 ? '...' : '')
+              : '';
+
+            return (
+              <Card
+                key={`session-${session.domain.id}`}
+                className="group border-0 shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 bg-gradient-to-br from-white to-slate-50 overflow-hidden cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/analyze?domainId=${session.domain.id}`)}
+                onKeyPress={e => { if (e.key === 'Enter' || e.key === ' ') navigate(`/analyze?domainId=${session.domain.id}`); }}
+                aria-label={`Resume analysis for ${domain.url}`}
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                <CardHeader className="relative space-y-4 pb-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-gradient-to-r from-slate-100 to-slate-200 rounded-lg flex items-center justify-center group-hover:from-blue-100 group-hover:to-indigo-100 transition-all duration-300">
+                        <Clock className="h-5 w-5 text-slate-600 group-hover:text-blue-600" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
+                          {domain.url}
+                        </CardTitle>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <Badge className="bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border-blue-200 animate-pulse">
+                            In Progress
+                          </Badge>
+                          <Badge variant="outline" className="text-xs border-slate-200 text-slate-600">
+                            {industry}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  {contextPreview && (
+                    <CardDescription className="text-slate-600 leading-relaxed text-sm">
+                      {contextPreview}
+                    </CardDescription>
+                  )}
+                </CardHeader>
+
+                <CardContent className="relative space-y-6">
+                  {/* Current Step Display */}
+                  <div className="relative">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-semibold text-slate-700">Current Step</span>
+                      <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
+                    </div>
+                    <div className="relative">
+                      <div className="text-2xl font-bold text-blue-700 mb-2">
+                        {currentStepName}
+                      </div>
+                      <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                        <div 
+                          className="h-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-1000 ease-out"
+                          style={{ width: `${progressPercentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Progress Metrics Grid */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <div className="w-6 h-6 bg-blue-500 rounded-md flex items-center justify-center">
+                          <Play className="h-3 w-3 text-white" />
+                        </div>
+                        <span className="text-xs font-medium text-blue-700">Progress</span>
+                      </div>
+                      <p className="text-xl font-bold text-blue-900">{progressPercentage}%</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-4 border border-emerald-100">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <div className="w-6 h-6 bg-emerald-500 rounded-md flex items-center justify-center">
+                          <Clock className="h-3 w-3 text-white" />
+                        </div>
+                        <span className="text-xs font-medium text-emerald-700">Steps Left</span>
+                      </div>
+                      <p className="text-xl font-bold text-emerald-900">{6 - (session.currentStep + 1)}</p>
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                    <span className="text-xs text-slate-500 font-medium">
+                      Last activity: {new Date(session.lastActivity).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit'
+                      })}
+                    </span>
+                    <div className="flex items-center text-blue-600 text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      Resume
+                      <Play className="h-3 w-3 ml-1" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+
+          {/* Completed Domain Cards */}
           {filteredDomains.map((domain) => {
             const status = domain.metrics ? 'completed' : 'analyzing';
             const visibilityScore = domain.metrics?.visibilityScore ?? 0;

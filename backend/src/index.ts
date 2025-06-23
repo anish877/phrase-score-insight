@@ -7,6 +7,7 @@ import phrasesRouter from './routes/phrases';
 import aiQueriesRouter from './routes/ai-queries';
 import competitorRouter from './routes/competitor';
 import dashboardRouter from './routes/dashboard';
+import onboardingRouter from './routes/onboarding';
 import { PrismaClient } from '../generated/prisma';
 
 const app = express();
@@ -77,6 +78,7 @@ app.use('/api/phrases', phrasesRouter);
 app.use('/api/ai-queries', aiQueriesRouter);
 app.use('/api/competitor', competitorRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/onboarding', onboardingRouter);
 
 // Health check endpoint
 app.get('/api/health', (req: Request, res: Response) => {

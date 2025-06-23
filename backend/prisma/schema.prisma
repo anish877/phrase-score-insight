@@ -25,6 +25,7 @@ model Domain {
   dashboardAnalysis DashboardAnalysis?
   competitorAnalyses CompetitorAnalysis[]
   suggestedCompetitors SuggestedCompetitor[]
+  onboardingProgress OnboardingProgress?
 }
 
 model CrawlResult {
@@ -124,4 +125,20 @@ model SuggestedCompetitor {
   createdAt DateTime @default(now())
 
   @@index([domainId])
+}
+
+// Onboarding Progress Tracking
+model OnboardingProgress {
+  id            Int      @id @default(autoincrement())
+  domainId      Int      @unique
+  domain        Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  currentStep   Int      @default(0) // 0-5 for the 6 steps
+  isCompleted   Boolean  @default(false)
+  stepData      Json?    // Store step-specific data
+  lastActivity  DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([isCompleted])
+  @@index([lastActivity])
 }

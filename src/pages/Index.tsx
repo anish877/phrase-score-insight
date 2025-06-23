@@ -1,17 +1,20 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import DomainSubmission from '../components/DomainSubmission';
 import DomainExtraction from '../components/DomainExtraction';
 import KeywordDiscovery from '../components/KeywordDiscovery';
 import PhraseGeneration from '../components/PhraseGeneration';
 import AIQueryResults, { AIQueryResult, AIQueryStats } from '../components/AIQueryResults';
 import ResponseScoring from '../components/ResponseScoring';
+import ResumeOnboarding from '../components/ResumeOnboarding';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle, Circle, Clock } from 'lucide-react';
+import { onboardingService, OnboardingStepData } from '@/services/onboardingService';
 
 const Index = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [currentStep, setCurrentStep] = useState(0);
   const [domain, setDomain] = useState('');
   const [domainId, setDomainId] = useState<number>(0); 
@@ -20,8 +23,14 @@ const Index = () => {
   const [generatedPhrases, setGeneratedPhrases] = useState<Array<{keyword: string, phrases: string[]}>>([]);
   const [queryResults, setQueryResults] = useState<AIQueryResult[]>([]);
   const [queryStats, setQueryStats] = useState<AIQueryStats | null>(null);
+  
+  // Onboarding state
+  const [isCheckingResume, setIsCheckingResume] = useState(false);
+  const [showResumeDialog, setShowResumeDialog] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [resumeData, setResumeData] = useState<OnboardingStepData | null>(null);
 
-  console.log('Current step:', currentStep, 'Domain ID:', domainId);
+  console.log('Current step:', currentStep, 'Domain ID:', domainId, 'Domain:', domain);
 
   const steps = [
     {
@@ -62,20 +71,257 @@ const Index = () => {
     }
   ];
 
-  const nextStep = () => {
+  // Initialize onboarding - check for resume opportunities
+  useEffect(() => {
+    const initializeOnboarding = async () => {
+      // Check if we have a domainId from URL params (for resuming)
+      const urlDomainId = searchParams.get('domainId');
+      if (urlDomainId) {
+        const domainIdNum = parseInt(urlDomainId);
+        if (domainIdNum > 0) {
+          setIsCheckingResume(true);
+          try {
+            console.log('Checking resume for domainId:', domainIdNum);
+            const resumeCheck = await onboardingService.checkResume(domainIdNum);
+            console.log('Resume check result:', resumeCheck);
+            
+            if (resumeCheck.canResume) {
+              setShowResumeDialog(true);
+              setDomainId(domainIdNum);
+              setResumeData(resumeCheck.stepData || null);
+            } else if (resumeCheck.redirectTo) {
+              // Redirect to dashboard if completed
+              console.log('Redirecting to dashboard:', resumeCheck.redirectTo);
+              window.location.href = resumeCheck.redirectTo;
+              return;
+            } else {
+              console.log('Cannot resume:', resumeCheck.reason);
+              // If cannot resume, start fresh but keep the domainId if available
+              if (resumeCheck.stepData?.domain) {
+                setDomain(resumeCheck.stepData.domain);
+              }
+              if (resumeCheck.stepData?.domainId) {
+                setDomainId(resumeCheck.stepData.domainId);
+              }
+            }
+          } catch (error) {
+            console.error('Failed to check resume status:', error);
+            // On error, continue with fresh start
+          } finally {
+            setIsCheckingResume(false);
+          }
+        }
+      }
+      setIsInitialized(true);
+    };
+
+    initializeOnboarding();
+  }, [searchParams]);
+
+  // Auto-save progress when state changes
+  useEffect(() => {
+    if (domainId > 0 && isInitialized && !isCheckingResume && currentStep > 0) {
+      const stepData: OnboardingStepData = {
+        domain,
+        domainId,
+        brandContext,
+        selectedKeywords,
+        generatedPhrases,
+        queryResults,
+        queryStats
+      };
+
+      console.log('Auto-saving progress for step:', currentStep, 'data:', stepData);
+      
+      // Save to onboarding progress for resume capability
+      onboardingService.autoSaveProgress(domainId, currentStep, stepData);
+      
+      // Also save to main domain tables for dashboard access
+      saveToMainTables(domainId, stepData);
+    }
+
+    // Cleanup auto-save on unmount
+    return () => {
+      onboardingService.cancelAutoSave();
+    };
+  }, [domainId, currentStep, domain, brandContext, selectedKeywords, generatedPhrases, queryResults, queryStats, isInitialized, isCheckingResume]);
+
+  // Function to save data to main domain tables
+  const saveToMainTables = async (domainId: number, stepData: OnboardingStepData) => {
+    try {
+      console.log('Saving onboarding data to main domain tables...');
+      const response = await fetch(`http://localhost:3002/api/onboarding/save-to-main/${domainId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(stepData)
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to save to main tables:', await response.text());
+      } else {
+        console.log('Successfully saved to main domain tables');
+      }
+    } catch (error) {
+      console.error('Error saving to main tables:', error);
+    }
+  };
+
+  const nextStep = async () => {
     if (currentStep < steps.length - 1) {
-      setCurrentStep(currentStep + 1);
+      const newStep = currentStep + 1;
+      setCurrentStep(newStep);
+      
+      // Save progress immediately when moving to next step
+      if (domainId > 0) {
+        const stepData: OnboardingStepData = {
+          domain,
+          domainId,
+          brandContext,
+          selectedKeywords,
+          generatedPhrases,
+          queryResults,
+          queryStats
+        };
+        
+        try {
+          console.log('Saving progress for step:', newStep);
+          await onboardingService.saveProgress(domainId, newStep, stepData);
+          await saveToMainTables(domainId, stepData);
+        } catch (error) {
+          console.error('Failed to save progress:', error);
+        }
+      }
     }
   };
 
-  const prevStep = () => {
+  const prevStep = async () => {
     if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
+      const newStep = currentStep - 1;
+      setCurrentStep(newStep);
+      
+      // Save progress when going back
+      if (domainId > 0) {
+        const stepData: OnboardingStepData = {
+          domain,
+          domainId,
+          brandContext,
+          selectedKeywords,
+          generatedPhrases,
+          queryResults,
+          queryStats
+        };
+        
+        try {
+          await onboardingService.saveProgress(domainId, newStep, stepData);
+          await saveToMainTables(domainId, stepData);
+        } catch (error) {
+          console.error('Failed to save progress:', error);
+        }
+      }
     }
   };
 
-  const completeAnalysis = () => {
+  const completeAnalysis = async () => {
+    if (domainId > 0) {
+      // Mark onboarding as completed
+      const stepData: OnboardingStepData = {
+        domain,
+        domainId,
+        brandContext,
+        selectedKeywords,
+        generatedPhrases,
+        queryResults,
+        queryStats
+      };
+      
+      try {
+        // Save progress and mark as completed
+        await onboardingService.saveProgress(domainId, currentStep, stepData, true);
+        
+        // Save to main tables (this ensures dashboard has access to data)
+        await saveToMainTables(domainId, stepData);
+      } catch (error) {
+        console.error('Failed to mark onboarding as complete:', error);
+      }
+    }
+    
     navigate(`/dashboard/${domainId}`);
+  };
+
+  const handleResume = async (stepData: OnboardingStepData, resumeStep: number) => {
+    console.log('Resuming with data:', stepData, 'step:', resumeStep);
+    
+    // Restore state from saved data with proper validation
+    if (stepData.domain) {
+      setDomain(stepData.domain);
+      console.log('Restored domain:', stepData.domain);
+    }
+    
+    if (stepData.domainId) {
+      setDomainId(stepData.domainId);
+      console.log('Restored domainId:', stepData.domainId);
+    }
+    
+    if (stepData.brandContext) {
+      setBrandContext(stepData.brandContext);
+      console.log('Restored brandContext');
+    }
+    
+    if (stepData.selectedKeywords && Array.isArray(stepData.selectedKeywords)) {
+      setSelectedKeywords(stepData.selectedKeywords);
+      console.log('Restored selectedKeywords:', stepData.selectedKeywords.length);
+    }
+    
+    if (stepData.generatedPhrases && Array.isArray(stepData.generatedPhrases)) {
+      setGeneratedPhrases(stepData.generatedPhrases);
+      console.log('Restored generatedPhrases:', stepData.generatedPhrases.length);
+    }
+    
+    if (stepData.queryResults && Array.isArray(stepData.queryResults)) {
+      setQueryResults(stepData.queryResults);
+      console.log('Restored queryResults:', stepData.queryResults.length);
+    }
+    
+    if (stepData.queryStats) {
+      setQueryStats(stepData.queryStats);
+      console.log('Restored queryStats');
+    }
+    
+    setCurrentStep(resumeStep);
+    setShowResumeDialog(false);
+    setResumeData(null);
+    
+    console.log('Resume completed. Current state:', {
+      currentStep: resumeStep,
+      domain,
+      domainId: stepData.domainId,
+      hasBrandContext: !!stepData.brandContext,
+      keywordsCount: stepData.selectedKeywords?.length || 0,
+      phrasesCount: stepData.generatedPhrases?.length || 0,
+      resultsCount: stepData.queryResults?.length || 0
+    });
+  };
+
+  const handleReset = () => {
+    console.log('Resetting onboarding state');
+    // Reset all state
+    setCurrentStep(0);
+    setDomain('');
+    setDomainId(0);
+    setBrandContext('');
+    setSelectedKeywords([]);
+    setGeneratedPhrases([]);
+    setQueryResults([]);
+    setQueryStats(null);
+    setShowResumeDialog(false);
+    setResumeData(null);
+  };
+
+  const handleCancelResume = () => {
+    setShowResumeDialog(false);
+    navigate('/');
   };
 
   const getStepStatus = (stepIndex: number) => {
@@ -85,6 +331,32 @@ const Index = () => {
   };
 
   const progressPercentage = ((currentStep + 1) / steps.length) * 100;
+
+  // Show loading state while checking resume status
+  if (isCheckingResume) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="h-12 w-12 rounded-full border-4 border-blue-600 border-t-transparent animate-spin mx-auto bg-blue-100 flex items-center justify-center"></div>
+          <p className="mt-4 text-gray-600">Checking for previous sessions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show resume dialog if available
+  if (showResumeDialog && domainId > 0) {
+    return (
+      <div className="min-h-screen bg-slate-50 py-8">
+        <ResumeOnboarding
+          domainId={domainId}
+          onResume={handleResume}
+          onReset={handleReset}
+          onCancel={handleCancelResume}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">

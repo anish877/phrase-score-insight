@@ -85,6 +85,13 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
   const totalPhrases = phrases.reduce((sum, item) => sum + item.phrases.length, 0);
   const totalExpected = totalPhrases * aiModels.length;
 
+  // Show a warning if the query count is very high
+  useEffect(() => {
+    if (totalExpected > 500) {
+      setCurrentPhrase(`Warning: Large query (${totalExpected} queries). This may take a long time. Please do not close the tab.`);
+    }
+  }, [totalExpected]);
+
   useEffect(() => {
     if (phrases.length === 0) {
       setIsAnalyzing(false);
@@ -112,7 +119,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
         setIsAnalyzing(false);
         ctrl.abort();
       }
-    }, 30000); // 30 second connection timeout
+    }, 60000); // 60 second connection timeout
 
     // Add overall timeout for large datasets
     const overallTimeout = setTimeout(() => {
@@ -121,7 +128,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
         setIsAnalyzing(false);
         ctrl.abort();
       }
-    }, Math.max(300000, totalExpected * 2000)); // 5 minutes minimum, or 2 seconds per query
+    }, Math.max(1200000, totalExpected * 3000)); // 20 minutes minimum, or 3 seconds per query
 
     fetchEventSource(`https://phrase-score-insight.onrender.com/api/ai-queries/${domainId}`, {
       method: 'POST',
@@ -152,15 +159,15 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
           );
           
           if (!isDuplicate) {
-            resultsRef.current.push(data);
-            setResults(prev => [...prev, data]);
+          resultsRef.current.push(data);
+          setResults(prev => [...prev, data]);
             
             // Calculate accurate progress
             const currentProgress = Math.min(100, Math.round((resultsRef.current.length / totalExpected) * 100));
             setProgress(currentProgress);
             
             // Update model status
-            setModelStatus(prev => ({ ...prev, [data.model]: 'Querying...' }));
+          setModelStatus(prev => ({ ...prev, [data.model]: 'Querying...' }));
             
             // Check if we've exceeded expected results
             if (resultsRef.current.length > totalExpected) {
@@ -213,9 +220,19 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
         clearTimeout(connectionTimeout);
         clearTimeout(overallTimeout);
         setIsAnalyzing(false);
-        setError('Connection error. Please try again.');
+        // Enhanced error handling for backend errors
+        if (err && err.message) {
+          if (err.message.includes('429')) {
+            setError('Too many concurrent requests. Please wait for the current analysis to complete.');
+          } else if (err.message.includes('413')) {
+            setError('Query payload too large. Please reduce the number of phrases and try again.');
+          } else {
+            setError('Connection error: ' + err.message);
+          }
+        } else {
+          setError('Connection error. Please try again.');
+        }
         ctrl.abort();
-        throw err;
       }
     });
 
@@ -477,7 +494,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
                           <TableCell className="text-center">
                             <div className="flex flex-col items-center">
                               <span className={`font-bold text-lg ${result.scores.relevance >= 4 ? 'text-green-600' : result.scores.relevance >= 3 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                {result.scores.relevance}
+                            {result.scores.relevance}
                               </span>
                               <span className="text-xs text-slate-500">
                                 {result.scores.relevance >= 4 ? 'High' : result.scores.relevance >= 3 ? 'Medium' : 'Low'}
@@ -487,7 +504,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
                           <TableCell className="text-center">
                             <div className="flex flex-col items-center">
                               <span className={`font-bold text-lg ${result.scores.accuracy >= 4 ? 'text-green-600' : result.scores.accuracy >= 3 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                {result.scores.accuracy}
+                            {result.scores.accuracy}
                               </span>
                               <span className="text-xs text-slate-500">
                                 {result.scores.accuracy >= 4 ? 'Trusted' : result.scores.accuracy >= 3 ? 'Good' : 'Poor'}
@@ -497,7 +514,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
                           <TableCell className="text-center">
                             <div className="flex flex-col items-center">
                               <span className={`font-bold text-lg ${result.scores.sentiment >= 4 ? 'text-green-600' : result.scores.sentiment >= 3 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                {result.scores.sentiment}
+                            {result.scores.sentiment}
                               </span>
                               <span className="text-xs text-slate-500">
                                 {result.scores.sentiment >= 4 ? 'Positive' : result.scores.sentiment >= 3 ? 'Neutral' : 'Negative'}
@@ -507,7 +524,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
                           <TableCell className="text-center">
                             <div className="flex flex-col items-center">
                               <span className={`font-bold text-xl ${result.scores.overall >= 4 ? 'text-green-600' : result.scores.overall >= 3 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                {result.scores.overall}
+                            {result.scores.overall}
                               </span>
                               <span className="text-xs text-slate-500">
                                 {result.scores.overall >= 4 ? 'Excellent' : result.scores.overall >= 3 ? 'Good' : 'Poor'}

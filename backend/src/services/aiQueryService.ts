@@ -5,6 +5,14 @@ const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/
 
 async function queryGemini(phrase: string, modelType: 'GPT-4o' | 'Claude 3' | 'Gemini 1.5' = 'Gemini 1.5', domain?: string): Promise<{ response: string, cost: number }> {
     try {
+        if (!GEMINI_API_KEY) {
+            console.error('GEMINI_API_KEY not set in environment variables');
+            return { 
+                response: `Error: GEMINI_API_KEY not configured. Please set the GEMINI_API_KEY environment variable to use AI features.`, 
+                cost: 0 
+            };
+        }
+        
         // Highly detailed system prompts that simulate real AI model behavior with domain context
         let systemPrompt = '';
         
@@ -102,14 +110,14 @@ TONE AND APPROACH:
                 ],
                 generationConfig: {
                     temperature: 0.7,
-                    maxOutputTokens: 500, // Increased for more detailed responses
+                    maxOutputTokens: 2000, // Increased for dashboard analysis
                     topK: 40,
                     topP: 0.8,
                 }
             },
             {
                 headers: { 'Content-Type': 'application/json' },
-                timeout: 30000 // Increased timeout for more comprehensive responses
+                timeout: 60000 // 60 seconds timeout for dashboard analysis
             }
         );
         const responseText = response.data.candidates?.[0]?.content?.parts?.[0]?.text || `No response from ${modelType}.`;
@@ -217,7 +225,7 @@ Be extremely strict and realistic in your evaluation. This directly impacts SEO 
             },
             {
                 headers: { 'Content-Type': 'application/json' },
-                timeout: 25000
+                timeout: 60000
             }
         );
 

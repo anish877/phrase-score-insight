@@ -24,7 +24,7 @@ setInterval(() => {
 // AI-powered scoring logic with timeout
 async function scoreResponseWithAI(phrase: string, response: string, model: string, domain?: string) {
   const timeoutPromise = new Promise((_, reject) => 
-    setTimeout(() => reject(new Error('Scoring timeout')), 15000)
+    setTimeout(() => reject(new Error('Scoring timeout')), 60000)
   );
   
   try {

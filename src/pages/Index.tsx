@@ -75,7 +75,7 @@ const Index = () => {
   };
 
   const completeAnalysis = () => {
-    navigate(`/dashboard/${domain}`);
+    navigate(`/dashboard/${domainId}`);
   };
 
   const getStepStatus = (stepIndex: number) => {

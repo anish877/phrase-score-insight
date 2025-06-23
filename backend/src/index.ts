@@ -7,20 +7,26 @@ import phrasesRouter from './routes/phrases';
 import aiQueriesRouter from './routes/ai-queries';
 import competitorRouter from './routes/competitor';
 import dashboardRouter from './routes/dashboard';
+import { PrismaClient } from '../generated/prisma';
 
 const app = express();
+const prisma = new PrismaClient();
 
 // Load environment variables
 import 'dotenv/config';
 
 const allowedOrigins = [
   'http://localhost:8080',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:4173',
   'https://phrase-score-insight-lxkj.vercel.app'
 ];
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    // Allow all localhost origins in development
+    if (!origin || origin.startsWith('http://localhost:') || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -31,6 +37,38 @@ const corsOptions: cors.CorsOptions = {
 // Middleware
 app.use(cors(corsOptions));
 app.use(express.json());
+
+// Debug endpoint to list all domains
+app.get('/api/debug/domains', async (req: Request, res: Response) => {
+  try {
+    const domains = await prisma.domain.findMany({
+      select: {
+        id: true,
+        url: true,
+        context: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            keywords: true,
+            crawlResults: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+    
+    res.json({
+      total: domains.length,
+      domains: domains
+    });
+  } catch (error) {
+    console.error('Error fetching domains:', error);
+    res.status(500).json({ error: 'Failed to fetch domains' });
+  }
+});
 
 // Routes
 app.use('/api/domain', domainRouter);
@@ -62,10 +100,11 @@ app.use((req: Request, res: Response) => {
   });
 });
 
-const PORT = Number(process.env?.PORT) || 3001;
+const PORT = Number(process.env?.PORT) || 3002;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 app.listen(PORT, () => {
   console.log(`Server running in ${NODE_ENV} mode on port ${PORT}`);
   console.log(`Health check available at http://localhost:${PORT}/api/health`);
+  console.log(`Debug domains available at http://localhost:${PORT}/api/debug/domains`);
 }); 

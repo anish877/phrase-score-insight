@@ -22,6 +22,9 @@ model Domain {
   updatedAt DateTime @updatedAt
   crawlResults CrawlResult[]
   keywords     Keyword[]
+  dashboardAnalysis DashboardAnalysis?
+  competitorAnalyses CompetitorAnalysis[]
+  suggestedCompetitors SuggestedCompetitor[]
 }
 
 model CrawlResult {
@@ -79,4 +82,46 @@ model AIQueryResult {
   sentiment Int
   overall   Float
   createdAt DateTime @default(now())
+}
+
+// New models for storing AI analysis results
+model DashboardAnalysis {
+  id        Int      @id @default(autoincrement())
+  domain    Domain   @relation(fields: [domainId], references: [id])
+  domainId  Int      @unique
+  metrics   Json     // Store all metrics as JSON
+  insights  Json     // Store insights as JSON
+  industryAnalysis Json // Store industry analysis as JSON
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([domainId])
+}
+
+model CompetitorAnalysis {
+  id        Int      @id @default(autoincrement())
+  domain    Domain   @relation(fields: [domainId], references: [id])
+  domainId  Int
+  competitors Json   // Store competitors array as JSON
+  marketInsights Json // Store market insights as JSON
+  strategicRecommendations Json // Store recommendations as JSON
+  competitiveAnalysis Json // Store competitive analysis as JSON
+  competitorList String @db.Text // Store the list of competitors analyzed
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([domainId])
+}
+
+model SuggestedCompetitor {
+  id        Int      @id @default(autoincrement())
+  domain    Domain   @relation(fields: [domainId], references: [id])
+  domainId  Int
+  name      String
+  competitorDomain String
+  reason    String   @db.Text
+  type      String   // 'direct' or 'indirect'
+  createdAt DateTime @default(now())
+
+  @@index([domainId])
 }

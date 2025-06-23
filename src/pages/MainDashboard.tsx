@@ -80,6 +80,33 @@ const ProfessionalDashboard = () => {
     .filter(d => d.metrics)
     .reduce((acc, d) => acc + (d.metrics?.keywordCount || 0), 0);
 
+  // Calculate previous month domain count for growth stat
+  // For demo, assume domains have a lastAnalyzed date and count those from previous month
+  const now = new Date();
+  const thisMonth = now.getMonth();
+  const thisYear = now.getFullYear();
+  const lastMonth = thisMonth === 0 ? 11 : thisMonth - 1;
+  const lastMonthYear = thisMonth === 0 ? thisYear - 1 : thisYear;
+  const domainsThisMonth = domains.filter(d => {
+    if (!d.lastAnalyzed) return false;
+    const date = new Date(d.lastAnalyzed);
+    return date.getMonth() === thisMonth && date.getFullYear() === thisYear;
+  }).length;
+  const domainsLastMonth = domains.filter(d => {
+    if (!d.lastAnalyzed) return false;
+    const date = new Date(d.lastAnalyzed);
+    return date.getMonth() === lastMonth && date.getFullYear() === lastMonthYear;
+  }).length;
+  const domainGrowth = domainsLastMonth > 0 ? Math.round(((domainsThisMonth - domainsLastMonth) / domainsLastMonth) * 100) : 0;
+
+  // Industry average for visibility
+  const industryAvgVisibility = 65;
+  const aboveIndustryAvg = avgVisibilityScore > industryAvgVisibility;
+
+  // High coverage threshold for keywords
+  const highCoverageThreshold = 1000;
+  const highCoverage = totalKeywords >= highCoverageThreshold;
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -149,7 +176,7 @@ const ProfessionalDashboard = () => {
                   <p className="text-3xl font-bold text-slate-900">{totalDomains}</p>
                   <div className="flex items-center text-emerald-600 text-sm font-medium">
                     <ArrowUpRight className="h-3 w-3 mr-1" />
-                    +12% this month
+                    {domainGrowth > 0 ? `+${domainGrowth}% this month` : domainGrowth < 0 ? `${domainGrowth}% this month` : '0% this month'}
                   </div>
                 </div>
                 <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
@@ -185,7 +212,7 @@ const ProfessionalDashboard = () => {
                   <p className="text-3xl font-bold text-slate-900">{avgVisibilityScore.toFixed(1)}%</p>
                   <div className="flex items-center text-emerald-600 text-sm font-medium">
                     <TrendingUp className="h-3 w-3 mr-1" />
-                    Above industry avg
+                    {aboveIndustryAvg ? 'Above industry avg' : 'Below industry avg'}
                   </div>
                 </div>
                 <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-xl flex items-center justify-center shadow-lg">
@@ -203,7 +230,7 @@ const ProfessionalDashboard = () => {
                   <p className="text-3xl font-bold text-slate-900">{totalKeywords.toLocaleString()}</p>
                   <div className="flex items-center text-emerald-600 text-sm font-medium">
                     <Zap className="h-3 w-3 mr-1" />
-                    High coverage
+                    {highCoverage ? 'High coverage' : 'Low coverage'}
                   </div>
                 </div>
                 <div className="w-12 h-12 bg-gradient-to-r from-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg">

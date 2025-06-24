@@ -469,9 +469,9 @@ Your entire response must be ONLY the raw JSON object. Do not wrap it in \`\`\`j
 export async function generatePhrases(keyword: string, domain?: string, context?: string): Promise<string[]> {
   let prompt;
   if (domain && context) {
-    prompt = `You are an expert SEO analyst with 15+ years of experience using Ahrefs, SEMrush, and Google Keyword Planner.\n\nYour task is to generate 5 highly realistic, high-value search phrases that real users would type into Google to test the SEO visibility and coverage of the domain: \"${domain}\" for the keyword: \"${keyword}\".\n\n- Each phrase should represent a real-world search query that, if searched, would indicate whether the domain is visible for that specific intent.\n- Include a mix of commercial, informational, transactional, and comparison queries.\n- Phrases should be natural, specific, and reflect actual user search behavior.\n- Do NOT simply repeat or slightly reword the keyword.\n- Do NOT include generic, irrelevant, or zero-volume phrases.\n- Use the business context for maximum relevance: \"${context}\".\n- Output ONLY a JSON array of 5 strings, no markdown, no comments, no extra text.\n\nExample for keyword \"project management software\":\n[\n  \"best project management software for small business\",\n  \"project management tools for remote teams\",\n  \"asana vs trello vs monday.com\",\n  \"how to choose project management software\",\n  \"project management software pricing comparison\"\n]\n\nNow generate 5 realistic, valuable search phrases for: \"${keyword}\" to test the SEO visibility of ${domain}.`;
+    prompt = `You are an expert SEO analyst with 15+ years of experience using Ahrefs, SEMrush, and Google Keyword Planner.\n\nYour task is to generate 5 highly realistic, high-value search phrases that real users would type into Google to TEST THE SEO VISIBILITY and PRESENCE of the domain: "${domain}" for the keyword: "${keyword}".\n\n- Each phrase should be a real-world search query that would specifically reveal if THIS domain is ranking for that intent, not just any domain.\n- These phrases are for an SEO tool to check if the domain is present and visible for important, competitive, and intent-diverse queries.\n- Tailor the phrases to the domain's business, offerings, and context: "${context}".\n- Include a mix of commercial, informational, transactional, and comparison queries.\n- Phrases should be natural, specific, and reflect actual user search behavior.\n- Do NOT simply repeat or slightly reword the keyword.\n- Do NOT include generic, irrelevant, or zero-volume phrases.\n- Output ONLY a JSON array of 5 strings, no markdown, no comments, no extra text.\n\nExample for keyword "project management software":\n[\n  "best project management software for small business",\n  "project management tools for remote teams",\n  "asana vs trello vs monday.com",\n  "how to choose project management software",\n  "project management software pricing comparison"\n]\n\nNow generate 5 realistic, valuable search phrases for: "${keyword}" to test the SEO presence and visibility of ${domain}.`;
   } else {
-    prompt = `You are an expert SEO analyst. Generate 5 highly realistic search phrases that would be used to test the SEO visibility of a website for the keyword: \"${keyword}\".\n- Each phrase should be a real-world search query that would reveal if the site is ranking for that intent.\n- Include a mix of commercial, informational, transactional, and comparison queries.\n- Output ONLY a JSON array of 5 strings, no markdown, no comments, no extra text.`;
+    prompt = `You are an expert SEO analyst. Generate 5 highly realistic search phrases that would be used to TEST THE SEO PRESENCE and VISIBILITY of a website for the keyword: "${keyword}".\n- Each phrase should be a real-world search query that would specifically reveal if THIS site is ranking for that intent, not just any site.\n- These phrases are for an SEO tool to check if the domain is present and visible for important, competitive, and intent-diverse queries.\n- Include a mix of commercial, informational, transactional, and comparison queries.\n- Output ONLY a JSON array of 5 strings, no markdown, no comments, no extra text.`;
   }
 
   const response = await axios.post(
@@ -535,6 +535,9 @@ You are an expert SEO analyst with 15+ years of experience using Ahrefs, SEMrush
 
 Given the following website and its business context, generate a list of the 50 most valuable, high-traffic, and competitive keywords for SEO, as if you were using Ahrefs.
 
+- ONLY include keywords that are important for TESTING THE SEO VISIBILITY AND PRESENCE of the domain: "${domain}" in an SEO tool.
+- These keywords will be used to generate search phrases that will specifically test if the domain is ranking and visible in Google for those topics.
+- Choose keywords that are highly relevant to the domain's business, offerings, and context: "${context}".
 - Only include keywords that have real, significant search volume (at least 100 monthly) and are relevant to the business.
 - Include a mix of head, mid-tail, and long-tail keywords.
 - For each keyword, provide:
@@ -547,6 +550,7 @@ CRITICAL REQUIREMENTS:
 - Do NOT include generic, irrelevant, or zero-volume keywords.
 - Do NOT invent data—use realistic, industry-standard values.
 - Include both commercial and informational intent.
+- These keywords should reflect real user search behavior and be suitable for evaluating the domain's SEO coverage and presence.
 - Output must be a JSON array, sorted by volume descending.
 
 Domain: ${domain}

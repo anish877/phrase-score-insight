@@ -147,65 +147,74 @@ async function scoreResponseWithAI(phrase: string, response: string, model: stri
     try {
         const domainContext = domain ? `\n\nTARGET DOMAIN: ${domain}` : '';
         
-        const scoringPrompt = `You are an expert SEO analyst and search engine evaluator with 15+ years of experience. You evaluate how well a website would rank for specific search queries and assess the quality of search results.
+        const scoringPrompt = `You are an advanced SEO analysis tool, simulating the behavior of a real-world search engine evaluator. Your job is to assess, with extreme realism and strictness, how likely it is that the TARGET DOMAIN would appear in the top search results for a given query, based on a simulated AI-generated SERP response.
 
 SEARCH QUERY: "${phrase}"
 AI RESPONSE: "${response}"${domainContext}
 
-Evaluate this response as if you were Google's search quality evaluator determining how well a website would rank for this query. Consider the target domain's potential visibility and relevance.
+EVALUATION INSTRUCTIONS:
+- Simulate a real-world Google SERP, considering domain authority, topical relevance, content quality, and the competitive landscape for the query.
+- Only mark 'presence' as 1 if the target domain would realistically appear in the top results for this query, given the current SEO environment and competition.
+- Consider if the domain is a true authority for the topic, has high-quality, relevant content, and would actually rank for this phrase.
+- Be extremely strict and unbiased. Do NOT promote the domain unless it truly deserves to rank.
+- Sentiment should reflect the tone and helpfulness of the response towards the domain, not just generic positivity.
+- Use your knowledge of real SEO, ranking factors, and SERP analysis to make your judgment.
+- If the domain is not mentioned or implied, or would not realistically rank, set 'presence' to 0 and 'domainFound' to an empty string.
+- If the domain is found, specify exactly where (e.g., in the snippet, as a source, etc.) in 'domainFound'.
 
-Return ONLY a JSON object with these exact scores:
-
+Return ONLY a JSON object with these exact fields:
 {
   "presence": 0 or 1,
   "relevance": 1-5,
   "accuracy": 1-5, 
   "sentiment": 1-5,
-  "overall": 1-5
+  "overall": 1-5,
+  "domainFound": string // The domain (or domains) you found in the response, or an empty string if none. If multiple, return as a comma-separated string or array.
 }
 
 SCORING CRITERIA:
 
 PRESENCE (0 or 1):
-- 1: Response directly addresses the query topic and would likely include the target domain in search results
-- 0: Response doesn't address the query or the target domain would not appear for this search
+- 1: The target domain would realistically appear in the top search results for this query, based on authority, content, and competition.
+- 0: The domain would not appear, or is not mentioned/implied in the response.
 
 RELEVANCE (1-5):
-- 5: Perfectly matches search intent, highly relevant to the query, target domain would rank #1-3
-- 4: Very relevant with minor gaps, target domain would rank #4-10
-- 3: Moderately relevant, addresses main points, target domain would rank #11-30
-- 2: Somewhat relevant but misses key aspects, target domain would rank #31-100
-- 1: Not relevant to the query, target domain would not rank
+- 5: Perfectly matches search intent, highly relevant, domain would rank #1-3
+- 4: Very relevant, minor gaps, domain would rank #4-10
+- 3: Moderately relevant, domain would rank #11-30
+- 2: Somewhat relevant, domain would rank #31-100
+- 1: Not relevant, domain would not rank
 
 ACCURACY (1-5):
-- 5: Factually correct, up-to-date, reliable information that builds trust
-- 4: Mostly accurate with minor inaccuracies, generally trustworthy
-- 3: Generally accurate but some questionable claims, moderate trust
-- 2: Several inaccuracies or outdated information, low trust
-- 1: Major factual errors or unreliable information, no trust
+- 5: Factually correct, up-to-date, reliable
+- 4: Mostly accurate, minor issues
+- 3: Generally accurate, some questionable claims
+- 2: Several inaccuracies or outdated info
+- 1: Major errors, unreliable
 
 SENTIMENT (1-5):
-- 5: Very positive, helpful, professional tone that enhances brand reputation
-- 4: Positive and helpful tone that supports brand image
-- 3: Neutral but professional tone, neither helps nor hurts brand
-- 2: Slightly negative or unhelpful tone that could hurt brand
-- 1: Negative, unprofessional, or unhelpful tone that damages brand
+- 5: Very positive/helpful for the domain
+- 4: Positive/helpful
+- 3: Neutral
+- 2: Slightly negative/unhelpful
+- 1: Negative or damaging
 
 OVERALL (1-5):
-- 5: Excellent response that would rank well and significantly boost domain visibility
-- 4: Very good response with minor issues, would improve domain ranking
-- 3: Good response with some room for improvement, moderate ranking impact
-- 2: Poor response with significant issues, would hurt domain ranking
-- 1: Very poor response that would damage domain visibility and ranking
+- 5: Excellent, would boost domain visibility
+- 4: Very good, minor issues
+- 3: Good, some room for improvement
+- 2: Poor, would hurt ranking
+- 1: Very poor, would damage visibility
 
 EVALUATION FOCUS:
 - Would this response help the target domain rank for this search query?
-- Does the content match what users searching for this query expect?
+- Does the content match what users expect?
 - Is the information accurate and trustworthy?
-- Does the tone and approach benefit the domain's brand?
-- Would this response satisfy the user's search intent?
+- Does the tone/approach benefit the domain's brand?
+- Would this response satisfy user intent?
+- Which domain(s) are mentioned or implied? List them in 'domainFound'.
 
-Be extremely strict and realistic in your evaluation. This directly impacts SEO rankings and domain visibility. Return ONLY the JSON object.`;
+Be extremely strict and realistic in your evaluation. Return ONLY the JSON object.`;
 
         const scoringResponse = await axios.post(
             `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,

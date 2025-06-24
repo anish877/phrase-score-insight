@@ -105,7 +105,7 @@ function calculateDomainMetrics(domain: any) {
       volume: keyword.volume,
       difficulty: keyword.difficulty,
       cpc: keyword.cpc,
-      category: keyword.category
+      isSelected: keyword.isSelected
     };
   }).filter(Boolean);
 
@@ -261,7 +261,6 @@ router.get('/:domainId', asyncHandler(async (req: Request, res: Response) => {
           volume: keyword.volume,
           difficulty: keyword.difficulty,
           cpc: keyword.cpc,
-          category: keyword.category,
           isSelected: keyword.isSelected
         })),
         phrases: domain.keywords.flatMap((keyword: any) => 
@@ -307,8 +306,6 @@ router.get('/:domainId', asyncHandler(async (req: Request, res: Response) => {
       volume: k.volume,
       difficulty: k.difficulty,
       cpc: k.cpc,
-      category: k.category,
-      phraseCount: k.phrases.length,
       isSelected: k.isSelected
     }));
     const phrases = domain.keywords.flatMap((k: any) => k.phrases.map((p: any) => p.text));
@@ -394,7 +391,7 @@ Return ONLY a valid JSON object in this exact format:
           "volume": ${keyword.volume || 1000},
           "difficulty": "${keyword.difficulty || 'Medium'}",
           "cpc": ${keyword.cpc || 1.50},
-          "category": "${keyword.category || 'General'}"
+          "isSelected": ${keyword.isSelected}
         }`;
       }).join(',')}
     ],
@@ -563,7 +560,7 @@ Return ONLY a valid JSON object in this exact format:
               volume: keyword.volume || 1000,
               difficulty: keyword.difficulty || 'Medium',
               cpc: keyword.cpc || 1.50,
-              category: keyword.category || 'General'
+              isSelected: keyword.isSelected
             };
           }),
           topPhrases: aiResults
@@ -666,7 +663,6 @@ Return ONLY a valid JSON object in this exact format:
         volume: keyword.volume,
         difficulty: keyword.difficulty,
         cpc: keyword.cpc,
-        category: keyword.category,
         isSelected: keyword.isSelected
       })),
       phrases: domain.keywords.flatMap((keyword: any) => 
@@ -970,8 +966,6 @@ router.post('/:domainId/competitors', asyncHandler(async (req: Request, res: Res
       volume: k.volume,
       difficulty: k.difficulty,
       cpc: k.cpc,
-      category: k.category,
-      phraseCount: k.phrases.length,
       isSelected: k.isSelected
     }));
     const phrases = domain.keywords.flatMap((k: any) => k.phrases.map((p: any) => p.text));

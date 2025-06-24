@@ -8,11 +8,6 @@ import { apiService, Keyword as ApiKeyword } from '@/services/api';
 import { useDebounce } from 'use-debounce';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 
-// We extend the API's Keyword type to include a client-side category property
-interface Keyword extends ApiKeyword {
-    category: string;
-}
-
 interface KeywordDiscoveryProps {
   domainId: number;
   selectedKeywords: string[];
@@ -20,19 +15,6 @@ interface KeywordDiscoveryProps {
   onNext: () => void;
   onPrev: () => void;
 }
-
-// Category configuration for UI
-const categoryConfig: { [key: string]: { name: string; icon: React.ReactNode; description: string } } = {
-  'core-business': { name: 'Core Business', icon: <Target className="h-5 w-5 text-blue-600" />, description: 'High-intent keywords directly related to your main offerings.' },
-  'products': { name: 'Products', icon: <Brain className="h-5 w-5 text-purple-600" />, description: 'Keywords mentioning specific products or software types.' },
-  'services': { name: 'Services', icon: <TrendingUp className="h-5 w-5 text-green-600" />, description: 'Keywords related to the services you provide.' },
-  'competitive': { name: 'Competitive', icon: <Filter className="h-5 w-5 text-orange-600" />, description: 'Keywords comparing your brand or offerings against others.' },
-  'informational': { name: 'Informational', icon: <Search className="h-5 w-5 text-yellow-600" />, description: 'Broader terms indicating users are researching or learning.' },
-  'transactional': { name: 'Transactional', icon: <Check className="h-5 w-5 text-red-600" />, description: 'Keywords showing strong intent to buy or take action.' },
-  'industry': { name: 'Industry', icon: <Plus className="h-5 w-5 text-gray-600" />, description: 'General keywords related to your industry or niche.' },
-  'custom': { name: 'Custom', icon: <Plus className="h-5 w-5 text-gray-600" />, description: 'Keywords added manually.' },
-};
-
 
 const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedKeywords, setSelectedKeywords, onNext, onPrev }) => {
   console.log('KeywordDiscovery rendered with domainId:', domainId);
@@ -42,7 +24,7 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
   const [customKeyword, setCustomKeyword] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [keywords, setKeywords] = useState<Keyword[]>([]);
+  const [keywords, setKeywords] = useState<ApiKeyword[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const loadingSteps = [
     'Analyzing brand context...',
@@ -65,7 +47,7 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
     setProgressMsg('Connecting to keyword engine...');
     setKeywords([]);
     const ctrl = new AbortController();
-    fetchEventSource(`http://localhost:3002/api/keywords/stream/${domainId}`, {
+    fetchEventSource(`https://phrase-score-insight.onrender.com/api/keywords/stream/${domainId}`, {
       signal: ctrl.signal,
       onopen(_response) {
         setProgressMsg('Connected. Discovering keywords...');
@@ -73,7 +55,7 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
       },
       onmessage(ev) {
         if (ev.event === 'keyword') {
-          const kw: Keyword = JSON.parse(ev.data);
+          const kw: ApiKeyword = JSON.parse(ev.data);
           setKeywords(prev => {
             if (prev.some(k => k.term === kw.term)) return prev;
             return [...prev, kw];
@@ -113,8 +95,14 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
     const saveSelection = async () => {
       if (debouncedKeywords.length === 0 || isLoading) return;
       setIsSaving(true);
+      console.log('Saving selected keywords to backend:', debouncedKeywords);
       try {
         await apiService.updateKeywordSelection(domainId, debouncedKeywords as string[]);
+        console.log('Successfully saved selected keywords:', debouncedKeywords);
+        const res = await apiService.getKeywords(domainId);
+        if (res && Array.isArray(res.keywords)) {
+          setKeywords(res.keywords);
+        }
       } catch (err) {
         console.error('Failed to save keyword selection:', err);
       } finally {
@@ -124,45 +112,26 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
     saveSelection();
   }, [debouncedKeywords, domainId, isLoading]);
 
-  const keywordCategories = useMemo(() => {
-    const categories: { [key: string]: Keyword[] } = {};
-    keywords.forEach(kw => {
-        const cat = kw.category || 'industry';
-        if (!categories[cat]) categories[cat] = [];
-        categories[cat].push(kw);
-    });
-    return Object.keys(categoryConfig).map(catId => ({
-        id: catId,
-        ...categoryConfig[catId],
-        keywords: categories[catId] || []
-    })).filter(cat => cat.keywords.length > 0);
-  }, [keywords]);
-
-  const filteredCategories = useMemo(() => keywordCategories
-    .map(category => ({
-      ...category,
-      keywords: category.keywords.filter(keyword =>
-        keyword.term.toLowerCase().includes(searchFilter.toLowerCase())
-      )
-    }))
-    .filter(category => (selectedCategory === 'all' || category.id === selectedCategory) && category.keywords.length > 0), 
-    [keywordCategories, searchFilter, selectedCategory]);
+  const sortedKeywords = useMemo(() =>
+    [...keywords].sort((a, b) => b.volume - a.volume),
+    [keywords]
+  );
 
   const addCustomKeyword = () => {
     const newKeyword = customKeyword.trim().toLowerCase();
     if (newKeyword && !selectedKeywords.includes(newKeyword)) {
       setSelectedKeywords([...selectedKeywords, newKeyword]);
       if (!keywords.some(k => k.term.toLowerCase() === newKeyword)) {
-        const newKw: Keyword = {
-            id: -1, 
+        const newKw: ApiKeyword = {
+            id: -1,
             term: newKeyword,
             volume: 0,
             difficulty: 'N/A',
             cpc: 0,
-            category: 'custom',
             isSelected: true,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
+            category: 'custom',
         };
         setKeywords([...keywords, newKw]);
       }
@@ -211,29 +180,38 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
        <StatsCards 
          selectedCount={selectedKeywords.length} 
          totalVolume={totalVolume}
-         categoryCount={keywordCategories.length}
+         categoryCount={keywords.length}
          avgDifficulty={getAvgDifficultyLabel(avgDifficultyScore)}
          isSaving={isSaving}
        />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         <div className="lg:col-span-3">
-          <FilterControls 
-            searchFilter={searchFilter}
-            setSearchFilter={setSearchFilter}
-            selectedCategory={selectedCategory}
-            setSelectedCategory={setSelectedCategory}
-            categories={keywordCategories.map(c => ({id: c.id, name: c.name, icon: c.icon}))}
-          />
-
+          <div className="flex flex-col md:flex-row gap-4 mb-6">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
+              <Input placeholder="Search keywords..." value={searchFilter} onChange={(e) => setSearchFilter(e.target.value)} className="pl-10" />
+            </div>
+          </div>
           <div className="space-y-6">
-            {filteredCategories.length > 0 ? filteredCategories.map((category) => (
-              <KeywordCategoryCard 
-                key={category.id}
-                category={category}
-                selectedKeywords={selectedKeywords}
-                toggleKeyword={toggleKeyword}
-              />
+            {sortedKeywords.filter(k => k.term.toLowerCase().includes(searchFilter.toLowerCase())).length > 0 ? sortedKeywords.filter(k => k.term.toLowerCase().includes(searchFilter.toLowerCase())).map((keyword) => (
+              <div
+                key={keyword.term}
+                className={`flex items-center justify-between p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedKeywords.includes(keyword.term) ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
+                onClick={() => toggleKeyword(keyword.term)}
+              >
+                <div className="flex items-center space-x-3">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center ${selectedKeywords.includes(keyword.term) ? 'bg-blue-500' : 'bg-slate-200'}`}>{selectedKeywords.includes(keyword.term) && <Check className="w-4 h-4 text-white" />}</div>
+                  <span className="font-medium text-slate-800">{keyword.term}</span>
+                </div>
+                <div className="flex items-center space-x-4 text-sm text-right">
+                  <div className="w-20">
+                    <div className="font-semibold text-slate-700">{keyword.volume.toLocaleString()}</div>
+                    <div className="text-xs text-slate-500">Volume</div>
+                  </div>
+                  <Badge className={`w-16 justify-center ${keyword.difficulty === 'Low' ? 'bg-green-100 text-green-800' : keyword.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>{keyword.difficulty}</Badge>
+                </div>
+              </div>
             )) : <NoResultsCard />}
           </div>
         </div>
@@ -245,11 +223,12 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
             setCustomKeyword={setCustomKeyword}
             addCustomKeyword={addCustomKeyword}
             removeKeyword={removeKeyword}
+            setSelectedKeywords={setSelectedKeywords}
           />
         </div>
       </div>
 
-      <Footer onPrev={onPrev} onNext={onNext} isSaving={isSaving} selectedCount={selectedKeywords.length} />
+      <Footer onPrev={onPrev} onNext={onNext} isSaving={isSaving} selectedCount={selectedKeywords.length} selectedKeywords={selectedKeywords} />
     </div>
   );
 };
@@ -339,152 +318,106 @@ const StatsCards: React.FC<StatsCardsProps> = ({ selectedCount, totalVolume, cat
     </div>
 );
 
-interface FilterControlsProps {
-    searchFilter: string;
-    setSearchFilter: (value: string) => void;
-    selectedCategory: string;
-    setSelectedCategory: (value: string) => void;
-    categories: {id: string; name: string; icon: React.ReactNode}[];
-}
-const FilterControls: React.FC<FilterControlsProps> = ({ searchFilter, setSearchFilter, selectedCategory, setSelectedCategory, categories }) => (
-    <div className="flex flex-col md:flex-row gap-4 mb-6">
-        <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
-            <Input placeholder="Search keywords..." value={searchFilter} onChange={(e) => setSearchFilter(e.target.value)} className="pl-10" />
-        </div>
-        <div className="flex items-center gap-2 overflow-x-auto pb-2">
-            <Button variant={selectedCategory === 'all' ? 'default' : 'outline'} onClick={() => setSelectedCategory('all')}>All</Button>
-            {categories.map((c) => (
-                <Button key={c.id} variant={selectedCategory === c.id ? 'default' : 'outline'} onClick={() => setSelectedCategory(c.id)} className="flex-shrink-0">
-                    {c.icon} <span className="ml-2">{c.name}</span>
-                </Button>
-            ))}
-        </div>
-    </div>
-);
-
-interface KeywordCategoryCardProps {
-    category: {
-        id: string;
-        name: string;
-        icon: React.ReactNode;
-        description: string;
-        keywords: Keyword[];
-    };
-    selectedKeywords: string[];
-    toggleKeyword: (keyword: string) => void;
-}
-const KeywordCategoryCard: React.FC<KeywordCategoryCardProps> = ({ category, selectedKeywords, toggleKeyword }) => {
-    const getDifficultyColor = (difficulty: string) => {
-        if (difficulty === 'Low') return 'bg-green-100 text-green-800';
-        if (difficulty === 'Medium') return 'bg-yellow-100 text-yellow-800';
-        if (difficulty === 'High') return 'bg-red-100 text-red-800';
-        return 'bg-gray-100 text-gray-800';
-    };
-    
-    return (
-        <Card key={category.id}>
-            <CardHeader>
-                <div className="flex justify-between items-center">
-                    <div className="flex items-center space-x-3">
-                        {category.icon}
-                        <div>
-                            <CardTitle className="text-lg">{category.name}</CardTitle>
-                            <CardDescription>{category.description}</CardDescription>
-                        </div>
-                    </div>
-                    <Badge variant="secondary">{category.keywords.filter((k) => selectedKeywords.includes(k.term)).length} / {category.keywords.length}</Badge>
-                </div>
-            </CardHeader>
-            <CardContent className="space-y-2">
-                {category.keywords.map((keyword: Keyword) => (
-                    <div
-                        key={keyword.term}
-                        className={`flex items-center justify-between p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedKeywords.includes(keyword.term) ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
-                        onClick={() => toggleKeyword(keyword.term)}
-                    >
-                        <div className="flex items-center space-x-3">
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center ${selectedKeywords.includes(keyword.term) ? 'bg-blue-500' : 'bg-slate-200'}`}>
-                                {selectedKeywords.includes(keyword.term) && <Check className="w-4 h-4 text-white" />}
-                            </div>
-                            <span className="font-medium text-slate-800">{keyword.term}</span>
-                        </div>
-                        <div className="flex items-center space-x-4 text-sm text-right">
-                            <div className="w-20">
-                                <div className="font-semibold text-slate-700">{keyword.volume.toLocaleString()}</div>
-                                <div className="text-xs text-slate-500">Volume</div>
-                            </div>
-                            <Badge className={`w-16 justify-center ${getDifficultyColor(keyword.difficulty)}`}>{keyword.difficulty}</Badge>
-                        </div>
-                    </div>
-                ))}
-            </CardContent>
-        </Card>
-    );
-};
-
-const NoResultsCard = () => (
-    <div className="text-center py-16 px-6 border-2 border-dashed rounded-lg">
-        <Search className="h-12 w-12 mx-auto text-slate-300 mb-4" />
-        <h3 className="text-lg font-semibold text-slate-700">No Keywords Found</h3>
-        <p className="text-slate-500">Try adjusting your search or category filters.</p>
-    </div>
-);
-
 interface SelectedKeywordsPanelProps {
     selectedKeywords: string[];
     customKeyword: string;
     setCustomKeyword: (value: string) => void;
     addCustomKeyword: () => void;
     removeKeyword: (keyword: string) => void;
+    setSelectedKeywords: React.Dispatch<React.SetStateAction<string[]>>;
 }
-const SelectedKeywordsPanel: React.FC<SelectedKeywordsPanelProps> = ({ selectedKeywords, customKeyword, setCustomKeyword, addCustomKeyword, removeKeyword }) => (
-    <Card className="sticky top-6">
-        <CardHeader>
-            <CardTitle className="flex items-center text-sm">
-                <Brain className="h-5 w-5 mr-2 text-blue-600 text-sm" />
-                Selected Keywords ({selectedKeywords.length})
-            </CardTitle>
-            <CardDescription>Keywords to guide AI analysis</CardDescription>
-        </CardHeader>
-        <CardContent>
-            <div className="space-y-4">
-                <div className="flex gap-2">
-                    <Input placeholder="Add a custom keyword..." value={customKeyword} onChange={(e) => setCustomKeyword(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addCustomKeyword()} />
-                    <Button onClick={addCustomKeyword} size="icon"><Plus className="h-4 w-4" /></Button>
+const SelectedKeywordsPanel: React.FC<SelectedKeywordsPanelProps> = ({ selectedKeywords, customKeyword, setCustomKeyword, addCustomKeyword, removeKeyword, setSelectedKeywords }) => {
+    const [bulkKeywords, setBulkKeywords] = useState('');
+    const [bulkAddCount, setBulkAddCount] = useState(0);
+
+    const handleBulkAdd = () => {
+        const raw = bulkKeywords.split(/\n|,/).map(k => k.trim()).filter(Boolean);
+        const unique = Array.from(new Set(raw));
+        const newOnes = unique.filter(k => !selectedKeywords.map(sk => sk.toLowerCase()).includes(k.toLowerCase()));
+        if (newOnes.length > 0) {
+            setSelectedKeywords([...selectedKeywords, ...newOnes]);
+            setBulkAddCount(newOnes.length);
+            setTimeout(() => setBulkAddCount(0), 3000);
+        }
+        setBulkKeywords('');
+    };
+
+    return (
+        <Card className="sticky top-6">
+            <CardHeader>
+                <CardTitle className="flex items-center text-sm">
+                    <Brain className="h-5 w-5 mr-2 text-blue-600 text-sm" />
+                    Selected Keywords ({selectedKeywords.length})
+                </CardTitle>
+                <CardDescription>Keywords to guide AI analysis</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="space-y-4">
+                    <div className="flex gap-2">
+                        <Input placeholder="Add a custom keyword..." value={customKeyword} onChange={(e) => setCustomKeyword(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addCustomKeyword()} />
+                        <Button onClick={addCustomKeyword} size="icon"><Plus className="h-4 w-4" /></Button>
+                    </div>
+                    {/* Bulk add UI */}
+                    <div className="space-y-2">
+                        <textarea
+                            className="w-full border rounded p-2 text-sm"
+                            rows={3}
+                            placeholder="Paste keywords here (one per line or comma-separated)"
+                            value={bulkKeywords}
+                            onChange={e => setBulkKeywords(e.target.value)}
+                        />
+                        <Button onClick={handleBulkAdd} size="sm" className="w-full">Add Bulk Keywords</Button>
+                        {bulkAddCount > 0 && <div className="text-green-600 text-xs mt-1">Added {bulkAddCount} new keywords!</div>}
+                    </div>
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-2">
+                        {selectedKeywords.length > 0 ? selectedKeywords.map((keyword) => (
+                            <div key={keyword} className="flex items-center justify-between p-2 bg-slate-50 rounded-md">
+                                <span className="text-slate-700 text-sm font-medium truncate pr-2">{keyword}</span>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeKeyword(keyword)}>
+                                    <X className="h-4 w-4 text-slate-400" />
+                                </Button>
+                            </div>
+                        )) : (
+                            <div className="text-center py-8 text-slate-500">
+                                <Target className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+                                <p className="text-sm">Select or add keywords to begin</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
-                <div className="space-y-2 max-h-72 overflow-y-auto pr-2">
-                    {selectedKeywords.length > 0 ? selectedKeywords.map((keyword) => (
-                        <div key={keyword} className="flex items-center justify-between p-2 bg-slate-50 rounded-md">
-                            <span className="text-slate-700 text-sm font-medium truncate pr-2">{keyword}</span>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeKeyword(keyword)}>
-                                <X className="h-4 w-4 text-slate-400" />
-                            </Button>
-                        </div>
-                    )) : (
-                        <div className="text-center py-8 text-slate-500">
-                            <Target className="h-8 w-8 mx-auto mb-2 text-slate-300" />
-                            <p className="text-sm">Select or add keywords to begin</p>
-                        </div>
-                    )}
-                </div>
-            </div>
-        </CardContent>
-    </Card>
-);
+            </CardContent>
+        </Card>
+    );
+};
 
 interface FooterProps {
     onPrev: () => void;
     onNext: () => void;
     isSaving: boolean;
     selectedCount: number;
+    selectedKeywords: string[];
 }
-const Footer: React.FC<FooterProps> = ({ onPrev, onNext, isSaving, selectedCount }) => (
+const Footer: React.FC<FooterProps> = ({ onPrev, onNext, isSaving, selectedCount, selectedKeywords }) => (
     <div className="flex gap-4 mt-8">
         <Button variant="outline" onClick={onPrev} className="px-8">Previous Step</Button>
-        <Button onClick={onNext} disabled={selectedCount === 0 || isSaving} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-12 font-semibold">
-            {isSaving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Saving...</> : `Continue with ${selectedCount} Keywords`}
+        <Button 
+            onClick={() => {
+                console.log('Continue clicked. Selected keywords:', selectedKeywords);
+                onNext();
+            }}
+            disabled={selectedCount === 0 || isSaving}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-12 font-semibold"
+        >
+            {isSaving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Saving selection...</> : `Continue with ${selectedCount} Keywords`}
         </Button>
+    </div>
+);
+
+const NoResultsCard = () => (
+    <div className="text-center py-16 px-6 border-2 border-dashed rounded-lg">
+        <Search className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+        <h3 className="text-lg font-semibold text-slate-700">No Keywords Found</h3>
+        <p className="text-slate-500">Try adjusting your search or category filters.</p>
     </div>
 );
 

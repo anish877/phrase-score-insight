@@ -7,11 +7,16 @@ const prisma = new PrismaClient();
 
 // POST /domain - create/find domain, run extraction, and stream progress
 router.post('/', async (req: Request, res: Response) => {
-  const { url } = req.body;
+  const { url, subdomains, customPaths } = req.body;
   if (!url) {
     res.status(400).json({ error: 'Domain url is required' });
     return;
   }
+  // If subdomains provided, pass array to extraction logic
+  // Otherwise, use main domain only
+  const domainsToExtract = Array.isArray(subdomains) && subdomains.length > 0
+    ? subdomains.map((sub: string) => `${sub}.${url}`)
+    : [url];
 
   // Set headers for SSE
   res.setHeader('Content-Type', 'text/event-stream');
@@ -26,9 +31,9 @@ router.post('/', async (req: Request, res: Response) => {
   try {
     // 1. Save or find domain
     sendEvent({ type: 'progress', message: 'Initializing domain analysis and validation...', progress: 5 });
-    let domain = await prisma.domain.findUnique({ where: { url } });
+    let domain = await prisma.domain.findUnique({ where: { url: domainsToExtract[0] } });
     if (!domain) {
-      domain = await prisma.domain.create({ data: { url } });
+      domain = await prisma.domain.create({ data: { url: domainsToExtract[0] } });
     }
     sendEvent({ type: 'domain_created', domainId: domain.id });
 
@@ -73,7 +78,7 @@ router.post('/', async (req: Request, res: Response) => {
     };
 
     // 3. Run Gemini extraction with progress streaming
-    const extraction = await crawlAndExtractWithGemini(domain.url, onProgress);
+    const extraction = await crawlAndExtractWithGemini(domainsToExtract, onProgress, customPaths);
 
     // 4. Fix keyEntities: sum if object, else use as is
     let keyEntitiesValue = extraction.keyEntities;

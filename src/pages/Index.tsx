@@ -11,12 +11,14 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle, Circle, Clock } from 'lucide-react';
 import { onboardingService, OnboardingStepData } from '@/services/onboardingService';
+import { Button } from '@/components/ui/button';
 
 const Index = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [currentStep, setCurrentStep] = useState(0);
   const [domain, setDomain] = useState('');
+  const [subdomains, setSubdomains] = useState<string[]>([]);
   const [domainId, setDomainId] = useState<number>(0); 
   const [brandContext, setBrandContext] = useState('');
   const [selectedKeywords, setSelectedKeywords] = useState<string[]>([]);
@@ -29,6 +31,7 @@ const Index = () => {
   const [showResumeDialog, setShowResumeDialog] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [resumeData, setResumeData] = useState<OnboardingStepData | null>(null);
+  const [customPaths, setCustomPaths] = useState<string[]>([]);
 
   console.log('Current step:', currentStep, 'Domain ID:', domainId, 'Domain:', domain);
 
@@ -150,7 +153,7 @@ const Index = () => {
   const saveToMainTables = async (domainId: number, stepData: OnboardingStepData) => {
     try {
       console.log('Saving onboarding data to main domain tables...');
-      const response = await fetch(`http://localhost:3002/api/onboarding/save-to-main/${domainId}`, {
+      const response = await fetch(`https://phrase-score-insight.onrender.com/api/onboarding/save-to-main/${domainId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -309,6 +312,7 @@ const Index = () => {
     // Reset all state
     setCurrentStep(0);
     setDomain('');
+    setSubdomains([]);
     setDomainId(0);
     setBrandContext('');
     setSelectedKeywords([]);
@@ -388,6 +392,13 @@ const Index = () => {
                   {Math.round(progressPercentage)}% Complete
                 </div>
               </div>
+              <Button
+                variant="outline"
+                className="ml-4 px-4 py-2 border-blue-600 text-blue-700 hover:bg-blue-50 hover:border-blue-700"
+                onClick={() => navigate('/')}
+              >
+                Back to Dashboard
+              </Button>
             </div>
           </div>
 
@@ -463,18 +474,24 @@ const Index = () => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {currentStep === 0 && (
-        <DomainSubmission
-          domain={domain}
+        <DomainSubmission 
+          domain={domain} 
           setDomain={setDomain}
-          onNext={nextStep}
+          subdomains={subdomains}
+          setSubdomains={setSubdomains}
+          customPaths={customPaths}
+          setCustomPaths={setCustomPaths}
+          onNext={nextStep} 
         />
       )}
       {currentStep === 1 && (
-        <DomainExtraction
+        <DomainExtraction 
           domain={domain}
+          subdomains={subdomains}
           setDomainId={setDomainId}
           domainId={domainId}
           setBrandContext={setBrandContext}
+          customPaths={customPaths}
           onNext={nextStep}
           onPrev={prevStep}
         />

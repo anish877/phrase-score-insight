@@ -6,19 +6,24 @@ import { CheckCircle, Globe, Brain, FileText, AlertCircle, Loader2 } from 'lucid
 
 interface DomainExtractionProps {
   domain: string;
+  subdomains?: string[];
   setDomainId: (id: number) => void;
   domainId: number;
   setBrandContext: (context: string) => void;
   onNext: () => void;
   onPrev: () => void;
+  customPaths?: string[];
 }
 
 const DomainExtraction: React.FC<DomainExtractionProps> = ({ 
   domain, 
+  subdomains = [],
   setDomainId,
+  domainId,
   setBrandContext, 
   onNext, 
-  onPrev 
+  onPrev,
+  customPaths
 }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,10 +80,10 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
 
     const processStream = async () => {
       try {
-        const response = await fetch('http://localhost:3002/api/domain', {
+        const response = await fetch('https://phrase-score-insight.onrender.com/api/domain', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: domain }),
+          body: JSON.stringify({ url: domain, subdomains, customPaths }),
           signal: controller.signal,
         });
 
@@ -161,7 +166,7 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
     return () => {
       controller.abort();
     };
-  }, [domain, setDomainId, setBrandContext]);
+  }, [domain, subdomains, setDomainId, setBrandContext, customPaths]);
 
   if (error) {
     return (
@@ -222,6 +227,16 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
+              {customPaths && customPaths.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-2">
+                  <div className="font-semibold text-blue-800 mb-1">Custom Relevant Paths Prioritized</div>
+                  <div className="flex flex-wrap gap-2">
+                    {customPaths.map((p, idx) => (
+                      <Badge key={idx} className="bg-blue-100 text-blue-800 border-blue-200">{p}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
               {isLoading ? (
                 <>
                   {/* Progress Section */}

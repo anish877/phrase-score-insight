@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export interface AIQueryResult {
   model: string;
@@ -130,7 +131,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
       }
     }, Math.max(1200000, totalExpected * 3000)); // 20 minutes minimum, or 3 seconds per query
 
-    fetchEventSource(`http://localhost:3002/api/ai-queries/${domainId}`, {
+    fetchEventSource(`https://phrase-score-insight.onrender.com/api/ai-queries/${domainId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -304,7 +305,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
                     Go Back
                   </Button>
                   <Button 
-                    onClick={() => window.location.reload()}
+                    onClick={onPrev}
                     className="bg-blue-600 hover:bg-blue-700"
                   >
                     Retry Analysis
@@ -462,18 +463,38 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
                       return (
                         <TableRow key={index} className="border-slate-100">
                           <TableCell className="font-medium max-w-xs">
-                            <div className="truncate text-slate-900" title={result.phrase}>
-                              {result.phrase}
-                            </div>
-                            <div className="text-xs text-slate-500">{result.keyword}</div>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="truncate text-slate-900 cursor-help" title={result.phrase}>
+                                    {result.phrase}
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-xs break-words">
+                                  <div className="font-semibold">Phrase</div>
+                                  <div>{result.phrase}</div>
+                                  <div className="mt-1 text-xs text-slate-500">Keyword: {result.keyword}</div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           </TableCell>
                           <TableCell>
                             <Badge className={model?.color}>{result.model}</Badge>
                           </TableCell>
                           <TableCell className="max-w-md">
-                            <div className="text-sm text-slate-700 line-clamp-2">
-                              {result.response}
-                            </div>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="text-sm text-slate-700 line-clamp-2 cursor-help">
+                                    {result.response}
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-md break-words">
+                                  <div className="font-semibold mb-1">Full Response</div>
+                                  <div>{result.response}</div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           </TableCell>
                           <TableCell className="text-sm">
                             <span className="font-mono text-slate-700">{Number(result.latency || 0).toFixed(2)}s</span>

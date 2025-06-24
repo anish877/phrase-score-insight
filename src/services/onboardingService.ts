@@ -31,7 +31,7 @@ export interface ResumeCheckResult {
 }
 
 class OnboardingService {
-  private baseUrl = 'http://localhost:3002/api/onboarding';
+  private baseUrl = 'https://phrase-score-insight.onrender.com/api/onboarding';
 
   // Save onboarding progress
   async saveProgress(domainId: number, currentStep: number, stepData: OnboardingStepData, isCompleted = false): Promise<OnboardingProgress> {

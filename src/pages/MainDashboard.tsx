@@ -16,6 +16,9 @@ interface DashboardDomain {
     visibilityScore: number;
     keywordCount: number;
     phraseCount: number;
+    totalQueries?: number;
+    topPhrases?: { phrase: string; score: number }[];
+    modelPerformance?: { model: string; score: number }[];
   };
   industry?: string;
 }
@@ -45,7 +48,7 @@ const ProfessionalDashboard = () => {
       setError(null);
       try {
         // Fetch completed domains
-        const domainsResponse = await fetch('http://localhost:3002/api/dashboard/all');
+        const domainsResponse = await fetch('https://phrase-score-insight.onrender.com/api/dashboard/all');
         if (!domainsResponse.ok) throw new Error('Failed to fetch dashboard analyses');
         const domainsData = await domainsResponse.json();
         setDomains(domainsData.domains || []);
@@ -62,10 +65,13 @@ const ProfessionalDashboard = () => {
     fetchData();
   }, []);
 
-  const filteredDomains = domains.filter(domain =>
-    (domain.url?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (domain.context?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-  );
+  const activeSessionIds = new Set(activeSessions.map(s => s.domain.id));
+  const filteredDomains = domains
+    .filter(domain =>
+      ((domain.url?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+      (domain.context?.toLowerCase() || '').includes(searchTerm.toLowerCase()))
+      && !activeSessionIds.has(domain.id) // Exclude active sessions
+    );
 
   const getScoreColor = (score: number) => {
     if (score >= 90) return 'from-emerald-500 to-teal-600';
@@ -450,11 +456,6 @@ const ProfessionalDashboard = () => {
                       </div>
                     </div>
                   </div>
-                  {contextPreview && (
-                    <CardDescription className="text-slate-600 leading-relaxed text-sm">
-                      {contextPreview}
-                    </CardDescription>
-                  )}
                 </CardHeader>
 
                 <CardContent className="relative space-y-6">
@@ -507,6 +508,39 @@ const ProfessionalDashboard = () => {
                       <p className="text-xl font-bold text-emerald-900">{phraseCount.toLocaleString()}</p>
                     </div>
                   </div>
+
+                  {/* AI Query Result Summary */}
+                  {status === 'completed' && domain.metrics && (
+                    <div className="mt-4 bg-slate-50 rounded-xl p-4 border border-slate-100">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-600">AI Queries:</span>
+                          <span className="font-bold text-blue-700">{domain.metrics.totalQueries?.toLocaleString?.() ?? '-'}</span>
+                        </div>
+                        {domain.metrics.topPhrases && domain.metrics.topPhrases.length > 0 && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-600">Top Phrase:</span>
+                            <span
+                              className="font-medium text-slate-900 truncate max-w-xs"
+                              title={domain.metrics.topPhrases[0].phrase}
+                            >
+                              {domain.metrics.topPhrases[0].phrase.length > 32
+                                ? domain.metrics.topPhrases[0].phrase.slice(0, 32) + '...'
+                                : domain.metrics.topPhrases[0].phrase}
+                            </span>
+                            <span className="text-xs text-slate-500 ml-1">Score: {domain.metrics.topPhrases[0].score ?? '-'}</span>
+                          </div>
+                        )}
+                        {domain.metrics.modelPerformance && domain.metrics.modelPerformance.length > 0 && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-600">Best Model:</span>
+                            <span className="font-medium text-slate-900">{domain.metrics.modelPerformance[0].model}</span>
+                            <span className="text-xs text-slate-500 ml-1">Score: {domain.metrics.modelPerformance[0].score ?? '-'}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Footer */}
                   <div className="flex items-center justify-between pt-4 border-t border-slate-100">

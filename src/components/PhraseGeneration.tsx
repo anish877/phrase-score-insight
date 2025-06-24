@@ -34,7 +34,7 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
       setGeneratedPhrases([]);
       setStats({ totalKeywords: 0, totalPhrases: 0, avgPerKeyword: 0, aiQueries: 0 });
       const phrasesMap: Record<string, string[]> = {};
-      const eventSource = new EventSource(`http://localhost:3002/api/phrases/${domainId}`);
+      const eventSource = new EventSource(`https://phrase-score-insight.onrender.com/api/phrases/${domainId}`);
 
       eventSource.addEventListener('progress', (e: MessageEvent) => {
         const data = JSON.parse(e.data);
@@ -243,7 +243,7 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
         </Button>
         <Button 
           onClick={onNext}
-          disabled={isGenerating || totalPhrases === 0}
+          disabled={isGenerating || totalPhrases === 0 || generatedPhrases.some(item => item.phrases.length !== 5)}
           className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
         >
           Run AI Analysis ({totalPhrases} phrases)

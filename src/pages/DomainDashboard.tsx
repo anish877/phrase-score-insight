@@ -394,7 +394,7 @@ const DomainDashboard = () => {
       setError(null);
       
       console.log('Fetching domain data for ID:', domainId);
-      const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}`);
+      const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}`);
       
       console.log('Response status:', response.status);
       
@@ -469,7 +469,7 @@ const DomainDashboard = () => {
     try {
       setCompetitorLoading(true);
       setError(null);
-      const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/competitors`);
+      const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}/competitors`);
       if (!response.ok) {
         throw new Error('No competitor analysis found');
       }
@@ -490,7 +490,7 @@ const DomainDashboard = () => {
   const fetchSuggestedCompetitors = async () => {
     try {
       setSuggestionsLoading(true);
-      const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/suggested-competitors`);
+      const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}/suggested-competitors`);
       if (!response.ok) {
         throw new Error('Failed to fetch suggested competitors');
       }
@@ -510,7 +510,7 @@ const DomainDashboard = () => {
       setCompetitorLoading(true);
       setError(null);
       const compList = typeof customCompetitors !== 'undefined' ? customCompetitors : competitors;
-      const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/competitors`, {
+      const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}/competitors`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ competitors: compList })
@@ -686,9 +686,7 @@ const DomainDashboard = () => {
               </div>
             </div>
             <div className="text-right space-y-1">
-              <div className={`text-4xl font-bold ${getVisibilityScoreColor(metrics.visibilityScore)}`}>
-                {metrics.visibilityScore}%
-              </div>
+              <div className={`text-4xl font-bold ${getVisibilityScoreColor(metrics.visibilityScore)}`}>{metrics.visibilityScore}%</div>
               <div className="text-sm font-medium text-slate-600">AI Visibility Score</div>
               <div className="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
                 <div 

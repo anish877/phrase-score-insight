@@ -109,7 +109,8 @@ async function processQueryBatch(
   allResults: any[], 
   completedQueries: { current: number }, 
   totalQueries: number,
-  domain?: string
+  domain?: string,
+  context?: string
 ) {
   const batches = [];
   for (let i = 0; i < queries.length; i += batchSize) {
@@ -283,16 +284,18 @@ router.post('/:domainId', async (req, res) => {
         }
 
         // Get domain information for context
-        const domain = await prisma.domain.findUnique({
+        const domainObj = await prisma.domain.findUnique({
             where: { id: domainId },
-            select: { url: true }
+            select: { url: true, context: true }
         });
 
-        if (!domain) {
+        if (!domainObj) {
             res.write(`event: error\ndata: ${JSON.stringify({ error: 'Domain not found' })}\n\n`);
             res.end();
             return;
         }
+        const domain = domainObj.url || undefined;
+        const context = domainObj.context || undefined;
 
         const allQueries = phrases.flatMap((item: any) =>
             item.phrases.map((phrase: string) => ({
@@ -311,7 +314,7 @@ router.post('/:domainId', async (req, res) => {
         res.write(`event: progress\ndata: ${JSON.stringify({ message: `Initializing AI analysis engine - Processing ${totalQueries} queries across ${AI_MODELS.length} AI models for domain visibility analysis...` })}\n\n`);
 
         // Process queries in optimized batches with domain context
-        await processQueryBatch(allQueries, batchSize, res, allResults, completedQueries, totalQueries, domain?.url);
+        await processQueryBatch(allQueries, batchSize, res, allResults, completedQueries, totalQueries, domain, context);
 
         res.write(`event: complete\ndata: {}\n\n`);
         res.end();

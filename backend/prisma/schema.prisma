@@ -47,7 +47,6 @@ model Keyword {
   volume       Int
   difficulty   String
   cpc          Float
-  category     String
   domainId     Int
   isSelected   Boolean  @default(false)
   createdAt    DateTime @default(now())

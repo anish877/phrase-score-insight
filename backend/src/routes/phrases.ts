@@ -28,6 +28,11 @@ router.get('/:domainId', async (req, res) => {
       select: { id: true, term: true }
     });
 
+    // Fetch domain and context
+    const domainObj = await prisma.domain.findUnique({ where: { id: domainId } });
+    const domain = domainObj?.url || '';
+    const context = domainObj?.context || '';
+
     if (!keywords.length) {
       sendEvent('error', { error: 'No selected keywords found' });
       res.end();
@@ -52,8 +57,8 @@ router.get('/:domainId', async (req, res) => {
       try {
         sendEvent('progress', { message: `Generating high-converting phrases for "${term}" (${i+1}/${keywords.length}) - Analyzing search intent patterns...` });
         
-        // Generate phrases using AI
-        const phrases = await geminiService.generatePhrases(term);
+        // Generate phrases using AI, now with domain and context
+        const phrases = await geminiService.generatePhrases(term, domain, context);
         totalAIQueries += 1; // Count each AI call
         
         phrasesPerKeyword[term] = 0;

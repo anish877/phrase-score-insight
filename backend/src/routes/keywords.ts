@@ -6,20 +6,6 @@ import { crawlAndExtractWithGemini } from '../services/geminiService';
 const router = Router();
 const prisma = new PrismaClient();
 
-// Helper to categorize keywords based on their characteristics
-function determineCategory(keyword: string, volume: number): string {
-  const lowerKeyword = keyword.toLowerCase();
-  if (/\b(vs|versus|alternative to|compare)\b/.test(lowerKeyword)) return 'competitive';
-  if (/\b(best|top|review|rating)\b/.test(lowerKeyword)) return 'competitive';
-  if (/\b(how to|what is|why|guide|tutorial)\b/.test(lowerKeyword)) return 'informational';
-  if (/\b(software|platform|tool|app|system)\b/.test(lowerKeyword)) return 'products';
-  if (/\b(service|solution|agency|consulting|company)\b/.test(lowerKeyword)) return 'services';
-  if (/\b(price|pricing|cost|buy|purchase)\b/.test(lowerKeyword)) return 'transactional';
-  if (volume > 2500) return 'core-business';
-  if (lowerKeyword.includes('enterprise') || lowerKeyword.includes('business')) return 'core-business';
-  return 'industry';
-}
-
 // GET /keywords/:domainId - get keywords for a domain
 router.get('/:domainId', async (req: Request, res: Response) => {
   const domainId = Number(req.params.domainId);
@@ -60,25 +46,20 @@ router.get('/:domainId', async (req: Request, res: Response) => {
       await prisma.domain.update({ where: { id: domain.id }, data: { context } });
     }
     const geminiKeywords = await generateKeywordsForDomain(domain.url, context);
-    const categorizedKeywords = geminiKeywords.map(kw => ({
-      ...kw,
-      category: determineCategory(kw.term, kw.volume)
-    }));
-    // Use all AI-generated keywords, not just top 10
-    const allKeywords = categorizedKeywords;
-
     // Save keywords to database
     const savedKeywords = await Promise.all(
-      allKeywords.map(kw =>
+      geminiKeywords.map(kw =>
         prisma.keyword.create({
           data: {
-            ...kw,
+            term: kw.term,
+            volume: kw.volume,
+            difficulty: kw.difficulty,
+            cpc: kw.cpc,
             domainId
           }
         })
       )
     );
-
     res.json({ keywords: savedKeywords });
   } catch (err: any) {
     console.error('Keyword fetch error:', err);
@@ -177,13 +158,9 @@ router.get('/stream/:domainId', async (req: Request, res: Response) => {
     const geminiKeywords = await generateKeywordsForDomain(domain.url, context);
     
     sendEvent('progress', { message: 'Categorizing keywords by search intent and user behavior patterns...' });
-    const categorizedKeywords = geminiKeywords.map(kw => ({
-      ...kw,
-      category: determineCategory(kw.term, kw.volume)
-    }));
     
     // Use all AI-generated keywords, not just top 10
-    const allKeywords = categorizedKeywords;
+    const allKeywords = geminiKeywords;
 
     sendEvent('progress', { message: `Processing ${allKeywords.length} AI-generated keywords with real-world SEO metrics...` });
 
@@ -191,7 +168,13 @@ router.get('/stream/:domainId', async (req: Request, res: Response) => {
       const kw = allKeywords[i];
       // Save to DB
       const saved = await prisma.keyword.create({
-        data: { ...kw, domainId }
+        data: {
+          term: kw.term,
+          volume: kw.volume,
+          difficulty: kw.difficulty,
+          cpc: kw.cpc,
+          domainId
+        }
       });
       // Stream to client
       sendEvent('keyword', saved);

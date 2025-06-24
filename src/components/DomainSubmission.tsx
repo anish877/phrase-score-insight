@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,14 +9,31 @@ interface DomainSubmissionProps {
   domain: string;
   setDomain: (domain: string) => void;
   onNext: () => void;
+  customPaths?: string[];
+  setCustomPaths?: (paths: string[]) => void;
+  subdomains?: string[];
+  setSubdomains?: (subdomains: string[]) => void;
 }
 
 const DomainSubmission: React.FC<DomainSubmissionProps> = ({ 
   domain, 
   setDomain, 
-  onNext 
+  onNext,
+  customPaths: customPathsProp,
+  setCustomPaths: setCustomPathsProp,
+  subdomains,
+  setSubdomains
 }) => {
   const [domainError, setDomainError] = useState('');
+  const [customPaths, setCustomPaths] = useState<string[]>(customPathsProp || []);
+  const [customPathInput, setCustomPathInput] = useState('');
+  const [customPathsError, setCustomPathsError] = useState('');
+
+  useEffect(() => {
+    if (customPathsProp && setCustomPathsProp) {
+      setCustomPaths(customPathsProp);
+    }
+  }, [customPathsProp]);
 
   const validateDomain = (domain: string) => {
     const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?:\.[a-zA-Z]{2,})+$/;
@@ -26,9 +43,44 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
   const handleDomainChange = (value: string) => {
     setDomain(value);
     setDomainError('');
-    
     if (value && !validateDomain(value)) {
       setDomainError('Please enter a valid domain (e.g., example.com)');
+    }
+  };
+
+  const addCustomPath = (raw: string) => {
+    let value = raw.trim();
+    if (!value.startsWith('/')) {
+      setCustomPathsError('Path must start with "/"');
+      return;
+    }
+    if (customPaths.includes(value)) {
+      setCustomPathsError('Path already added');
+      return;
+    }
+    setCustomPaths([...customPaths, value]);
+    if (setCustomPathsProp) setCustomPathsProp([...customPaths, value]);
+    setCustomPathInput('');
+    setCustomPathsError('');
+  };
+
+  const removeCustomPath = (path: string) => {
+    const updated = customPaths.filter(p => p !== path);
+    setCustomPaths(updated);
+    if (setCustomPathsProp) setCustomPathsProp(updated);
+  };
+
+  const handleCustomPathInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCustomPathInput(e.target.value);
+    setCustomPathsError('');
+  };
+
+  const handleCustomPathKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      if (customPathInput.trim()) {
+        addCustomPath(customPathInput);
+      }
     }
   };
 
@@ -137,6 +189,34 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
                   <p className="text-sm text-slate-500">
                     Enter without http:// or https:// (e.g., example.com)
                   </p>
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="custom-paths" className="block text-sm font-semibold text-slate-700 mb-1">
+                    Custom Relevant Paths (optional)
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="custom-paths"
+                      type="text"
+                      placeholder="Type a path (e.g. /about) and press Enter"
+                      value={customPathInput}
+                      onChange={handleCustomPathInput}
+                      onKeyDown={handleCustomPathKeyDown}
+                      className="h-12 text-base px-4 border-2 transition-all duration-200 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
+                    />
+                    <Button type="button" onClick={() => customPathInput.trim() && addCustomPath(customPathInput)} disabled={!customPathInput.trim()} className="h-12">Add</Button>
+                  </div>
+                  <p className="text-xs text-slate-400">Add any number of relevant paths to prioritize during crawling. Each must start with '/'.</p>
+                  {customPathsError && <p className="text-sm text-red-600 mt-1">{customPathsError}</p>}
+                  {customPaths.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {customPaths.map((p, idx) => (
+                        <Badge key={idx} className="bg-purple-100 text-purple-800 border-purple-200 cursor-pointer" onClick={() => removeCustomPath(p)} title="Remove">
+                          {p} <span className="ml-1 text-xs">×</span>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Analysis Preview */}

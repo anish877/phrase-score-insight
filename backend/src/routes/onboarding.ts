@@ -393,19 +393,19 @@ router.post('/save-to-main/:domainId', asyncHandler(async (req: Request, res: Re
         });
 
         if (keyword && phraseGroup.phrases && Array.isArray(phraseGroup.phrases)) {
-          // Remove existing phrases for this keyword
-          await prisma.phrase.deleteMany({
-            where: { keywordId: keyword.id }
-          });
-
           // Add new phrases
           for (const phraseText of phraseGroup.phrases) {
-            await prisma.phrase.create({
-              data: {
-                text: phraseText,
-                keywordId: keyword.id
-              }
+            const existing = await prisma.phrase.findFirst({
+              where: { text: phraseText, keywordId: keyword.id }
             });
+            if (!existing) {
+              await prisma.phrase.create({
+                data: {
+                  text: phraseText,
+                  keywordId: keyword.id
+                }
+              });
+            }
           }
         }
       }

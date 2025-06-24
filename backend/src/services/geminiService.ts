@@ -35,7 +35,8 @@ async function delay(ms: number): Promise<void> {
 async function crawlWebsiteWithProgress(
   domain: string, 
   maxPages = 8,
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  relevantPaths?: string[]
 ): Promise<{contentBlocks: string[], urls: string[]}> {
   const visited = new Set<string>();
   const queue: string[] = [`https://${domain}`, `https://www.${domain}`];
@@ -171,13 +172,14 @@ async function crawlWebsiteWithProgress(
       });
 
       // Find more links to crawl - prioritize relevant pages
-      const relevantPaths = [
+      const defaultRelevantPaths = [
         '/about', '/about-us', '/company', '/team', '/leadership',
         '/services', '/products', '/solutions', '/capabilities',
         '/industries', '/clients', '/case-studies', '/portfolio',
         '/contact', '/locations', '/careers', '/blog', '/news',
         '/mission', '/vision', '/values', '/approach', '/methodology'
       ];
+      const pathsToUse = relevantPaths && relevantPaths.length > 0 ? relevantPaths : defaultRelevantPaths;
 
       $('a[href]').each((_, element) => {
         const href = $(element).attr('href');
@@ -191,7 +193,7 @@ async function crawlWebsiteWithProgress(
           
           if (fullUrl && !visited.has(fullUrl) && queue.length < 20) {
             // Prioritize relevant pages
-            const isRelevant = relevantPaths.some(path => fullUrl.includes(path));
+            const isRelevant = pathsToUse.some(path => fullUrl.includes(path));
             if (isRelevant) {
               queue.unshift(fullUrl); // Add to front of queue
             } else {
@@ -221,28 +223,45 @@ async function crawlWebsiteWithProgress(
 }
 
 export async function crawlAndExtractWithGemini(
-  domain: string,
-  onProgress?: ProgressCallback
+  domains: string[] | string,
+  onProgress?: ProgressCallback,
+  customPaths?: string[]
 ): Promise<GeminiExtractionResult> {
   if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY not configured');
   }
 
   try {
-    // Clean domain
-    const cleanDomain = domain.replace(/^https?:\/\//, '');
-    
-    // Crawl website with progress updates
-    const { contentBlocks, urls } = await crawlWebsiteWithProgress(cleanDomain, 8, onProgress);
-    
-    if (contentBlocks.length === 0) {
-      throw new Error('No content found on the website');
+    // Support both string and array for backward compatibility
+    const domainList: string[] = Array.isArray(domains) ? domains : [domains];
+    let allContentBlocks: string[] = [];
+    let allUrls: string[] = [];
+    let totalPages = 0;
+    let totalBlocks = 0;
+
+    for (let i = 0; i < domainList.length; i++) {
+      const domain = domainList[i];
+      onProgress?.({
+        phase: 'discovery',
+        step: `Crawling subdomain ${domain} (${i + 1}/${domainList.length})...`,
+        progress: Math.round((i / domainList.length) * 15),
+        stats: { pagesScanned: totalPages, contentBlocks: totalBlocks, keyEntities: 0, confidenceScore: 0 }
+      });
+      const { contentBlocks, urls } = await crawlWebsiteWithProgress(domain, 8, onProgress, customPaths);
+      allContentBlocks = allContentBlocks.concat(contentBlocks);
+      allUrls = allUrls.concat(urls);
+      totalPages += urls.length;
+      totalBlocks += contentBlocks.length;
+    }
+
+    if (allContentBlocks.length === 0) {
+      throw new Error('No content found on the specified subdomains');
     }
 
     // Phase 3: AI Processing
     let stats = { 
-      pagesScanned: urls.length, 
-      contentBlocks: contentBlocks.length, 
+      pagesScanned: totalPages, 
+      contentBlocks: allContentBlocks.length, 
       keyEntities: 0, 
       confidenceScore: 0 
     };
@@ -255,14 +274,18 @@ export async function crawlAndExtractWithGemini(
     });
 
     // Prepare content for analysis
-    const siteContent = contentBlocks
+    const siteContent = allContentBlocks
       .filter(block => block.length > 20)
-      .slice(0, 150) // Use more blocks for better context
+      .slice(0, 150)
       .join('\n\n')
-      .slice(0, 30000); // Increase content size limit
+      .slice(0, 30000);
 
+    const customPathsNote = customPaths && customPaths.length > 0
+      ? `The following custom relevant paths were prioritized during crawling: ${customPaths.join(", ")}
+`
+      : '';
     const enhancedPrompt = `
-You are a senior brand analyst and SEO expert with 15+ years of experience analyzing websites for Fortune 500 companies. Your task is to provide a comprehensive, professional analysis of ${cleanDomain} based on the provided website content.
+${customPathsNote}You are a senior brand analyst and SEO expert with 15+ years of experience analyzing websites for Fortune 500 companies. Your task is to provide a comprehensive, professional analysis of the following subdomains: ${domainList.join(", ")} based on the provided website content.
 
 Analyze the following content thoroughly:
 ---
@@ -292,10 +315,8 @@ Your response MUST be a single, valid JSON object with this EXACT structure and 
 
 ANALYSIS REQUIREMENTS:
 
-1. "pagesScanned": Use the provided value: ${urls.length}.
-
-2. "contentBlocks": Use the provided value: ${contentBlocks.length}.
-
+1. "pagesScanned": Use the provided value: ${totalPages}.
+2. "contentBlocks": Use the provided value: ${allContentBlocks.length}.
 3. "keyEntities": Extract ALL unique, specific entities mentioned:
    - "products": Specific product names, software, tools, platforms
    - "services": Specific services offered, consulting areas, solutions
@@ -303,14 +324,12 @@ ANALYSIS REQUIREMENTS:
    - "brands": Company names, partner brands, competitors mentioned
    - "people": Names of executives, team members, key personnel
    - "locations": Cities, countries, office locations, service areas
-
 4. "confidenceScore": Integer 0-100 based on:
    - Content quality and comprehensiveness (30%)
    - Information clarity and specificity (25%)
    - Brand positioning clarity (25%)
    - Technical information completeness (20%)
    Use realistic scores: 75-95 for good content, 60-74 for moderate, below 60 for poor
-
 5. "extractedContext": Write a 4-6 sentence professional summary that includes:
    - Company's primary business focus and industry
    - Key products/services and target market
@@ -318,7 +337,6 @@ ANALYSIS REQUIREMENTS:
    - Company size/scale indicators (if mentioned)
    - Geographic scope and market positioning
    Use professional business language and be specific
-
 6. "seoAnalysis":
    - "focusKeywords": 3-5 primary SEO keywords the site appears to target (be realistic)
    - "titleTag": Extract the main page title or create a professional one
@@ -415,12 +433,12 @@ Your entire response must be ONLY the raw JSON object. Do not wrap it in \`\`\`j
 
     // Validate and normalize the result using real AI-generated data
     const finalResult: GeminiExtractionResult = {
-      pagesScanned: urls.length,
-      contentBlocks: contentBlocks.length,
+      pagesScanned: totalPages,
+      contentBlocks: allContentBlocks.length,
       keyEntities: totalEntities,
       confidenceScore: result.confidenceScore || 75,
       extractedContext: result.extractedContext || 
-        `${cleanDomain} is a business website offering various services and solutions. The site contains information about their offerings and approach to serving their target market.`
+        `${domainList.join(', ')} is a business website offering various services and solutions. The site contains information about their offerings and approach to serving their target market.`
     };
 
     return finalResult;
@@ -448,45 +466,13 @@ Your entire response must be ONLY the raw JSON object. Do not wrap it in \`\`\`j
   }
 }
 
-export async function generatePhrases(keyword: string): Promise<string[]> {
-  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not configured');
-
-  const prompt = `You are an expert SEO specialist with deep knowledge of search intent and user behavior. Generate 5 highly realistic search phrases that actual users would type into Google when searching for information related to: "${keyword}"
-
-CRITICAL REQUIREMENTS:
-1. Use REAL search patterns that match actual user behavior
-2. Include different search intents: informational, commercial, transactional, navigational
-3. Use natural language that real people actually type
-4. Include question-based searches, comparison searches, and specific queries
-5. Match the complexity and specificity of real search queries
-6. Use industry-standard terminology and search patterns
-7. Include long-tail variations that show specific user intent
-8. Avoid generic or overly broad phrases
-
-SEARCH INTENT PATTERNS TO INCLUDE:
-- Informational: "how to", "what is", "guide", "tutorial", "tips"
-- Commercial: "best", "top", "review", "comparison", "vs"
-- Transactional: "buy", "pricing", "cost", "free trial", "demo"
-- Specific: Include industry terms, brand names, specific features
-- Question-based: Natural questions users ask
-- Comparison: "vs", "alternative to", "instead of"
-
-EXAMPLE REALISTIC PHRASES:
-For "project management software":
-- "best project management software for small teams"
-- "how to choose project management tools"
-- "asana vs monday.com vs trello comparison"
-- "project management software pricing plans"
-- "free project management tools for startups"
-
-For "digital marketing":
-- "digital marketing strategies for 2024"
-- "how to start digital marketing business"
-- "best digital marketing tools for small business"
-- "digital marketing vs traditional marketing"
-- "digital marketing course online free"
-
-Generate 5 phrases that would actually be valuable for SEO targeting "${keyword}". Return ONLY a JSON array of strings, no markdown, no comments, no extra text.`;
+export async function generatePhrases(keyword: string, domain?: string, context?: string): Promise<string[]> {
+  let prompt;
+  if (domain && context) {
+    prompt = `You are an expert SEO analyst with 15+ years of experience using Ahrefs, SEMrush, and Google Keyword Planner.\n\nYour task is to generate 5 highly realistic, high-value search phrases that real users would type into Google to test the SEO visibility and coverage of the domain: \"${domain}\" for the keyword: \"${keyword}\".\n\n- Each phrase should represent a real-world search query that, if searched, would indicate whether the domain is visible for that specific intent.\n- Include a mix of commercial, informational, transactional, and comparison queries.\n- Phrases should be natural, specific, and reflect actual user search behavior.\n- Do NOT simply repeat or slightly reword the keyword.\n- Do NOT include generic, irrelevant, or zero-volume phrases.\n- Use the business context for maximum relevance: \"${context}\".\n- Output ONLY a JSON array of 5 strings, no markdown, no comments, no extra text.\n\nExample for keyword \"project management software\":\n[\n  \"best project management software for small business\",\n  \"project management tools for remote teams\",\n  \"asana vs trello vs monday.com\",\n  \"how to choose project management software\",\n  \"project management software pricing comparison\"\n]\n\nNow generate 5 realistic, valuable search phrases for: \"${keyword}\" to test the SEO visibility of ${domain}.`;
+  } else {
+    prompt = `You are an expert SEO analyst. Generate 5 highly realistic search phrases that would be used to test the SEO visibility of a website for the keyword: \"${keyword}\".\n- Each phrase should be a real-world search query that would reveal if the site is ranking for that intent.\n- Include a mix of commercial, informational, transactional, and comparison queries.\n- Output ONLY a JSON array of 5 strings, no markdown, no comments, no extra text.`;
+  }
 
   const response = await axios.post(
     `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
@@ -512,8 +498,8 @@ Generate 5 phrases that would actually be valuable for SEO targeting "${keyword}
   if (!jsonMatch) throw new Error('Could not extract JSON array from Gemini response.');
   try {
     const arr = JSON.parse(jsonMatch[0]);
-    if (Array.isArray(arr) && arr.every(x => typeof x === 'string')) return arr;
-    throw new Error('Gemini did not return a valid array of strings.');
+    if (Array.isArray(arr) && arr.length === 5 && arr.every(x => typeof x === 'string')) return arr;
+    throw new Error('Gemini did not return a valid array of 5 strings.');
   } catch (e) {
     throw new Error('Failed to parse Gemini response as JSON array.');
   }
@@ -544,60 +530,30 @@ export const geminiService = {
 
 // Generate relevant keywords for a domain using Gemini
 export async function generateKeywordsForDomain(domain: string, context: string): Promise<Array<{ term: string, volume: number, difficulty: string, cpc: number }>> {
-  const prompt = `You are an expert SEO analyst with 15+ years of experience using Ahrefs, SEMrush, and Google Keyword Planner. You have access to real search volume data and understand exact keyword difficulty metrics.
+  const prompt = `
+You are an expert SEO analyst with 15+ years of experience using Ahrefs, SEMrush, and Google Keyword Planner. You have access to real search volume, CPC, and keyword difficulty data.
 
-Given this website domain and context, generate 15 highly relevant keywords with ACCURATE, REAL-WORLD SEO metrics.
+Given the following website and its business context, generate a list of the 50 most valuable, high-traffic, and competitive keywords for SEO, as if you were using Ahrefs.
+
+- Only include keywords that have real, significant search volume (at least 100 monthly) and are relevant to the business.
+- Include a mix of head, mid-tail, and long-tail keywords.
+- For each keyword, provide:
+  - "term": the exact keyword phrase
+  - "volume": realistic monthly search volume (based on Ahrefs data)
+  - "difficulty": "Low" | "Medium" | "High" (based on Ahrefs KD)
+  - "cpc": realistic cost per click in USD
+
+CRITICAL REQUIREMENTS:
+- Do NOT include generic, irrelevant, or zero-volume keywords.
+- Do NOT invent data—use realistic, industry-standard values.
+- Include both commercial and informational intent.
+- Output must be a JSON array, sorted by volume descending.
 
 Domain: ${domain}
 Context: ${context}
 
-IMPORTANT: You must provide REALISTIC, ACCURATE data that matches actual SEO tools:
-
-VOLUME RANGES (monthly searches):
-- Low volume: 100-1,000 searches
-- Medium volume: 1,000-10,000 searches  
-- High volume: 10,000-100,000 searches
-- Very high: 100,000+ searches
-
-DIFFICULTY SCORES (based on Ahrefs/SEMrush):
-- Low (0-30): Easy to rank, few competitors
-- Medium (31-70): Moderate competition, established sites
-- High (71-100): Very competitive, dominated by big brands
-
-CPC RANGES (cost per click in USD):
-- Low: $0.50-$2.00
-- Medium: $2.00-$8.00
-- High: $8.00-$25.00+
-- Very high: $25.00+ (for high-value terms)
-
-Return ONLY a valid JSON array with this EXACT structure:
-[
-  {
-    "term": "exact keyword phrase",
-    "volume": number (realistic monthly search volume),
-    "difficulty": "Low" | "Medium" | "High",
-    "cpc": number (realistic cost per click in USD)
-  }
-]
-
-CRITICAL REQUIREMENTS:
-1. Use REAL keyword research patterns - include long-tail, question-based, and commercial intent keywords
-2. Volume numbers must be realistic for the industry and keyword type
-3. Difficulty should correlate with volume and commercial intent
-4. CPC should reflect the keyword's commercial value and competition
-5. Include a mix of informational, commercial, and transactional keywords
-6. Base difficulty on actual competition levels, not just volume
-7. CPC should be higher for commercial/transactional terms
-8. Use industry-standard keyword patterns and search behavior
-
-Example realistic data:
-- "best project management software" - volume: 8,500, difficulty: "High", cpc: 12.50
-- "how to manage remote teams" - volume: 2,200, difficulty: "Medium", cpc: 3.80
-- "project management tools comparison" - volume: 1,800, difficulty: "Medium", cpc: 8.20
-- "agile project management guide" - volume: 4,500, difficulty: "Medium", cpc: 2.10
-
-Generate 15 keywords that would actually be valuable for this business. No markdown, no comments, just the JSON array.`;
-
+Return ONLY the JSON array, no markdown, no comments, no extra text.
+`;
   try {
     const response = await axios.post(
       `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
@@ -607,22 +563,24 @@ Generate 15 keywords that would actually be valuable for this business. No markd
           temperature: 0.3,
           topK: 32,
           topP: 0.8,
-          maxOutputTokens: 1200,
+          maxOutputTokens: 2000,
         }
       },
       {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 25000
+        timeout: 35000
       }
     );
     let text = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
-    console.log('Gemini raw response:', text);
     if (!text) throw new Error('Empty response from Gemini API');
     text = text.trim();
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) throw new Error('Could not extract JSON array from Gemini response.');
     const arr = JSON.parse(jsonMatch[0]);
-    if (Array.isArray(arr) && arr.every(x => x.term && typeof x.volume === 'number')) return arr;
+    if (Array.isArray(arr) && arr.every(x => x.term && typeof x.volume === 'number')) {
+      // Filter out keywords with volume < 100, sort descending
+      return arr.filter(x => x.volume >= 100).sort((a, b) => b.volume - a.volume);
+    }
     throw new Error('Gemini did not return a valid array of keyword objects.');
   } catch (e) {
     // Only fall back if Gemini truly fails or returns an invalid array
@@ -643,6 +601,6 @@ Generate 15 keywords that would actually be valuable for this business. No markd
       { term: 'software implementation services', volume: 3100, difficulty: 'High', cpc: 17.30 },
       { term: 'enterprise software reviews', volume: 5600, difficulty: 'Medium', cpc: 8.90 },
       { term: 'business software solutions', volume: 7800, difficulty: 'High', cpc: 12.10 }
-    ];
+    ].filter(x => x.volume >= 100).sort((a, b) => b.volume - a.volume);
   }
 }

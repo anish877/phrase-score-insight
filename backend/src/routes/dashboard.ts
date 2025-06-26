@@ -335,20 +335,50 @@ router.get('/:domainId', asyncHandler(async (req: Request, res: Response) => {
     console.log(`Basic metrics calculated: ${totalQueries} queries, ${mentions} mentions, ${mentionRate.toFixed(1)}% mention rate, ${visibilityScore.toFixed(1)}% visibility score`);
 
     // Use AI to generate comprehensive dashboard data
-    const dashboardPrompt = `You are an expert SEO and AI visibility analyst. Generate dashboard metrics and insights based on this domain data:
+    const dashboardPrompt = `You are an expert SEO analyst with 15+ years of experience using Ahrefs, SEMrush, and Google Search Console. You are analyzing real SEO data for a domain to provide professional, actionable insights.
 
-DOMAIN: ${domain.url}
-TOTAL QUERIES: ${aiResults.length}
-MENTIONS: ${mentions}
-AVERAGE RELEVANCE: ${avgRelevance.toFixed(1)}/5
-AVERAGE ACCURACY: ${avgAccuracy.toFixed(1)}/5
-AVERAGE SENTIMENT: ${avgSentiment.toFixed(1)}/5
-AVERAGE OVERALL: ${avgOverall.toFixed(1)}/5
-KEYWORD COUNT: ${domain.keywords.length}
-PHRASE COUNT: ${domain.keywords.reduce((sum: number, k: any) => sum + k.phrases.length, 0)}
+DOMAIN ANALYSIS DATA:
+Domain: ${domain.url}
+Total AI Queries: ${aiResults.length}
+Total Mentions: ${mentions}
+Mention Rate: ${mentionRate.toFixed(1)}%
+Average Relevance: ${avgRelevance.toFixed(1)}/5
+Average Accuracy: ${avgAccuracy.toFixed(1)}/5
+Average Sentiment: ${avgSentiment.toFixed(1)}/5
+Average Overall Score: ${avgOverall.toFixed(1)}/5
+Keyword Count: ${domain.keywords.length}
+Phrase Count: ${domain.keywords.reduce((sum: number, k: any) => sum + k.phrases.length, 0)}
+Visibility Score: ${visibilityScore.toFixed(1)}%
 
-Calculate visibility score as: (mention rate * 0.4) + (avg relevance * 12) + (avg sentiment * 8)
-Current visibility score: ${visibilityScore.toFixed(1)}%
+KEYWORD PERFORMANCE DATA:
+${domain.keywords.slice(0, 10).map((keyword: any) => {
+  const keywordResults = keyword.phrases.flatMap((phrase: any) => phrase.aiQueryResults);
+  const keywordMentions = keywordResults.filter((result: any) => result.presence === 1).length;
+  const keywordVisibility = keywordResults.length > 0 ? (keywordMentions / keywordResults.length) * 100 : 0;
+  const avgSentiment = keywordResults.length > 0 ? keywordResults.reduce((sum: number, result: any) => sum + result.sentiment, 0) / keywordResults.length : 0;
+  return `- "${keyword.term}": ${keywordVisibility.toFixed(1)}% visibility, ${keywordMentions}/${keywordResults.length} mentions, ${avgSentiment.toFixed(1)}/5 sentiment, ${keyword.volume || 1000} volume, ${keyword.difficulty || 'Medium'} difficulty`;
+}).join('\n')}
+
+TOP PERFORMING PHRASES:
+${aiResults
+  .filter((result: any) => result.presence === 1)
+  .sort((a: any, b: any) => b.overall - a.overall)
+  .slice(0, 5)
+  .map((result: any) => {
+    const phrase = domain.keywords.flatMap((keyword: any) => 
+      keyword.phrases.find((phrase: any) => phrase.id === result.phraseId)
+    ).find(Boolean);
+    return `- "${phrase?.text || 'Unknown'}": ${result.overall}/5 overall, ${result.relevance}/5 relevance, ${result.sentiment}/5 sentiment (${result.model})`;
+  }).join('\n')}
+
+ANALYSIS REQUIREMENTS:
+1. Calculate visibility score using: (mention rate * 0.4) + (avg relevance * 12) + (avg sentiment * 8)
+2. Analyze keyword performance patterns and identify top/bottom performers
+3. Evaluate phrase effectiveness and content quality
+4. Assess competitive positioning based on mention rates
+5. Provide data-driven insights and actionable recommendations
+6. Use realistic SEO metrics and industry benchmarks
+7. Focus on actionable improvements for organic visibility
 
 Return ONLY a valid JSON object in this exact format:
 
@@ -427,37 +457,37 @@ Return ONLY a valid JSON object in this exact format:
     "strengths": [
       {
         "title": "Strong AI Visibility Performance",
-        "description": "Domain achieves ${visibilityScore.toFixed(1)}% visibility score with ${mentions} mentions across ${totalQueries} queries",
+        "description": "Domain achieves ${visibilityScore.toFixed(1)}% visibility score with ${mentions} mentions across ${totalQueries} queries, indicating strong presence in AI-generated search results",
         "metric": "${visibilityScore.toFixed(1)}% visibility score"
       },
       {
         "title": "High Content Relevance",
-        "description": "Average relevance score of ${avgRelevance.toFixed(1)}/5 indicates strong alignment with search queries",
+        "description": "Average relevance score of ${avgRelevance.toFixed(1)}/5 indicates strong alignment with search queries and user intent",
         "metric": "${avgRelevance.toFixed(1)}/5 relevance score"
       }
     ],
     "weaknesses": [
       {
         "title": "Content Accuracy Improvement Needed",
-        "description": "Average accuracy score of ${avgAccuracy.toFixed(1)}/5 suggests room for improvement in factual accuracy",
+        "description": "Average accuracy score of ${avgAccuracy.toFixed(1)}/5 suggests room for improvement in factual accuracy and content quality",
         "metric": "${avgAccuracy.toFixed(1)}/5 accuracy score"
       },
       {
         "title": "Sentiment Optimization Opportunity",
-        "description": "Average sentiment score of ${avgSentiment.toFixed(1)}/5 indicates potential for more positive brand perception",
+        "description": "Average sentiment score of ${avgSentiment.toFixed(1)}/5 indicates potential for more positive brand perception and user engagement",
         "metric": "${avgSentiment.toFixed(1)}/5 sentiment score"
       }
     ],
     "recommendations": [
       {
-        "category": "Content",
+        "category": "Content Quality",
         "priority": "High",
         "action": "Improve content accuracy and factual verification",
         "expectedImpact": "Increase accuracy score from ${avgAccuracy.toFixed(1)}/5 to 4.5/5",
         "timeline": "short term"
       },
       {
-        "category": "SEO",
+        "category": "SEO Optimization",
         "priority": "Medium",
         "action": "Optimize content for better sentiment and brand perception",
         "expectedImpact": "Improve sentiment score and overall visibility",

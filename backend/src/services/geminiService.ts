@@ -531,80 +531,164 @@ export const geminiService = {
 // Generate relevant keywords for a domain using Gemini
 export async function generateKeywordsForDomain(domain: string, context: string): Promise<Array<{ term: string, volume: number, difficulty: string, cpc: number }>> {
   const prompt = `
-You are an expert SEO analyst with 15+ years of experience using Ahrefs, SEMrush, and Google Keyword Planner. You have access to real search volume, CPC, and keyword difficulty data.
+You are an Ahrefs keyword research expert. Generate keywords exactly like Ahrefs would show for a domain analysis.
 
-Given the following website and its business context, generate a list of the 50 most valuable, high-traffic, and competitive keywords for SEO, as if you were using Ahrefs.
+DOMAIN: ${domain}
+BUSINESS CONTEXT: ${context}
 
-- ONLY include keywords that are important for TESTING THE SEO VISIBILITY AND PRESENCE of the domain: "${domain}" in an SEO tool.
-- These keywords will be used to generate search phrases that will specifically test if the domain is ranking and visible in Google for those topics.
-- Choose keywords that are highly relevant to the domain's business, offerings, and context: "${context}".
-- Only include keywords that have real, significant search volume (at least 100 monthly) and are relevant to the business.
-- Include a mix of head, mid-tail, and long-tail keywords.
-- For each keyword, provide:
-  - "term": the exact keyword phrase
-  - "volume": realistic monthly search volume (based on Ahrefs data)
-  - "difficulty": "Low" | "Medium" | "High" (based on Ahrefs KD)
-  - "cpc": realistic cost per click in USD
+Generate 40-50 keywords that represent how people actually search for this domain, including:
 
-CRITICAL REQUIREMENTS:
-- Do NOT include generic, irrelevant, or zero-volume keywords.
-- Do NOT invent data—use realistic, industry-standard values.
-- Include both commercial and informational intent.
-- These keywords should reflect real user search behavior and be suitable for evaluating the domain's SEO coverage and presence.
-- Output must be a JSON array, sorted by volume descending.
+1. DOMAIN VARIATIONS (20-30%):
+   - Exact domain: "${domain}"
+   - Common variations: "www.${domain}", "old.${domain}", "${domain}.com" etc.
 
-Domain: ${domain}
-Context: ${context}
+2. DOMAIN + SUBDIRECTORIES (25-35%):
+   - Main sections: "${domain}/login", "${domain}/about", "${domain}/contact"
+   - Service pages: "${domain}/services", "${domain}/products"
+   - Category pages based on business context
 
-Return ONLY the JSON array, no markdown, no comments, no extra text.
+3. BRANDED SEARCHES (25-35%):
+   - "${domain} login"
+   - "${domain} reviews"
+   - "${domain} pricing"
+   - "${domain} [relevant category]" (based on business context)
+
+4. NAVIGATIONAL QUERIES (10-20%):
+   - Related to the business type from context
+   - How users would search to find this specific domain
+
+VOLUME DISTRIBUTION:
+- 1-3 keywords: >10,000 volume
+- 5-8 keywords: 1,000-10,000 volume  
+- 15-20 keywords: 100-1,000 volume
+- 15-25 keywords: <100 volume
+
+DIFFICULTY PATTERNS:
+- Domain name itself: "Hard"
+- Brand variations: "Hard" 
+- Specific pages/subdirectories: "Medium" to "Hard"
+- Long-tail branded: "Easy" to "Medium"
+- Some entries can be "N/A"
+
+CPC RANGE: $0.00-$15.00 (most branded searches have low CPC)
+
+CRITICAL: 
+- Keywords should look like real Ahrefs data for domain analysis
+- Focus on how people search FOR this specific domain
+- Include realistic subdirectory paths based on business context
+- Match the exact format from your Ahrefs example
+
+Return ONLY a JSON array sorted by volume (highest first):
+
+[
+  {"term": "${domain}", "volume": 15000, "difficulty": "Hard", "cpc": 0.50},
+  {"term": "${domain}/login", "volume": 800, "difficulty": "Hard", "cpc": 0.20}
+]
 `;
+
   try {
     const response = await axios.post(
       `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
       {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
-          temperature: 0.3,
+          temperature: 0.3, // Lower for more consistent branded terms
           topK: 32,
           topP: 0.8,
-          maxOutputTokens: 2000,
+          maxOutputTokens: 3000,
         }
       },
       {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 35000
+        timeout: 40000
       }
     );
+
     let text = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) throw new Error('Empty response from Gemini API');
+    
+    // Clean the response
     text = text.trim();
+    
+    // Extract JSON array more robustly
     const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) throw new Error('Could not extract JSON array from Gemini response.');
-    const arr = JSON.parse(jsonMatch[0]);
-    if (Array.isArray(arr) && arr.every(x => x.term && typeof x.volume === 'number')) {
-      // Filter out keywords with volume < 100, sort descending
-      return arr.filter(x => x.volume >= 100).sort((a, b) => b.volume - a.volume);
+    if (!jsonMatch) {
+      console.warn('Could not extract JSON array, trying to clean response...');
+      text = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const cleanMatch = text.match(/\[[\s\S]*\]/);
+      if (!cleanMatch) throw new Error('Could not extract JSON array from response.');
+      text = cleanMatch[0];
+    } else {
+      text = jsonMatch[0];
     }
-    throw new Error('Gemini did not return a valid array of keyword objects.');
-  } catch (e) {
-    // Only fall back if Gemini truly fails or returns an invalid array
-    console.error('Gemini keyword generation failed, using fallback:', e);
-    return [
-      { term: 'enterprise software solutions', volume: 3200, difficulty: 'High', cpc: 15.80 },
-      { term: 'digital transformation consulting', volume: 1800, difficulty: 'Medium', cpc: 22.50 },
-      { term: 'business automation tools', volume: 4500, difficulty: 'Medium', cpc: 8.90 },
-      { term: 'cloud migration services', volume: 2800, difficulty: 'High', cpc: 18.20 },
-      { term: 'IT consulting companies', volume: 8900, difficulty: 'High', cpc: 12.40 },
-      { term: 'software development services', volume: 12500, difficulty: 'High', cpc: 14.60 },
-      { term: 'business process optimization', volume: 2100, difficulty: 'Medium', cpc: 9.80 },
-      { term: 'enterprise technology solutions', volume: 3400, difficulty: 'High', cpc: 16.70 },
-      { term: 'digital workplace tools', volume: 1600, difficulty: 'Medium', cpc: 6.40 },
-      { term: 'business software comparison', volume: 3800, difficulty: 'Medium', cpc: 11.20 },
-      { term: 'enterprise software pricing', volume: 4200, difficulty: 'Medium', cpc: 13.80 },
-      { term: 'business technology consulting', volume: 2200, difficulty: 'Medium', cpc: 19.50 },
-      { term: 'software implementation services', volume: 3100, difficulty: 'High', cpc: 17.30 },
-      { term: 'enterprise software reviews', volume: 5600, difficulty: 'Medium', cpc: 8.90 },
-      { term: 'business software solutions', volume: 7800, difficulty: 'High', cpc: 12.10 }
-    ].filter(x => x.volume >= 100).sort((a, b) => b.volume - a.volume);
+    
+    const keywords = JSON.parse(text);
+    
+    // Validate structure
+    if (!Array.isArray(keywords)) {
+      throw new Error('Response is not an array');
+    }
+    
+    // Validate each keyword object
+    const validKeywords = keywords.filter(keyword => {
+      return keyword && 
+             typeof keyword.term === 'string' && 
+             typeof keyword.volume === 'number' && 
+             typeof keyword.difficulty === 'string' && 
+             typeof keyword.cpc === 'number';
+    });
+    
+    if (validKeywords.length === 0) {
+      throw new Error('No valid keywords found in response');
+    }
+    
+    // Sort by volume descending
+    return validKeywords.sort((a, b) => b.volume - a.volume);
+    
+  } catch (error) {
+    console.error('Keyword generation failed:', error);
+    
+    // Enhanced domain-specific fallback
+    const fallbackKeywords = generateDomainFallbackKeywords(domain, context);
+    return fallbackKeywords.sort((a, b) => b.volume - a.volume);
   }
+}
+
+// Helper function for domain-specific fallbacks
+function generateDomainFallbackKeywords(domain: string, context: string): Array<{ term: string, volume: number, difficulty: string, cpc: number }> {
+  const baseDomain = domain.replace(/^https?:\/\//, '').replace(/^www\./, '');
+  
+  return [
+    // High volume domain searches
+    { term: baseDomain, volume: 12000, difficulty: 'Hard', cpc: 0.80 },
+    { term: `www.${baseDomain}`, volume: 3200, difficulty: 'Hard', cpc: 0.60 },
+    
+    // Login and account related
+    { term: `${baseDomain} login`, volume: 2800, difficulty: 'Hard', cpc: 0.40 },
+    { term: `${baseDomain}/login`, volume: 1500, difficulty: 'Hard', cpc: 0.30 },
+    
+    // Common pages
+    { term: `${baseDomain}/contact`, volume: 800, difficulty: 'Medium', cpc: 1.20 },
+    { term: `${baseDomain}/about`, volume: 600, difficulty: 'Medium', cpc: 0.90 },
+    { term: `${baseDomain}/pricing`, volume: 950, difficulty: 'Medium', cpc: 2.50 },
+    
+    // Branded searches
+    { term: `${baseDomain} reviews`, volume: 1200, difficulty: 'Medium', cpc: 1.80 },
+    { term: `${baseDomain} app`, volume: 750, difficulty: 'Medium', cpc: 1.10 },
+    { term: `${baseDomain} support`, volume: 450, difficulty: 'Medium', cpc: 0.70 },
+    
+    // Lower volume variations
+    { term: `old.${baseDomain}`, volume: 150, difficulty: 'Hard', cpc: 0.20 },
+    { term: `${baseDomain}]`, volume: 120, difficulty: 'Hard', cpc: 0.10 },
+    { term: `${baseDomain}/dashboard`, volume: 280, difficulty: 'Medium', cpc: 0.90 },
+    { term: `${baseDomain} api`, volume: 320, difficulty: 'Medium', cpc: 1.40 },
+    
+    // Very low volume
+    { term: `${baseDomain}/help`, volume: 90, difficulty: 'Easy', cpc: 0.50 },
+    { term: `${baseDomain} mobile`, volume: 80, difficulty: 'Easy', cpc: 0.60 },
+    { term: `${baseDomain}/terms`, volume: 60, difficulty: 'Easy', cpc: 0.30 },
+    { term: `${baseDomain} down`, volume: 70, difficulty: 'Easy', cpc: 0.20 },
+    { term: `${baseDomain}/privacy`, volume: 50, difficulty: 'Easy', cpc: 0.25 },
+    { term: `${baseDomain} alternative`, volume: 180, difficulty: 'Medium', cpc: 2.10 }
+  ];
 }

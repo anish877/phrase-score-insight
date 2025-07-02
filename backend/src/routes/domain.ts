@@ -7,11 +7,16 @@ const prisma = new PrismaClient();
 
 // POST /domain - create/find domain, run extraction, and stream progress
 router.post('/', async (req: Request, res: Response) => {
-  const { url, subdomains, customPaths } = req.body;
+  const { url, subdomains, customPaths, priorityUrls } = req.body;
   if (!url) {
-    res.status(400).json({ error: 'Domain url is required' });
+    res.status(400).json({ error: 'URL is required' });
     return;
   }
+
+  // Determine crawl target based on priorityUrls
+  const isFullUrl = (url: string) => url.startsWith('http://') || url.startsWith('https://');
+  const crawlTarget = isFullUrl(url) ? url : `https://${url}`;
+
   // If subdomains provided, pass array to extraction logic
   // Otherwise, use main domain only
   const domainsToExtract = Array.isArray(subdomains) && subdomains.length > 0
@@ -78,7 +83,7 @@ router.post('/', async (req: Request, res: Response) => {
     };
 
     // 3. Run Gemini extraction with progress streaming
-    const extraction = await crawlAndExtractWithGemini(domainsToExtract, onProgress, customPaths);
+    const extraction = await crawlAndExtractWithGemini(domainsToExtract, onProgress, customPaths, priorityUrls);
 
     // 4. Fix keyEntities: sum if object, else use as is
     let keyEntitiesValue = extraction.keyEntities;

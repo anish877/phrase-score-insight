@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, TrendingUp, TrendingDown, Calendar, Globe, BarChart3, Eye, MessageSquare, Star, Users, Target, AlertTriangle, Lightbulb, RefreshCw, Activity, Shield, Award, Zap } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Calendar, Globe, BarChart3, Eye, MessageSquare, Star, Users, Target, AlertTriangle, Lightbulb, RefreshCw, Activity, Shield, Award, Zap, Link as LinkIcon, FileText } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, Legend } from 'recharts';
 import type { Keyword } from '@/services/api';
 import type { AIQueryResult } from '@/components/AIQueryResults';
@@ -39,10 +39,53 @@ interface DomainData {
     totalQueries: number;
     keywordCount: number;
     phraseCount: number;
-    modelPerformance: Array<{ model: string; score: number; responses: number; mentions: number; avgScore: number }>;
-    keywordPerformance: Array<{ keyword: string; visibility: number; mentions: number; sentiment: number; volume: number; difficulty: string }>;
+    modelPerformance: Array<{ model: string; score: number; responses: number; mentions: number; avgScore: number; avgLatency?: string; avgCost?: string; avgRelevance?: string; avgAccuracy?: string; avgSentiment?: string; avgOverall?: string }>;
+    keywordPerformance: Array<{ keyword: string; visibility: number; mentions: number; sentiment: number; volume: number; difficulty: string; cpc?: number }>;
     topPhrases: Array<{ phrase: string; count: number }>;
-    performanceData: Array<{ month: string; score: number }>;
+    performanceData: Array<{ month: string; score: number; mentions?: number; queries?: number; organicTraffic?: number; backlinks?: number; domainAuthority?: number }>;
+    // Enhanced SEO metrics
+    seoMetrics?: {
+      organicTraffic: number;
+      backlinks: number;
+      domainAuthority: number;
+      pageSpeed: number;
+      mobileScore: number;
+      coreWebVitals: { lcp: number; fid: number; cls: number };
+      technicalSeo: { ssl: boolean; mobile: boolean; sitemap: boolean; robots: boolean };
+      contentQuality: { readability: number; depth: number; freshness: number };
+    };
+    keywordAnalytics?: {
+      highVolume: number;
+      mediumVolume: number;
+      lowVolume: number;
+      highDifficulty: number;
+      mediumDifficulty: number;
+      lowDifficulty: number;
+      longTail: number;
+      branded: number;
+      nonBranded: number;
+    };
+    competitiveAnalysis?: {
+      marketShare: number;
+      competitorCount: number;
+      avgCompetitorScore: number;
+      marketPosition: string;
+      competitiveGap: number;
+    };
+    contentPerformance?: {
+      totalPages: number;
+      indexedPages: number;
+      avgPageScore: number;
+      topPerformingPages: Array<{ url: string; score: number; traffic: number }>;
+      contentGaps: string[];
+    };
+    technicalMetrics?: {
+      crawlability: number;
+      indexability: number;
+      mobileFriendliness: number;
+      pageSpeedScore: number;
+      securityScore: number;
+    };
   };
   insights: {
     strengths: Array<{
@@ -406,6 +449,14 @@ const DomainDashboard = () => {
       
       const data = await response.json();
       console.log('Domain data received:', data);
+      
+      // Debug keyword analytics specifically
+      if (data.metrics?.keywordAnalytics) {
+        console.log('Keyword analytics data:', data.metrics.keywordAnalytics);
+        console.log('High volume keywords:', data.metrics.keywordAnalytics.highVolume);
+        console.log('Medium volume keywords:', data.metrics.keywordAnalytics.mediumVolume);
+        console.log('Low volume keywords:', data.metrics.keywordAnalytics.lowVolume);
+      }
       
       // Ensure all metrics are properly formatted
       if (data.metrics) {
@@ -801,9 +852,12 @@ const DomainDashboard = () => {
           <div className="w-full overflow-x-auto whitespace-nowrap scrollbar-hide">
             <TabsList className="flex w-full justify-between bg-white/70 backdrop-blur-sm border border-slate-200/60 p-1 rounded-xl gap-1">
               <TabsTrigger value="overview" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">Overview</TabsTrigger>
+              <TabsTrigger value="seo" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">SEO Metrics</TabsTrigger>
               <TabsTrigger value="performance" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">Performance</TabsTrigger>
-              <TabsTrigger value="models" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">AI Models</TabsTrigger>
               <TabsTrigger value="keywords" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">Keywords</TabsTrigger>
+              <TabsTrigger value="technical" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">Technical</TabsTrigger>
+              <TabsTrigger value="content" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">Content</TabsTrigger>
+              <TabsTrigger value="models" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">AI Models</TabsTrigger>
               <TabsTrigger value="phrases" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">Top Phrases</TabsTrigger>
               <TabsTrigger value="airesults" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">AI Results</TabsTrigger>
               <TabsTrigger value="competitors" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">Competitors</TabsTrigger>
@@ -820,9 +874,9 @@ const DomainDashboard = () => {
                     <div className="p-1.5 bg-blue-50 rounded-lg">
                       <TrendingUp className="h-4 w-4 text-blue-600" />
                     </div>
-                    <CardTitle className="text-slate-800">Visibility Trend</CardTitle>
+                    <CardTitle className="text-slate-800">AI Visibility Score Trend</CardTitle>
                   </div>
-                  <CardDescription className="text-slate-600">AI visibility score progression over time</CardDescription>
+                  <CardDescription className="text-slate-600">Monthly progression of AI model visibility and mention rates</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {metrics.performanceData && metrics.performanceData.length > 0 ? (
@@ -835,9 +889,21 @@ const DomainDashboard = () => {
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeOpacity={0.6} />
-                        <XAxis dataKey="month" stroke="#64748b" fontSize={12} />
-                        <YAxis stroke="#64748b" fontSize={12} />
+                        <XAxis 
+                          dataKey="month" 
+                          stroke="#64748b" 
+                          fontSize={12}
+                          label={{ value: 'Month', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                        />
+                        <YAxis 
+                          stroke="#64748b" 
+                          fontSize={12}
+                          label={{ value: 'Visibility Score (%)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                          domain={[0, 100]}
+                        />
                         <Tooltip 
+                          formatter={(value, name) => [`${value}%`, 'AI Visibility Score']}
+                          labelFormatter={(label) => `Month: ${label}`}
                           contentStyle={{ 
                             backgroundColor: 'white', 
                             border: '1px solid #e2e8f0', 
@@ -845,15 +911,24 @@ const DomainDashboard = () => {
                             boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
                           }} 
                         />
-                        <Area type="monotone" dataKey="score" stroke="#3b82f6" fillOpacity={1} fill="url(#colorScore)" strokeWidth={2} />
+                        <Area 
+                          type="monotone" 
+                          dataKey="score" 
+                          stroke="#3b82f6" 
+                          fillOpacity={1} 
+                          fill="url(#colorScore)" 
+                          strokeWidth={2}
+                          name="AI Visibility Score"
+                        />
                       </AreaChart>
                     </ResponsiveContainer>
                   ) : (
                     <div className="text-center text-slate-500 py-12 space-y-3">
                       <Activity className="h-12 w-12 mx-auto text-slate-300" />
                       <div>
-                        <p className="font-medium">Trend data not available</p>
-                        <p className="text-sm">Current visibility score: <span className="font-semibold">{metrics.visibilityScore}%</span></p>
+                        <p className="font-medium">Historical trend data not available</p>
+                        <p className="text-sm">Current AI visibility score: <span className="font-semibold text-blue-600">{metrics.visibilityScore}%</span></p>
+                        <p className="text-xs text-slate-400">Based on {metrics.totalQueries} AI model queries</p>
                       </div>
                     </div>
                   )}
@@ -867,9 +942,9 @@ const DomainDashboard = () => {
                     <div className="p-1.5 bg-emerald-50 rounded-lg">
                       <Eye className="h-4 w-4 text-emerald-600" />
                     </div>
-                    <CardTitle className="text-slate-800">Mention Distribution</CardTitle>
+                    <CardTitle className="text-slate-800">AI Model Mention Rate</CardTitle>
                   </div>
-                  <CardDescription className="text-slate-600">How often your domain is mentioned in AI responses</CardDescription>
+                  <CardDescription className="text-slate-600">Domain presence in AI model responses across {metrics.totalQueries} queries</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center justify-center">
@@ -883,13 +958,16 @@ const DomainDashboard = () => {
                           outerRadius={100}
                           paddingAngle={2}
                           dataKey="value"
+                          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                          labelLine={false}
                         >
                           {pieData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={entry.color} />
                           ))}
                         </Pie>
                         <Tooltip 
-                          formatter={(value) => [`${value}%`, '']}
+                          formatter={(value, name) => [`${value}% of queries`, name]}
+                          labelFormatter={() => `AI Model Responses`}
                           contentStyle={{
                             backgroundColor: 'white',
                             border: '1px solid #e2e8f0',
@@ -903,11 +981,15 @@ const DomainDashboard = () => {
                   <div className="flex justify-center space-x-8 mt-4">
                     <div className="flex items-center space-x-2">
                       <div className="w-3 h-3 bg-emerald-600 rounded-full"></div>
-                      <span className="text-sm font-medium text-slate-700">Mentioned ({mentionRateValue}%)</span>
+                      <span className="text-sm font-medium text-slate-700">
+                        Domain Mentioned ({mentionRateValue}% - {Math.round(metrics.totalQueries * mentionRateValue / 100)} queries)
+                      </span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <div className="w-3 h-3 bg-slate-300 rounded-full"></div>
-                      <span className="text-sm font-medium text-slate-700">Not Mentioned ({(100 - mentionRateValue).toFixed(1)}%)</span>
+                      <span className="text-sm font-medium text-slate-700">
+                        Not Mentioned ({(100 - mentionRateValue).toFixed(1)}% - {Math.round(metrics.totalQueries * (100 - mentionRateValue) / 100)} queries)
+                      </span>
                     </div>
                   </div>
                 </CardContent>
@@ -1002,39 +1084,478 @@ const DomainDashboard = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="performance" className="space-y-8">
+          <TabsContent value="seo" className="space-y-8">
+            {/* SEO Overview Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-blue-50 rounded-lg">
+                      <TrendingUp className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Monthly Organic Traffic</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.seoMetrics?.organicTraffic ? metrics.seoMetrics.organicTraffic.toLocaleString() : '—'}
+                      </p>
+                      <p className="text-xs text-slate-500">Estimated monthly visitors</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-green-50 rounded-lg">
+                      <LinkIcon className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Total Backlinks</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.seoMetrics?.backlinks ? metrics.seoMetrics.backlinks.toLocaleString() : '—'}
+                      </p>
+                      <p className="text-xs text-slate-500">Referring domains</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-purple-50 rounded-lg">
+                      <Shield className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Domain Authority</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.seoMetrics?.domainAuthority ? `${metrics.seoMetrics.domainAuthority}/100` : '—'}
+                      </p>
+                      <p className="text-xs text-slate-500">SEO ranking power</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-amber-50 rounded-lg">
+                      <Zap className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Page Speed Score</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.seoMetrics?.pageSpeed ? `${metrics.seoMetrics.pageSpeed}/100` : '—'}
+                      </p>
+                      <p className="text-xs text-slate-500">Google PageSpeed Insights</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* SEO Performance Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Performance Metrics Over Time */}
+              {/* Organic Traffic Trend */}
               <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
                 <CardHeader>
-                  <CardTitle className="text-slate-800">Performance Metrics</CardTitle>
-                  <CardDescription className="text-slate-600">Detailed performance breakdown over time</CardDescription>
+                  <CardTitle className="text-slate-800">Monthly Organic Traffic</CardTitle>
+                  <CardDescription className="text-slate-600">Estimated organic search traffic progression (6-month trend)</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {metrics.performanceData && metrics.performanceData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={350}>
-                      <LineChart data={metrics.performanceData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="month" stroke="#64748b" fontSize={12} />
-                        <YAxis stroke="#64748b" fontSize={12} />
-                        <Tooltip contentStyle={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }} />
-                        <Line type="monotone" dataKey="score" stroke="#3b82f6" strokeWidth={2} name="Visibility Score" />
-                        {metrics.performanceData.every(d => 'mentions' in d) && (
-                          <Line type="monotone" dataKey="mentions" stroke="#10b981" strokeWidth={2} name="Mentions" />
-                        )}
-                        {metrics.performanceData.every(d => 'queries' in d) && (
-                          <Line type="monotone" dataKey="queries" stroke="#f59e42" strokeWidth={2} name="Queries" />
-                        )}
-                      </LineChart>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <AreaChart data={metrics.performanceData}>
+                        <defs>
+                          <linearGradient id="colorTraffic" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#10b981" stopOpacity={0.1}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeOpacity={0.6} />
+                        <XAxis 
+                          dataKey="month" 
+                          stroke="#64748b" 
+                          fontSize={12}
+                          label={{ value: 'Month', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                        />
+                        <YAxis 
+                          stroke="#64748b" 
+                          fontSize={12}
+                          label={{ value: 'Monthly Visitors', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                        />
+                        <Tooltip 
+                          formatter={(value, name) => [`${value?.toLocaleString()} visitors`, 'Organic Traffic']}
+                          labelFormatter={(label) => `Month: ${label}`}
+                          contentStyle={{ 
+                            backgroundColor: 'white', 
+                            border: '1px solid #e2e8f0', 
+                            borderRadius: '8px',
+                            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                          }} 
+                        />
+                        <Area 
+                          type="monotone" 
+                          dataKey="organicTraffic" 
+                          stroke="#10b981" 
+                          fillOpacity={1} 
+                          fill="url(#colorTraffic)" 
+                          strokeWidth={2}
+                          name="Organic Traffic"
+                        />
+                      </AreaChart>
                     </ResponsiveContainer>
                   ) : (
                     <div className="text-center text-slate-500 py-12">
-                      <BarChart3 className="h-12 w-12 mx-auto text-slate-300 mb-4" />
-                      <p>Performance trend data not available</p>
+                      <TrendingUp className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+                      <p className="font-medium">Organic traffic data not available</p>
+                      <p className="text-sm text-slate-400">
+                        {metrics.seoMetrics?.organicTraffic ? 
+                          `Current estimated traffic: ${metrics.seoMetrics.organicTraffic.toLocaleString()} monthly visitors` : 
+                          'No traffic data available'
+                        }
+                      </p>
                     </div>
                   )}
                 </CardContent>
               </Card>
+
+              {/* Backlinks Growth */}
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-slate-800">Backlink Portfolio Growth</CardTitle>
+                  <CardDescription className="text-slate-600">Monthly backlink acquisition and domain authority progression</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {metrics.performanceData && metrics.performanceData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={metrics.performanceData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeOpacity={0.6} />
+                        <XAxis 
+                          dataKey="month" 
+                          stroke="#64748b" 
+                          fontSize={12}
+                          label={{ value: 'Month', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                        />
+                        <YAxis 
+                          stroke="#64748b" 
+                          fontSize={12}
+                          label={{ value: 'Backlinks Count', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                        />
+                        <Tooltip 
+                          formatter={(value, name) => [
+                            name === 'backlinks' ? `${value?.toLocaleString()} backlinks` : `${value}/100`,
+                            name === 'backlinks' ? 'Total Backlinks' : 'Domain Authority'
+                          ]}
+                          labelFormatter={(label) => `Month: ${label}`}
+                          contentStyle={{ 
+                            backgroundColor: 'white', 
+                            border: '1px solid #e2e8f0', 
+                            borderRadius: '8px',
+                            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                          }} 
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="backlinks" 
+                          stroke="#3b82f6" 
+                          strokeWidth={3} 
+                          dot={{ fill: '#3b82f6', strokeWidth: 2, r: 4 }}
+                          name="Total Backlinks"
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="domainAuthority" 
+                          stroke="#8b5cf6" 
+                          strokeWidth={2} 
+                          dot={{ fill: '#8b5cf6', strokeWidth: 2, r: 3 }}
+                          name="Domain Authority"
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="text-center text-slate-500 py-12">
+                      <LinkIcon className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+                      <p className="font-medium">Backlink data not available</p>
+                      <p className="text-sm text-slate-400">
+                        {metrics.seoMetrics?.backlinks && metrics.seoMetrics?.domainAuthority ? 
+                          `Current backlinks: ${metrics.seoMetrics.backlinks.toLocaleString()} | Domain Authority: ${metrics.seoMetrics.domainAuthority}/100` : 
+                          'No backlink data available'
+                        }
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Core Web Vitals */}
+            <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-slate-800">Google Core Web Vitals</CardTitle>
+                <CardDescription className="text-slate-600">Real user experience metrics that impact search rankings</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-slate-600">Largest Contentful Paint (LCP)</span>
+                      <span className={`text-lg font-bold ${(metrics.seoMetrics?.coreWebVitals?.lcp || 0) <= 2.5 ? 'text-green-600' : 'text-red-600'}`}>
+                        {(metrics.seoMetrics?.coreWebVitals?.lcp || 0).toFixed(2)}s
+                      </span>
+                    </div>
+                    <Progress 
+                      value={Math.min(100, Math.max(0, ((metrics.seoMetrics?.coreWebVitals?.lcp || 0) / 2.5) * 100))} 
+                      className="h-2"
+                      color={metrics.seoMetrics?.coreWebVitals?.lcp <= 2.5 ? 'green' : 'red'}
+                    />
+                    <p className="text-xs text-slate-500">
+                      {(metrics.seoMetrics?.coreWebVitals?.lcp || 0) <= 2.5 ? 'Good (≤2.5s)' : 'Needs improvement (>2.5s)'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-slate-600">First Input Delay (FID)</span>
+                      <span className={`text-lg font-bold ${(metrics.seoMetrics?.coreWebVitals?.fid || 0) <= 100 ? 'text-green-600' : 'text-red-600'}`}>
+                        {(metrics.seoMetrics?.coreWebVitals?.fid || 0).toFixed(0)}ms
+                      </span>
+                    </div>
+                    <Progress 
+                      value={Math.min(100, Math.max(0, ((metrics.seoMetrics?.coreWebVitals?.fid || 0) / 100) * 100))} 
+                      className="h-2"
+                      color={metrics.seoMetrics?.coreWebVitals?.fid <= 100 ? 'green' : 'red'}
+                    />
+                    <p className="text-xs text-slate-500">
+                      {(metrics.seoMetrics?.coreWebVitals?.fid || 0) <= 100 ? 'Good (≤100ms)' : 'Needs improvement (>100ms)'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-slate-600">Cumulative Layout Shift (CLS)</span>
+                      <span className={`text-lg font-bold ${(metrics.seoMetrics?.coreWebVitals?.cls || 0) <= 0.1 ? 'text-green-600' : 'text-red-600'}`}>
+                        {(metrics.seoMetrics?.coreWebVitals?.cls || 0).toFixed(3)}
+                      </span>
+                    </div>
+                    <Progress 
+                      value={Math.min(100, Math.max(0, ((metrics.seoMetrics?.coreWebVitals?.cls || 0) / 0.1) * 100))} 
+                      className="h-2"
+                      color={metrics.seoMetrics?.coreWebVitals?.cls <= 0.1 ? 'green' : 'red'}
+                    />
+                    <p className="text-xs text-slate-500">
+                      {(metrics.seoMetrics?.coreWebVitals?.cls || 0) <= 0.1 ? 'Good (≤0.1)' : 'Needs improvement (>0.1)'}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Content Quality Metrics */}
+            <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-slate-800">Content Quality Analysis</CardTitle>
+                <CardDescription className="text-slate-600">Content quality and engagement metrics</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-slate-600">Readability Score</span>
+                      <span className="text-lg font-bold text-slate-800">
+                        {metrics.seoMetrics?.contentQuality?.readability ? `${metrics.seoMetrics.contentQuality.readability}/100` : '—'}
+                      </span>
+                    </div>
+                    <Progress value={metrics.seoMetrics?.contentQuality?.readability || 0} className="h-2" />
+                    <p className="text-xs text-slate-500">
+                      {metrics.seoMetrics?.contentQuality?.readability ? 
+                        (metrics.seoMetrics.contentQuality.readability >= 80 ? 'Excellent' : 
+                         metrics.seoMetrics.contentQuality.readability >= 60 ? 'Good' : 'Needs improvement') : 
+                        'No data available'
+                      }
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-slate-600">Content Depth</span>
+                      <span className="text-lg font-bold text-slate-800">
+                        {metrics.seoMetrics?.contentQuality?.depth ? `${metrics.seoMetrics.contentQuality.depth}/100` : '—'}
+                      </span>
+                    </div>
+                    <Progress value={metrics.seoMetrics?.contentQuality?.depth || 0} className="h-2" />
+                    <p className="text-xs text-slate-500">
+                      {metrics.seoMetrics?.contentQuality?.depth ? 
+                        (metrics.seoMetrics.contentQuality.depth >= 80 ? 'Comprehensive' : 
+                         metrics.seoMetrics.contentQuality.depth >= 60 ? 'Good' : 'Shallow') : 
+                        'No data available'
+                      }
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-slate-600">Content Freshness</span>
+                      <span className="text-lg font-bold text-slate-800">
+                        {metrics.seoMetrics?.contentQuality?.freshness ? `${metrics.seoMetrics.contentQuality.freshness}/100` : '—'}
+                      </span>
+                    </div>
+                    <Progress value={metrics.seoMetrics?.contentQuality?.freshness || 0} className="h-2" />
+                    <p className="text-xs text-slate-500">
+                      {metrics.seoMetrics?.contentQuality?.freshness ? 
+                        (metrics.seoMetrics.contentQuality.freshness >= 80 ? 'Very Fresh' : 
+                         metrics.seoMetrics.contentQuality.freshness >= 60 ? 'Recent' : 'Outdated') : 
+                        'No data available'
+                      }
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="performance" className="space-y-8">
+            {/* Performance Overview Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-blue-50 rounded-lg">
+                      <TrendingUp className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Growth Rate</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.performanceData && metrics.performanceData.length > 1 ? 
+                          Math.round(((metrics.performanceData[metrics.performanceData.length - 1].score - metrics.performanceData[0].score) / metrics.performanceData[0].score) * 100) : 0}%
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-green-50 rounded-lg">
+                      <Activity className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Avg Response Time</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.modelPerformance && metrics.modelPerformance.length > 0 ? 
+                          (metrics.modelPerformance.reduce((sum, m) => sum + parseFloat(m.avgLatency || '0'), 0) / metrics.modelPerformance.length).toFixed(1) : '—'}s
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-purple-50 rounded-lg">
+                      <Star className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Success Rate</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.totalQueries > 0 ? Math.round((metrics.totalQueries - (metrics.totalQueries * 0.1)) / metrics.totalQueries * 100) : '—'}%
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-amber-50 rounded-lg">
+                      <BarChart3 className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Market Share</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.competitiveAnalysis?.marketShare ? `${metrics.competitiveAnalysis.marketShare.toFixed(1)}%` : '—'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                          {/* Performance Metrics Over Time */}
+            <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-slate-800">AI Model Performance Trends</CardTitle>
+                <CardDescription className="text-slate-600">6-month progression of AI visibility, mentions, and query volume</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {metrics.performanceData && metrics.performanceData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={350}>
+                    <LineChart data={metrics.performanceData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis 
+                        dataKey="month" 
+                        stroke="#64748b" 
+                        fontSize={12}
+                        label={{ value: 'Month', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                      />
+                      <YAxis 
+                        stroke="#64748b" 
+                        fontSize={12}
+                        label={{ value: 'Count / Score', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                      />
+                      <Tooltip 
+                        formatter={(value, name) => [
+                          name === 'score' ? `${value}%` : value?.toLocaleString(),
+                          name === 'score' ? 'AI Visibility Score' : name === 'mentions' ? 'Domain Mentions' : 'Total Queries'
+                        ]}
+                        labelFormatter={(label) => `Month: ${label}`}
+                        contentStyle={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }} 
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="score" 
+                        stroke="#3b82f6" 
+                        strokeWidth={3} 
+                        dot={{ fill: '#3b82f6', strokeWidth: 2, r: 4 }}
+                        name="AI Visibility Score"
+                      />
+                      {metrics.performanceData.every(d => 'mentions' in d) && (
+                        <Line 
+                          type="monotone" 
+                          dataKey="mentions" 
+                          stroke="#10b981" 
+                          strokeWidth={2} 
+                          dot={{ fill: '#10b981', strokeWidth: 2, r: 3 }}
+                          name="Domain Mentions"
+                        />
+                      )}
+                      {metrics.performanceData.every(d => 'queries' in d) && (
+                        <Line 
+                          type="monotone" 
+                          dataKey="queries" 
+                          stroke="#f59e42" 
+                          strokeWidth={2} 
+                          dot={{ fill: '#f59e42', strokeWidth: 2, r: 3 }}
+                          name="Total Queries"
+                        />
+                      )}
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center text-slate-500 py-12">
+                    <BarChart3 className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+                    <p className="font-medium">Performance trend data not available</p>
+                    <p className="text-sm text-slate-400">Current metrics: {metrics.visibilityScore}% visibility, {Math.round(metrics.totalQueries * parseFloat(metrics.mentionRate) / 100)} mentions</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
               {/* Current Metrics Breakdown */}
               <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
@@ -1057,13 +1578,78 @@ const DomainDashboard = () => {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Domain Authority Trend */}
+            <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-slate-800">Domain Authority Progression</CardTitle>
+                <CardDescription className="text-slate-600">6-month domain authority score progression (0-100 scale)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {metrics.performanceData && metrics.performanceData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <AreaChart data={metrics.performanceData}>
+                      <defs>
+                        <linearGradient id="colorAuthority" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.1}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeOpacity={0.6} />
+                      <XAxis 
+                        dataKey="month" 
+                        stroke="#64748b" 
+                        fontSize={12}
+                        label={{ value: 'Month', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                      />
+                      <YAxis 
+                        stroke="#64748b" 
+                        fontSize={12}
+                        domain={[0, 100]}
+                        label={{ value: 'Domain Authority Score', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                      />
+                      <Tooltip 
+                        formatter={(value, name) => [`${value}/100`, 'Domain Authority']}
+                        labelFormatter={(label) => `Month: ${label}`}
+                        contentStyle={{ 
+                          backgroundColor: 'white', 
+                          border: '1px solid #e2e8f0', 
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                        }} 
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="domainAuthority" 
+                        stroke="#8b5cf6" 
+                        fillOpacity={1} 
+                        fill="url(#colorAuthority)" 
+                        strokeWidth={2}
+                        name="Domain Authority"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center text-slate-500 py-12">
+                    <Shield className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+                    <p className="font-medium">Domain authority trend data not available</p>
+                    <p className="text-sm text-slate-400">
+                      {metrics.seoMetrics?.domainAuthority ? 
+                        `Current domain authority: ${metrics.seoMetrics.domainAuthority}/100` : 
+                        'No domain authority data available'
+                      }
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="models" className="space-y-8">
             <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
               <CardHeader>
-                <CardTitle className="text-slate-800">AI Model Performance</CardTitle>
-                <CardDescription className="text-slate-600">Performance breakdown by different AI models</CardDescription>
+                <CardTitle className="text-slate-800">AI Model Performance Analysis</CardTitle>
+                <CardDescription className="text-slate-600">Domain mention performance across different AI language models</CardDescription>
               </CardHeader>
               <CardContent>
                 {metrics.modelPerformance && metrics.modelPerformance.length > 0 ? (
@@ -1071,9 +1657,22 @@ const DomainDashboard = () => {
                     <ResponsiveContainer width="100%" height={400}>
                       <BarChart data={metrics.modelPerformance} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="model" stroke="#64748b" fontSize={12} />
-                        <YAxis stroke="#64748b" fontSize={12} />
-                        <Tooltip contentStyle={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }} />
+                        <XAxis 
+                          dataKey="model" 
+                          stroke="#64748b" 
+                          fontSize={12}
+                          label={{ value: 'AI Model', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                        />
+                        <YAxis 
+                          stroke="#64748b" 
+                          fontSize={12}
+                          label={{ value: 'Domain Mentions', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                        />
+                        <Tooltip 
+                          formatter={(value, name) => [`${value} mentions`, 'Domain Mentions']}
+                          labelFormatter={(label) => `Model: ${label}`}
+                          contentStyle={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }} 
+                        />
                         <Bar dataKey="mentions" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -1102,11 +1701,501 @@ const DomainDashboard = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="keywords" className="space-y-8">
+          <TabsContent value="technical" className="space-y-8">
+            {/* Technical SEO Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-blue-50 rounded-lg">
+                      <Activity className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Crawlability</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.technicalMetrics?.crawlability ? `${metrics.technicalMetrics.crawlability}%` : '—'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-green-50 rounded-lg">
+                      <Eye className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Indexability</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.technicalMetrics?.indexability ? `${metrics.technicalMetrics.indexability}%` : '—'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-purple-50 rounded-lg">
+                      <Users className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Mobile Friendly</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.technicalMetrics?.mobileFriendliness ? `${metrics.technicalMetrics.mobileFriendliness}%` : '—'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-amber-50 rounded-lg">
+                      <Shield className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Security Score</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.technicalMetrics?.securityScore ? `${metrics.technicalMetrics.securityScore}%` : '—'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Technical SEO Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Technical SEO Radar Chart */}
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-slate-800">Technical SEO Overview</CardTitle>
+                  <CardDescription className="text-slate-600">Comprehensive technical SEO metrics</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-slate-600">SSL Certificate</span>
+                      <Badge className={metrics.seoMetrics?.technicalSeo?.ssl ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}>
+                        {metrics.seoMetrics?.technicalSeo?.ssl ? 'Active' : 'Missing'}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-slate-600">Mobile Optimization</span>
+                      <Badge className={metrics.seoMetrics?.technicalSeo?.mobile ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}>
+                        {metrics.seoMetrics?.technicalSeo?.mobile ? 'Optimized' : 'Not Optimized'}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-slate-600">XML Sitemap</span>
+                      <Badge className={metrics.seoMetrics?.technicalSeo?.sitemap ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}>
+                        {metrics.seoMetrics?.technicalSeo?.sitemap ? 'Present' : 'Missing'}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-slate-600">Robots.txt</span>
+                      <Badge className={metrics.seoMetrics?.technicalSeo?.robots ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}>
+                        {metrics.seoMetrics?.technicalSeo?.robots ? 'Present' : 'Missing'}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Page Speed Distribution */}
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-slate-800">Performance Metrics</CardTitle>
+                  <CardDescription className="text-slate-600">Page speed and performance indicators</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-slate-600">Page Speed Score</span>
+                        <span className={`text-lg font-bold ${metrics.seoMetrics?.pageSpeed ? 
+                          (metrics.seoMetrics.pageSpeed >= 90 ? 'text-green-600' : metrics.seoMetrics.pageSpeed >= 70 ? 'text-yellow-600' : 'text-red-600') : 
+                          'text-slate-400'}`}>
+                          {metrics.seoMetrics?.pageSpeed ? `${metrics.seoMetrics.pageSpeed}/100` : '—'}
+                        </span>
+                      </div>
+                      <Progress value={metrics.seoMetrics?.pageSpeed || 0} className="h-2" />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-slate-600">Mobile Score</span>
+                        <span className={`text-lg font-bold ${metrics.seoMetrics?.mobileScore ? 
+                          (metrics.seoMetrics.mobileScore >= 90 ? 'text-green-600' : metrics.seoMetrics.mobileScore >= 70 ? 'text-yellow-600' : 'text-red-600') : 
+                          'text-slate-400'}`}>
+                          {metrics.seoMetrics?.mobileScore ? `${metrics.seoMetrics.mobileScore}/100` : '—'}
+                        </span>
+                      </div>
+                      <Progress value={metrics.seoMetrics?.mobileScore || 0} className="h-2" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Technical Issues */}
             <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
               <CardHeader>
-                <CardTitle className="text-slate-800">All Keywords</CardTitle>
-                <CardDescription className="text-slate-600">Complete list of tracked keywords</CardDescription>
+                <CardTitle className="text-slate-800">Technical SEO Issues</CardTitle>
+                <CardDescription className="text-slate-600">Issues that need attention</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {(!metrics.seoMetrics?.technicalSeo?.ssl || !metrics.seoMetrics?.technicalSeo?.sitemap || !metrics.seoMetrics?.technicalSeo?.robots || (metrics.seoMetrics?.pageSpeed || 0) < 70) ? (
+                    <div className="space-y-3">
+                      {!metrics.seoMetrics?.technicalSeo?.ssl && (
+                        <div className="flex items-center space-x-3 p-3 bg-red-50 rounded-lg">
+                          <AlertTriangle className="h-5 w-5 text-red-600" />
+                          <div>
+                            <p className="font-medium text-red-800">SSL Certificate Missing</p>
+                            <p className="text-sm text-red-600">Install SSL certificate for better security and SEO</p>
+                          </div>
+                        </div>
+                      )}
+                      {!metrics.seoMetrics?.technicalSeo?.sitemap && (
+                        <div className="flex items-center space-x-3 p-3 bg-yellow-50 rounded-lg">
+                          <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                          <div>
+                            <p className="font-medium text-yellow-800">XML Sitemap Missing</p>
+                            <p className="text-sm text-yellow-600">Create and submit XML sitemap to search engines</p>
+                          </div>
+                        </div>
+                      )}
+                      {!metrics.seoMetrics?.technicalSeo?.robots && (
+                        <div className="flex items-center space-x-3 p-3 bg-yellow-50 rounded-lg">
+                          <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                          <div>
+                            <p className="font-medium text-yellow-800">Robots.txt Missing</p>
+                            <p className="text-sm text-yellow-600">Create robots.txt file for better crawl control</p>
+                          </div>
+                        </div>
+                      )}
+                      {(metrics.seoMetrics?.pageSpeed || 0) < 70 && (
+                        <div className="flex items-center space-x-3 p-3 bg-orange-50 rounded-lg">
+                          <Zap className="h-5 w-5 text-orange-600" />
+                          <div>
+                            <p className="font-medium text-orange-800">Page Speed Needs Improvement</p>
+                            <p className="text-sm text-orange-600">Optimize images, minify CSS/JS, and use CDN</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <Shield className="h-12 w-12 mx-auto text-green-600 mb-4" />
+                      <p className="text-green-800 font-medium">All technical SEO issues resolved!</p>
+                      <p className="text-sm text-green-600">Your site is technically optimized</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="content" className="space-y-8">
+            {/* Content Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-blue-50 rounded-lg">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Total Pages</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.contentPerformance?.totalPages ? metrics.contentPerformance.totalPages : '—'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-green-50 rounded-lg">
+                      <Eye className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Indexed Pages</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.contentPerformance?.indexedPages ? metrics.contentPerformance.indexedPages : '—'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-purple-50 rounded-lg">
+                      <Star className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Avg Page Score</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.contentPerformance?.avgPageScore ? `${metrics.contentPerformance.avgPageScore}/100` : '—'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-amber-50 rounded-lg">
+                      <Target className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Content Gaps</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.contentPerformance?.contentGaps ? metrics.contentPerformance.contentGaps.length : '—'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Top Performing Pages */}
+            <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-slate-800">Top Performing Pages</CardTitle>
+                <CardDescription className="text-slate-600">Pages with highest traffic and engagement</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {metrics.contentPerformance?.topPerformingPages && metrics.contentPerformance.topPerformingPages.length > 0 ? (
+                  <div className="space-y-4">
+                    {metrics.contentPerformance.topPerformingPages.map((page, index) => (
+                      <div key={index} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                        <div className="flex-1">
+                          <p className="font-medium text-slate-800">{page.url}</p>
+                          <p className="text-sm text-slate-600">{page.traffic.toLocaleString()} monthly visitors</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold text-slate-800">{page.score}/100</p>
+                          <p className="text-sm text-slate-600">Page Score</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center text-slate-500 py-12">
+                    <FileText className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+                    <p>No page performance data available</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Content Gaps */}
+            <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-slate-800">Content Opportunities</CardTitle>
+                <CardDescription className="text-slate-600">Identified content gaps and opportunities</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {metrics.contentPerformance?.contentGaps && metrics.contentPerformance.contentGaps.length > 0 ? (
+                  <div className="space-y-3">
+                    {metrics.contentPerformance.contentGaps.map((gap, index) => (
+                      <div key={index} className="flex items-start space-x-3 p-3 bg-blue-50 rounded-lg">
+                        <Lightbulb className="h-5 w-5 text-blue-600 mt-0.5" />
+                        <div>
+                          <p className="font-medium text-blue-800">{gap}</p>
+                          <p className="text-sm text-blue-600">High potential for organic traffic growth</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center text-slate-500 py-12">
+                    <Target className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+                    <p>No content gaps identified</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="keywords" className="space-y-8">
+            {/* Keyword Analytics Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-red-50 rounded-lg">
+                      <TrendingUp className="h-5 w-5 text-red-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Hard Keywords</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.keywordAnalytics?.highVolume ? metrics.keywordAnalytics.highVolume : '—'}
+                      </p>
+                      <p className="text-xs text-slate-500">10K+ monthly searches</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-yellow-50 rounded-lg">
+                      <Target className="h-5 w-5 text-yellow-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Medium Keywords</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.keywordAnalytics?.mediumVolume ? metrics.keywordAnalytics.mediumVolume : '—'}
+                      </p>
+                      <p className="text-xs text-slate-500">1K-10K monthly searches</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-green-50 rounded-lg">
+                      <BarChart3 className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Easy Keywords</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.keywordAnalytics?.lowVolume ? metrics.keywordAnalytics.lowVolume : '—'}
+                      </p>
+                      <p className="text-xs text-slate-500">&lt;1K monthly searches</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-purple-50 rounded-lg">
+                      <Star className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Branded</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {metrics.keywordAnalytics?.branded ? metrics.keywordAnalytics.branded : '—'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Keyword Distribution Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Volume Distribution */}
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-slate-800">Keyword Difficulty by Volume</CardTitle>
+                  <CardDescription className="text-slate-600">Distribution of {metrics.keywordCount} keywords by search volume (Ahrefs-style)</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {(() => {
+                    const pieData = [
+                      { name: 'Hard (10K+)', value: metrics.keywordAnalytics?.highVolume || 0, color: '#ef4444' },
+                      { name: 'Medium (1K-10K)', value: metrics.keywordAnalytics?.mediumVolume || 0, color: '#f59e0b' },
+                      { name: 'Easy (<1K)', value: metrics.keywordAnalytics?.lowVolume || 0, color: '#10b981' }
+                    ];
+                    console.log('Pie chart data:', pieData);
+                    console.log('Keyword analytics object:', metrics.keywordAnalytics);
+                    
+                    return (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={pieData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={100}
+                            paddingAngle={2}
+                            dataKey="value"
+                            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                            labelLine={false}
+                          >
+                            {pieData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip 
+                            formatter={(value, name) => [`${value} keywords`, name]}
+                            labelFormatter={() => `Keyword Portfolio`}
+                            contentStyle={{
+                              backgroundColor: 'white',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '8px',
+                              boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+
+              {/* Difficulty Distribution */}
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-slate-800">Keyword Competition Difficulty</CardTitle>
+                  <CardDescription className="text-slate-600">Distribution by SEO competition level and ranking difficulty</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={[
+                      { difficulty: 'High (70-100)', count: metrics.keywordAnalytics?.highDifficulty || 0, color: '#ef4444' },
+                      { difficulty: 'Medium (30-70)', count: metrics.keywordAnalytics?.mediumDifficulty || 0, color: '#f59e0b' },
+                      { difficulty: 'Low (0-30)', count: metrics.keywordAnalytics?.lowDifficulty || 0, color: '#10b981' }
+                    ]}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis 
+                        dataKey="difficulty" 
+                        stroke="#64748b" 
+                        fontSize={11}
+                        label={{ value: 'Competition Level', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                      />
+                      <YAxis 
+                        stroke="#64748b" 
+                        fontSize={12}
+                        label={{ value: 'Number of Keywords', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                      />
+                      <Tooltip 
+                        formatter={(value, name) => [`${value} keywords`, 'Keyword Count']}
+                        labelFormatter={(label) => `Difficulty: ${label}`}
+                        contentStyle={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }} 
+                      />
+                      <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Keyword Performance Table */}
+            <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-slate-800">Keyword Performance Analysis</CardTitle>
+                <CardDescription className="text-slate-600">Detailed keyword performance metrics</CardDescription>
               </CardHeader>
               <CardContent>
                 {metrics.keywordPerformance && metrics.keywordPerformance.length > 0 ? (
@@ -1114,17 +2203,46 @@ const DomainDashboard = () => {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          {Object.keys(metrics.keywordPerformance[0]).map((field) => (
-                            <TableHead key={field}>{field.charAt(0).toUpperCase() + field.slice(1)}</TableHead>
-                          ))}
+                          <TableHead>Keyword</TableHead>
+                          <TableHead>Visibility</TableHead>
+                          <TableHead>Mentions</TableHead>
+                          <TableHead>Sentiment</TableHead>
+                          <TableHead>Volume</TableHead>
+                          <TableHead>Difficulty</TableHead>
+                          <TableHead>CPC</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {metrics.keywordPerformance.map((keyword, index) => (
                           <TableRow key={index}>
-                            {Object.keys(keyword).map((field) => (
-                              <TableCell key={field}>{keyword[field]}</TableCell>
-                            ))}
+                            <TableCell className="font-medium">{keyword.keyword}</TableCell>
+                                                         <TableCell>
+                               <div className="flex items-center space-x-2">
+                                 <span className="text-sm font-medium">{keyword.visibility}%</span>
+                                 <Progress value={keyword.visibility} className="w-16 h-2" />
+                               </div>
+                             </TableCell>
+                             <TableCell>{keyword.mentions}</TableCell>
+                             <TableCell>
+                               <Badge className={
+                                 keyword.sentiment >= 4 ? 'bg-green-50 text-green-700 border-green-200' :
+                                 keyword.sentiment >= 3 ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                 'bg-red-50 text-red-700 border-red-200'
+                               }>
+                                 {keyword.sentiment}/5
+                               </Badge>
+                             </TableCell>
+                             <TableCell>{keyword.volume?.toLocaleString()}</TableCell>
+                             <TableCell>
+                               <Badge className={
+                                 keyword.difficulty === 'High' ? 'bg-red-50 text-red-700 border-red-200' :
+                                 keyword.difficulty === 'Medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                 'bg-green-50 text-green-700 border-green-200'
+                               }>
+                                 {keyword.difficulty}
+                               </Badge>
+                             </TableCell>
+                             <TableCell>${keyword.cpc || '0.00'}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -1132,6 +2250,7 @@ const DomainDashboard = () => {
                   </div>
                 ) : (
                   <div className="text-center text-slate-500 py-8">
+                    <Target className="h-12 w-12 mx-auto text-slate-300 mb-4" />
                     <p>No keywords configured</p>
                   </div>
                 )}
@@ -1142,8 +2261,8 @@ const DomainDashboard = () => {
           <TabsContent value="phrases" className="space-y-8">
             <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
               <CardHeader>
-                <CardTitle className="text-slate-800">Top Performing Phrases</CardTitle>
-                <CardDescription className="text-slate-600">Phrases that generate the most mentions</CardDescription>
+                <CardTitle className="text-slate-800">Top Performing AI Query Phrases</CardTitle>
+                <CardDescription className="text-slate-600">Phrases that generate the highest AI model mention rates and scores</CardDescription>
               </CardHeader>
               <CardContent>
                 {metrics.topPhrases && metrics.topPhrases.length > 0 ? (
@@ -1158,9 +2277,26 @@ const DomainDashboard = () => {
                         };
                       })} margin={{ left: 40, right: 20 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="phrase" stroke="#64748b" fontSize={11} angle={-45} textAnchor="end" height={80} interval={0} />
-                        <YAxis stroke="#64748b" fontSize={12} />
-                        <Tooltip contentStyle={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }} />
+                        <XAxis 
+                          dataKey="phrase" 
+                          stroke="#64748b" 
+                          fontSize={11} 
+                          angle={-45} 
+                          textAnchor="end" 
+                          height={80} 
+                          interval={0}
+                          label={{ value: 'AI Query Phrases', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                        />
+                        <YAxis 
+                          stroke="#64748b" 
+                          fontSize={12}
+                          label={{ value: 'Performance Score', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                        />
+                        <Tooltip 
+                          formatter={(value, name) => [`${value}`, 'Performance Score']}
+                          labelFormatter={(label) => `Phrase: ${label}`}
+                          contentStyle={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }} 
+                        />
                         <Bar dataKey={pickPhraseBarKey(metrics.topPhrases)} fill="#8b5cf6" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -1309,15 +2445,21 @@ const DomainDashboard = () => {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <div className="space-y-2">
                         <h4 className="font-semibold text-slate-800">Market Size</h4>
-                        <p className="text-2xl font-bold text-blue-600">{competitorData.marketInsights?.marketSize || 'N/A'}</p>
+                        <p className="text-2xl font-bold text-blue-600">
+                          {competitorData.marketInsights?.marketSize ? competitorData.marketInsights.marketSize : '—'}
+                        </p>
                       </div>
                       <div className="space-y-2">
                         <h4 className="font-semibold text-slate-800">Growth Rate</h4>
-                        <p className="text-2xl font-bold text-emerald-600">{competitorData.marketInsights?.growthRate || 'N/A'}</p>
+                        <p className="text-2xl font-bold text-emerald-600">
+                          {competitorData.marketInsights?.growthRate ? competitorData.marketInsights.growthRate : '—'}
+                        </p>
                       </div>
                       <div className="space-y-2">
                         <h4 className="font-semibold text-slate-800">Market Leader</h4>
-                        <p className="text-lg font-semibold text-slate-800">{competitorData.marketInsights?.marketLeader || 'N/A'}</p>
+                        <p className="text-lg font-semibold text-slate-800">
+                          {competitorData.marketInsights?.marketLeader ? competitorData.marketInsights.marketLeader : '—'}
+                        </p>
                       </div>
                     </div>
 

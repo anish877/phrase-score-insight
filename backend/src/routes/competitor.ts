@@ -56,59 +56,46 @@ router.post('/analyze', async (req: Request, res: Response) => {
 
     // Create comprehensive AI prompt for competitor analysis
     const analysisPrompt = `
-You are an expert SEO and AI visibility analyst. Analyze the competitor domain "${competitorDomain}" compared to the target domain "${targetDomain}" in the context of AI-powered search visibility.
+You are an expert SEO and AI visibility analyst. Compare "${targetDomain}" and "${competitorDomain}" in detail.
 
-TARGET DOMAIN CONTEXT:
-- Domain: ${targetDomain}
-- Brand Context: ${context || 'Not provided'}
-- Keywords: ${keywords?.join(', ') || 'Not provided'}
-- Phrases: ${phrases?.join(', ') || 'Not provided'}
+1. Provide a summary of the competitive landscape.
+2. Create a metrics table for both domains with: traffic, domain authority, backlinks, page speed, mobile score, AI visibility score, keyword count, phrase count, average relevance, accuracy, sentiment.
+3. Calculate keyword and phrase overlap (% and list top 10).
+4. Compare AI visibility (score and mention rate for each).
+5. Provide a SWOT analysis for both domains.
+6. List 5-8 prioritized recommendations for the target domain, with expected impact and effort (high/medium/low).
+7. Classify each domain as leader/challenger/niche and justify.
+8. List any recent news/events for each domain (if available).
 
-TARGET DOMAIN PERFORMANCE DATA:
-- Total AI Queries: ${targetDomainData.keywords.flatMap(k => k.phrases.flatMap(p => p.aiQueryResults)).length}
-- Domain Presence Rate: ${targetDomainData.keywords.flatMap(k => k.phrases.flatMap(p => p.aiQueryResults)).filter(r => r.presence === 1).length / Math.max(targetDomainData.keywords.flatMap(k => k.phrases.flatMap(p => p.aiQueryResults)).length, 1) * 100}%
-- Average Relevance Score: ${targetDomainData.keywords.flatMap(k => k.phrases.flatMap(p => p.aiQueryResults)).reduce((sum, r) => sum + r.relevance, 0) / Math.max(targetDomainData.keywords.flatMap(k => k.phrases.flatMap(p => p.aiQueryResults)).length, 1)}
-- Average Accuracy Score: ${targetDomainData.keywords.flatMap(k => k.phrases.flatMap(p => p.aiQueryResults)).reduce((sum, r) => sum + r.accuracy, 0) / Math.max(targetDomainData.keywords.flatMap(k => k.phrases.flatMap(p => p.aiQueryResults)).length, 1)}
-- Average Sentiment Score: ${targetDomainData.keywords.flatMap(k => k.phrases.flatMap(p => p.aiQueryResults)).reduce((sum, r) => sum + r.sentiment, 0) / Math.max(targetDomainData.keywords.flatMap(k => k.phrases.flatMap(p => p.aiQueryResults)).length, 1)}
-
-COMPETITOR ANALYSIS TASK:
-Analyze ${competitorDomain} as a competitor to ${targetDomain} in terms of AI visibility and search presence. Consider:
-
-1. Domain Authority and Brand Recognition
-2. Content Quality and Relevance
-3. Search Engine Optimization
-4. AI Model Recognition
-5. Market Positioning
-6. Content Strategy
-7. Technical SEO Factors
-
-Provide a comprehensive analysis with:
-- Estimated AI visibility score (0-100)
-- Mention rate percentage
-- Average relevance, accuracy, and sentiment scores
-- Key strengths and weaknesses
-- Specific recommendations for improvement
-- Comparison analysis showing where target domain performs better/worse/similar
-
-Respond in JSON format with the following structure:
+Return ONLY a valid JSON object with this structure:
 {
-  "domain": "${competitorDomain}",
-  "visibilityScore": <0-100>,
-  "mentionRate": <0-100>,
-  "avgRelevance": <1-5>,
-  "avgAccuracy": <1-5>,
-  "avgSentiment": <1-5>,
-  "keyStrengths": ["strength1", "strength2", ...],
-  "keyWeaknesses": ["weakness1", "weakness2", ...],
-  "recommendations": ["rec1", "rec2", ...],
-  "comparison": {
-    "better": ["area where target is better", ...],
-    "worse": ["area where target is worse", ...],
-    "similar": ["area where performance is similar", ...]
-  }
+  "summary": "...",
+  "metricsTable": [
+    { "domain": "...", "traffic": ..., "domainAuthority": ..., ... },
+    { "domain": "...", "traffic": ..., "domainAuthority": ..., ... }
+  ],
+  "keywordOverlap": { "percent": ..., "keywords": ["..."] },
+  "phraseOverlap": { "percent": ..., "phrases": ["..."] },
+  "aiVisibility": [
+    { "domain": "...", "score": ..., "mentionRate": ... },
+    { "domain": "...", "score": ..., "mentionRate": ... }
+  ],
+  "swot": {
+    "target": { "strengths": [...], "weaknesses": [...], "opportunities": [...], "threats": [...] },
+    "competitor": { "strengths": [...], "weaknesses": [...], "opportunities": [...], "threats": [...] }
+  },
+  "recommendations": [
+    { "action": "...", "impact": "high/medium/low", "effort": "high/medium/low" }
+  ],
+  "marketMap": [
+    { "domain": "...", "position": "leader/challenger/niche", "justification": "..." },
+    { "domain": "...", "position": "leader/challenger/niche", "justification": "..." }
+  ],
+  "recentNews": [
+    { "domain": "...", "headline": "...", "url": "..." }
+  ]
 }
-
-Be realistic and provide detailed, actionable insights based on typical competitive analysis patterns.
+Be realistic, use all provided data, and do not add any extra text.
 `;
 
     sendEvent({ event: 'progress', message: 'Running AI analysis...', progress: 60 });
@@ -123,7 +110,6 @@ Be realistic and provide detailed, actionable insights based on typical competit
     // Parse JSON response
     let analysisData;
     try {
-      // Extract JSON from the response (in case there's extra text)
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         analysisData = JSON.parse(jsonMatch[0]);
@@ -137,7 +123,20 @@ Be realistic and provide detailed, actionable insights based on typical competit
       return;
     }
 
-    sendEvent({ event: 'analysis', ...analysisData });
+    // Fallbacks for missing sections
+    const defaultAnalysis = {
+      summary: '',
+      metricsTable: [],
+      keywordOverlap: { percent: 0, keywords: [] },
+      phraseOverlap: { percent: 0, phrases: [] },
+      aiVisibility: [],
+      swot: { target: { strengths: [], weaknesses: [], opportunities: [], threats: [] }, competitor: { strengths: [], weaknesses: [], opportunities: [], threats: [] } },
+      recommendations: [],
+      marketMap: [],
+      recentNews: []
+    };
+    const mergedAnalysis = { ...defaultAnalysis, ...analysisData };
+    sendEvent({ event: 'analysis', ...mergedAnalysis });
     res.end();
 
   } catch (error) {

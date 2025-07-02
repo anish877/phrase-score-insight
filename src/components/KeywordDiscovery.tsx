@@ -7,6 +7,7 @@ import { Plus, X, Check, Search, Target, Brain, Loader2, AlertCircle, TrendingUp
 import { apiService, Keyword as ApiKeyword } from '@/services/api';
 import { useDebounce } from 'use-debounce';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
+import { useToast } from '@/components/ui/use-toast';
 
 interface KeywordDiscoveryProps {
   domainId: number;
@@ -14,9 +15,10 @@ interface KeywordDiscoveryProps {
   setSelectedKeywords: React.Dispatch<React.SetStateAction<string[]>>;
   onNext: () => void;
   onPrev: () => void;
+  isSaving?: boolean;
 }
 
-const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedKeywords, setSelectedKeywords, onNext, onPrev }) => {
+const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedKeywords, setSelectedKeywords, onNext, onPrev, isSaving: isSavingProp }) => {
   console.log('KeywordDiscovery rendered with domainId:', domainId);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +36,11 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
     'Categorizing keywords by user intent...',
     'Finalizing recommendations...'
   ];
-  const [debouncedKeywords] = useDebounce(selectedKeywords, 1000);
+  const [debouncedKeywords] = useDebounce(selectedKeywords, 500);
+  const { toast } = useToast();
+
+  // Use prop if provided, otherwise local state
+  const effectiveIsSaving = typeof isSavingProp === 'boolean' ? isSavingProp : isSaving;
 
   useEffect(() => {
     if (!domainId || domainId <= 0) {
@@ -60,6 +66,13 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
             if (prev.some(k => k.term === kw.term)) return prev;
             return [...prev, kw];
           });
+          // If this keyword is already selected in the database, add it to selectedKeywords
+          if (kw.isSelected) {
+            setSelectedKeywords(prev => {
+              if (prev.includes(kw.term)) return prev;
+              return [...prev, kw.term];
+            });
+          }
         } else if (ev.event === 'progress') {
           const data = JSON.parse(ev.data);
           setProgressMsg(data.message);
@@ -74,6 +87,13 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
         } else if (ev.event === 'complete') {
           setIsLoading(false);
           setProgressMsg('Keyword discovery complete!');
+          // After all keywords are loaded, ensure selectedKeywords state is in sync
+          setKeywords(prevKeywords => {
+            const selectedFromKeywords = prevKeywords.filter(k => k.isSelected).map(k => k.term);
+            console.log('Setting selected keywords from loaded keywords:', selectedFromKeywords);
+            setSelectedKeywords(selectedFromKeywords);
+            return prevKeywords;
+          });
         }
       },
       onclose() {
@@ -90,27 +110,6 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
       ctrl.abort();
     };
   }, [domainId, setSelectedKeywords]);
-
-  useEffect(() => {
-    const saveSelection = async () => {
-      if (debouncedKeywords.length === 0 || isLoading) return;
-      setIsSaving(true);
-      console.log('Saving selected keywords to backend:', debouncedKeywords);
-      try {
-        await apiService.updateKeywordSelection(domainId, debouncedKeywords as string[]);
-        console.log('Successfully saved selected keywords:', debouncedKeywords);
-        const res = await apiService.getKeywords(domainId);
-        if (res && Array.isArray(res.keywords)) {
-          setKeywords(res.keywords);
-        }
-      } catch (err) {
-        console.error('Failed to save keyword selection:', err);
-      } finally {
-        setTimeout(() => setIsSaving(false), 500);
-      }
-    };
-    saveSelection();
-  }, [debouncedKeywords, domainId, isLoading]);
 
   const sortedKeywords = useMemo(() =>
     [...keywords].sort((a, b) => b.volume - a.volume),
@@ -140,14 +139,18 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
   };
 
   const removeKeyword = (keyword: string) => {
+    console.log('Removing keyword:', keyword, 'from:', selectedKeywords);
     setSelectedKeywords(selectedKeywords.filter(k => k.toLowerCase() !== keyword.toLowerCase()));
   };
 
   const toggleKeyword = (keyword: string) => {
     const lowerKeyword = keyword.toLowerCase();
+    console.log('Toggling keyword:', keyword, 'Current selected:', selectedKeywords);
     if (selectedKeywords.map(k => k.toLowerCase()).includes(lowerKeyword)) {
+      console.log('Removing keyword:', keyword);
       removeKeyword(keyword);
     } else {
+      console.log('Adding keyword:', keyword);
       setSelectedKeywords([...selectedKeywords, keyword]);
     }
   };
@@ -182,7 +185,7 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
          totalVolume={totalVolume}
          categoryCount={keywords.length}
          avgDifficulty={getAvgDifficultyLabel(avgDifficultyScore)}
-         isSaving={isSaving}
+         isSaving={effectiveIsSaving}
        />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -228,7 +231,7 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
         </div>
       </div>
 
-      <Footer onPrev={onPrev} onNext={onNext} isSaving={isSaving} selectedCount={selectedKeywords.length} selectedKeywords={selectedKeywords} />
+      <Footer onPrev={onPrev} onNext={onNext} isSaving={effectiveIsSaving} selectedCount={selectedKeywords.length} selectedKeywords={selectedKeywords} domainId={domainId} />
     </div>
   );
 };
@@ -396,22 +399,43 @@ interface FooterProps {
     isSaving: boolean;
     selectedCount: number;
     selectedKeywords: string[];
+    domainId: number;
 }
-const Footer: React.FC<FooterProps> = ({ onPrev, onNext, isSaving, selectedCount, selectedKeywords }) => (
-    <div className="flex gap-4 mt-8">
-        <Button variant="outline" onClick={onPrev} className="px-8">Previous Step</Button>
-        <Button 
-            onClick={() => {
-                console.log('Continue clicked. Selected keywords:', selectedKeywords);
-                onNext();
-            }}
-            disabled={selectedCount === 0 || isSaving}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-12 font-semibold"
-        >
-            {isSaving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Saving selection...</> : `Continue with ${selectedCount} Keywords`}
-        </Button>
-    </div>
-);
+const Footer: React.FC<FooterProps> = ({ onPrev, onNext, isSaving, selectedCount, selectedKeywords, domainId }) => {
+    const [saving, setSaving] = React.useState(false);
+    const { toast } = useToast();
+    const handleContinue = async () => {
+        setSaving(true);
+        try {
+            await apiService.updateKeywordSelection(domainId, selectedKeywords as string[]);
+            setSaving(false);
+            toast({
+                title: "Keywords Saved",
+                description: "Selected keywords have been successfully saved.",
+            });
+            onNext();
+        } catch (err) {
+            setSaving(false);
+            toast({
+                title: "Error Saving Keywords",
+                description: "Failed to save selected keywords. Please try again.",
+                variant: "destructive",
+            });
+        }
+    };
+    return (
+        <div className="flex gap-4 mt-8">
+            <Button variant="outline" onClick={onPrev} className="px-8">Previous Step</Button>
+            <Button 
+                onClick={handleContinue}
+                disabled={selectedCount === 0 || isSaving || saving}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-12 font-semibold"
+            >
+                {saving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Saving selection...</> : `Continue with ${selectedCount} Keywords`}
+            </Button>
+        </div>
+    );
+};
 
 const NoResultsCard = () => (
     <div className="text-center py-16 px-6 border-2 border-dashed rounded-lg">

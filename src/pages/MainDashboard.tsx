@@ -14,8 +14,8 @@ interface DashboardDomain {
   lastAnalyzed: string;
   metrics?: {
     visibilityScore: number;
-    keywordCount: number;
-    phraseCount: number;
+  keywordCount: number;
+  phraseCount: number;
     totalQueries?: number;
     topPhrases?: { phrase: string; score: number }[];
     modelPerformance?: { model: string; score: number }[];
@@ -71,7 +71,7 @@ const ProfessionalDashboard = () => {
       ((domain.url?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
       (domain.context?.toLowerCase() || '').includes(searchTerm.toLowerCase()))
       && !activeSessionIds.has(domain.id) // Exclude active sessions
-    );
+  );
 
   const getScoreColor = (score: number) => {
     if (score >= 90) return 'from-emerald-500 to-teal-600';
@@ -181,13 +181,13 @@ const ProfessionalDashboard = () => {
                 <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
                   <Sparkles className="h-6 w-6 text-white" />
                 </div>
-                <div>
+            <div>
                   <h1 className="text-4xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
                     AI Visibility Intelligence
-                  </h1>
+              </h1>
                   <p className="text-slate-400 text-lg font-medium">
                     Advanced brand monitoring & competitive intelligence platform
-                  </p>
+              </p>
                 </div>
               </div>
             </div>
@@ -282,10 +282,10 @@ const ProfessionalDashboard = () => {
           <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 h-5 w-5" />
-              <Input
+            <Input
                 placeholder="Search domains, brands, or industries..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:ring-0 bg-slate-50 focus:bg-white transition-all duration-200"
               />
             </div>
@@ -349,7 +349,7 @@ const ProfessionalDashboard = () => {
                   {contextPreview && (
                     <CardDescription className="text-slate-600 leading-relaxed text-sm">
                       {contextPreview}
-                    </CardDescription>
+                  </CardDescription>
                   )}
                 </CardHeader>
 
@@ -429,7 +429,7 @@ const ProfessionalDashboard = () => {
             return (
               <Card
                 key={domain.id}
-                className="group border-0 shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 bg-gradient-to-br from-white to-slate-50 overflow-hidden cursor-pointer"
+                className="group border-0 shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 bg-gradient-to-br from-white to-slate-50 overflow-hidden cursor-pointer min-h-[340px]"
                 role="button"
                 tabIndex={0}
                 onClick={() => navigate(`/dashboard/${domain.id}`)}
@@ -439,12 +439,12 @@ const ProfessionalDashboard = () => {
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                 <CardHeader className="relative space-y-4 pb-4">
                   <div className="flex items-start justify-between">
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-3 min-w-0">
                       <div className="w-10 h-10 bg-gradient-to-r from-slate-100 to-slate-200 rounded-lg flex items-center justify-center group-hover:from-blue-100 group-hover:to-indigo-100 transition-all duration-300">
                         <Globe className="h-5 w-5 text-slate-600 group-hover:text-blue-600" />
                       </div>
-                      <div>
-                        <CardTitle className="text-lg font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
+                      <div className="min-w-0">
+                        <CardTitle className="text-lg font-bold text-slate-900 group-hover:text-blue-700 transition-colors truncate" title={domain.url}>
                           {domain.url}
                         </CardTitle>
                         <div className="flex items-center space-x-2 mt-1">
@@ -457,12 +457,11 @@ const ProfessionalDashboard = () => {
                     </div>
                   </div>
                 </CardHeader>
-
-                <CardContent className="relative space-y-6">
+                <CardContent className="relative space-y-4 max-h-[420px] md:max-h-[380px] overflow-hidden p-4 md:p-6">
                   {/* Visibility Score Display */}
                   {status === 'completed' ? (
                     <div className="relative">
-                      <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-semibold text-slate-700">AI Visibility Score</span>
                         <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
                       </div>
@@ -486,11 +485,10 @@ const ProfessionalDashboard = () => {
                       </div>
                     </div>
                   )}
-
                   {/* Metrics Grid */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
-                      <div className="flex items-center space-x-2 mb-2">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-3 border border-blue-100">
+                      <div className="flex items-center space-x-2 mb-1">
                         <div className="w-6 h-6 bg-blue-500 rounded-md flex items-center justify-center">
                           <Search className="h-3 w-3 text-white" />
                         </div>
@@ -498,8 +496,8 @@ const ProfessionalDashboard = () => {
                       </div>
                       <p className="text-xl font-bold text-blue-900">{keywordCount.toLocaleString()}</p>
                     </div>
-                    <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-4 border border-emerald-100">
-                      <div className="flex items-center space-x-2 mb-2">
+                    <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-3 border border-emerald-100">
+                      <div className="flex items-center space-x-2 mb-1">
                         <div className="w-6 h-6 bg-emerald-500 rounded-md flex items-center justify-center">
                           <TrendingUp className="h-3 w-3 text-white" />
                         </div>
@@ -508,20 +506,19 @@ const ProfessionalDashboard = () => {
                       <p className="text-xl font-bold text-emerald-900">{phraseCount.toLocaleString()}</p>
                     </div>
                   </div>
-
                   {/* AI Query Result Summary */}
                   {status === 'completed' && domain.metrics && (
-                    <div className="mt-4 bg-slate-50 rounded-xl p-4 border border-slate-100">
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                        <div className="flex items-center gap-2">
+                    <div className="mt-2 bg-slate-50 rounded-xl p-3 border border-slate-100">
+                      <div className="flex flex-col gap-2 min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
                           <span className="text-xs text-slate-600">AI Queries:</span>
-                          <span className="font-bold text-blue-700">{domain.metrics.totalQueries?.toLocaleString?.() ?? '-'}</span>
+                          <span className="font-bold text-blue-700 truncate" title={domain.metrics.totalQueries?.toLocaleString?.() ?? '-'}>{domain.metrics.totalQueries?.toLocaleString?.() ?? '-'}</span>
                         </div>
                         {domain.metrics.topPhrases && domain.metrics.topPhrases.length > 0 && (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
                             <span className="text-xs text-slate-600">Top Phrase:</span>
                             <span
-                              className="font-medium text-slate-900 truncate max-w-xs"
+                              className="font-medium text-slate-900 truncate max-w-[120px] md:max-w-[180px] lg:max-w-[220px]"
                               title={domain.metrics.topPhrases[0].phrase}
                             >
                               {domain.metrics.topPhrases[0].phrase.length > 32
@@ -532,19 +529,18 @@ const ProfessionalDashboard = () => {
                           </div>
                         )}
                         {domain.metrics.modelPerformance && domain.metrics.modelPerformance.length > 0 && (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
                             <span className="text-xs text-slate-600">Best Model:</span>
-                            <span className="font-medium text-slate-900">{domain.metrics.modelPerformance[0].model}</span>
+                            <span className="font-medium text-slate-900 truncate max-w-[100px]" title={domain.metrics.modelPerformance[0].model}>{domain.metrics.modelPerformance[0].model}</span>
                             <span className="text-xs text-slate-500 ml-1">Score: {domain.metrics.modelPerformance[0].score ?? '-'}</span>
                           </div>
                         )}
                       </div>
                     </div>
                   )}
-
                   {/* Footer */}
                   <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                    <span className="text-xs text-slate-500 font-medium">
+                    <span className="text-xs text-slate-500 font-medium truncate">
                       Last analyzed: {domain.lastAnalyzed ? new Date(domain.lastAnalyzed).toLocaleDateString('en-US', { 
                         month: 'short', 
                         day: 'numeric',
@@ -573,9 +569,9 @@ const ProfessionalDashboard = () => {
               {searchTerm ? 'Try adjusting your search terms or filters to find what you\'re looking for' : 'Start building your AI visibility intelligence by analyzing your first domain'}
             </p>
             <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5" onClick={() => navigate('/analyze')}>
-              <Plus className="h-4 w-4 mr-2" />
+                <Plus className="h-4 w-4 mr-2" />
               Analyze Your First Domain
-            </Button>
+              </Button>
           </div>
         )}
       </div>

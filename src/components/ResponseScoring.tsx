@@ -7,24 +7,28 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import type { AIQueryResult, AIQueryStats } from './AIQueryResults';
+import { useToast } from '@/components/ui/use-toast';
 
 interface ResponseScoringProps {
   queryResults: AIQueryResult[];
   queryStats: AIQueryStats | null;
   onNext: () => void;
   onPrev: () => void;
+  isSaving?: boolean;
 }
 
 const ResponseScoring: React.FC<ResponseScoringProps> = ({
   queryResults,
   queryStats,
   onNext,
-  onPrev
+  onPrev,
+  isSaving = false
 }) => {
   const [selectedView, setSelectedView] = useState('overview');
   const [selectedModel, setSelectedModel] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [resultsPerPage, setResultsPerPage] = useState(25);
+  const { toast } = useToast();
 
   // Use stats from props, fallback to local calculation if needed
   const stats = queryStats;
@@ -464,14 +468,22 @@ const ResponseScoring: React.FC<ResponseScoringProps> = ({
       </Tabs>
 
       <div className="flex gap-4 mt-8">
-        <Button variant="outline" onClick={onPrev}>
+        <Button variant="outline" onClick={onPrev} disabled={isSaving}>
           Back
         </Button>
         <Button 
           onClick={onNext}
           className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+          disabled={isSaving}
         >
-          View Dashboard Summary
+          {isSaving ? (
+            <>
+              <div className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin mr-2"></div>
+              Saving & Redirecting...
+            </>
+          ) : (
+            'View Dashboard Summary'
+          )}
         </Button>
       </div>
     </div>

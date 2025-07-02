@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Edit2, Save, X } from 'lucide-react';
 import { apiService } from '@/services/api';
+import { useToast } from '@/components/ui/use-toast';
 
 interface PhraseGenerationProps {
   domainId: number;
@@ -26,6 +27,8 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
   const [editingPhrase, setEditingPhrase] = useState<{keyword: string, index: number} | null>(null);
   const [editValue, setEditValue] = useState('');
   const [stats, setStats] = useState({ totalKeywords: 0, totalPhrases: 0, avgPerKeyword: 0, aiQueries: 0 });
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (domainId) {
@@ -91,6 +94,10 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
         return item;
       });
       setGeneratedPhrases(updated);
+      toast({
+        title: "Phrase saved successfully!",
+        description: "The phrase has been successfully saved.",
+      });
     }
     setEditingPhrase(null);
     setEditValue('');

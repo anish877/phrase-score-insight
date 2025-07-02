@@ -371,107 +371,90 @@ router.post('/save-to-main/:domainId', asyncHandler(async (req: Request, res: Re
       });
 
       // Mark selected keywords
-      for (const keywordTerm of stepData.selectedKeywords) {
-        await prisma.keyword.updateMany({
-          where: { 
-            domainId,
-            term: keywordTerm
-          },
-          data: { isSelected: true }
-        });
-      }
+      await prisma.keyword.updateMany({
+        where: {
+          domainId,
+          term: { in: stepData.selectedKeywords }
+        },
+        data: { isSelected: true }
+      });
     }
 
-    // Update phrases
+    // Batch insert phrases
     if (stepData.generatedPhrases && Array.isArray(stepData.generatedPhrases)) {
+      // Gather all phrases to insert
+      let allPhrases = [];
       for (const phraseGroup of stepData.generatedPhrases) {
         const keyword = await prisma.keyword.findFirst({
-          where: { 
-            domainId,
-            term: phraseGroup.keyword
-          }
+          where: { domainId, term: phraseGroup.keyword }
         });
-
         if (keyword && phraseGroup.phrases && Array.isArray(phraseGroup.phrases)) {
-          // Add new phrases
           for (const phraseText of phraseGroup.phrases) {
-            const existing = await prisma.phrase.findFirst({
-              where: { text: phraseText, keywordId: keyword.id }
-            });
-            if (!existing) {
-              await prisma.phrase.create({
-                data: {
-                  text: phraseText,
-                  keywordId: keyword.id
-                }
-              });
-            }
+            allPhrases.push({ text: phraseText, keywordId: keyword.id });
           }
         }
       }
+      if (allPhrases.length > 0) {
+        await prisma.phrase.createMany({
+          data: allPhrases,
+          skipDuplicates: true
+        });
+      }
     }
 
-    // Update AI query results
+    // Batch upsert AI query results
     if (stepData.queryResults && Array.isArray(stepData.queryResults)) {
-      for (const result of stepData.queryResults) {
-        const keyword = await prisma.keyword.findFirst({
-          where: { 
-            domainId,
-            term: result.keyword
+      // Build a map of keyword/phrase to their IDs to minimize DB calls
+      const keywordMap: Record<string, number> = {};
+      const phraseMap: Record<string, number> = {};
+      // Get all keywords for this domain
+      const keywords = await prisma.keyword.findMany({ where: { domainId } });
+      for (const k of keywords) keywordMap[k.term] = k.id;
+      // Get all phrases for these keywords
+      const phrases = await prisma.phrase.findMany({ where: { keywordId: { in: Object.values(keywordMap) } } });
+      for (const p of phrases) phraseMap[`${p.keywordId}|${p.text}`] = p.id;
+
+      // Prepare upsert promises
+      const upsertPromises = stepData.queryResults.map((result: any) => {
+        const keywordId = keywordMap[result.keyword];
+        if (!keywordId) return null;
+        const phraseId = phraseMap[`${keywordId}|${result.phrase}`];
+        if (!phraseId) return null;
+        return prisma.aIQueryResult.upsert({
+          where: {
+            // Compound unique constraint not defined, so use phraseId+model as unique
+            phraseId_model: {
+              phraseId,
+              model: result.model
+            }
+          },
+          update: {
+            response: result.response,
+            latency: result.latency,
+            cost: result.cost,
+            presence: result.scores.presence,
+            relevance: result.scores.relevance,
+            accuracy: result.scores.accuracy,
+            sentiment: result.scores.sentiment,
+            overall: result.scores.overall
+          },
+          create: {
+            phraseId,
+            model: result.model,
+            response: result.response,
+            latency: result.latency,
+            cost: result.cost,
+            presence: result.scores.presence,
+            relevance: result.scores.relevance,
+            accuracy: result.scores.accuracy,
+            sentiment: result.scores.sentiment,
+            overall: result.scores.overall
           }
         });
-
-        if (keyword) {
-          const phrase = await prisma.phrase.findFirst({
-            where: { 
-              keywordId: keyword.id,
-              text: result.phrase
-            }
-          });
-
-          if (phrase) {
-            // Check if result already exists
-            const existingResult = await prisma.aIQueryResult.findFirst({
-              where: {
-                phraseId: phrase.id,
-                model: result.model
-              }
-            });
-
-            if (existingResult) {
-              // Update existing result
-              await prisma.aIQueryResult.update({
-                where: { id: existingResult.id },
-                data: {
-                  response: result.response,
-                  latency: result.latency,
-                  cost: result.cost,
-                  presence: result.scores.presence,
-                  relevance: result.scores.relevance,
-                  accuracy: result.scores.accuracy,
-                  sentiment: result.scores.sentiment,
-                  overall: result.scores.overall
-                }
-              });
-            } else {
-              // Create new result
-              await prisma.aIQueryResult.create({
-                data: {
-                  phraseId: phrase.id,
-                  model: result.model,
-                  response: result.response,
-                  latency: result.latency,
-                  cost: result.cost,
-                  presence: result.scores.presence,
-                  relevance: result.scores.relevance,
-                  accuracy: result.scores.accuracy,
-                  sentiment: result.scores.sentiment,
-                  overall: result.scores.overall
-                }
-              });
-            }
-          }
-        }
+      }).filter(Boolean);
+      if (upsertPromises.length > 0) {
+        // Run all upserts in parallel
+        await Promise.all(upsertPromises);
       }
     }
 

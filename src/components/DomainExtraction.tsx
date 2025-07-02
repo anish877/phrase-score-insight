@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle, Globe, Brain, FileText, AlertCircle, Loader2 } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
 
 interface DomainExtractionProps {
   domain: string;
@@ -13,6 +14,8 @@ interface DomainExtractionProps {
   onNext: () => void;
   onPrev: () => void;
   customPaths?: string[];
+  priorityUrls?: string[];
+  priorityPaths?: string[];
 }
 
 const DomainExtraction: React.FC<DomainExtractionProps> = ({ 
@@ -23,9 +26,12 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
   setBrandContext, 
   onNext, 
   onPrev,
-  customPaths
+  customPaths,
+  priorityUrls,
+  priorityPaths
 }) => {
-  const [isLoading, setIsLoading] = useState(true);
+
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [currentStep, setCurrentStep] = useState('Initializing analysis...');
@@ -41,6 +47,7 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
   const [extractedContext, setExtractedContext] = useState('');
   const [responseTime, setResponseTime] = useState(0);
   const startTimeRef = useRef(Date.now());
+  const { toast } = useToast();
 
   const phases = [
     { id: 'discovery', name: 'Domain Discovery', icon: <Globe className="h-5 w-5" /> },
@@ -80,10 +87,11 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
 
     const processStream = async () => {
       try {
+        setIsLoading(true);
         const response = await fetch('https://phrase-score-insight.onrender.com/api/domain', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: domain, subdomains, customPaths }),
+          body: JSON.stringify({ url: domain, subdomains, customPaths, priorityUrls }),
           signal: controller.signal,
         });
 
@@ -141,11 +149,20 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
                   setProgress(100);
                   setIsLoading(false);
                   setResponseTime(Number(((Date.now() - startTimeRef.current) / 1000).toFixed(1)));
+                  toast({
+                    title: "Analysis Complete",
+                    description: "Brand context successfully extracted",
+                  });
                   return; // Exit the loop
                 }
                 case 'error': {
                   setError(data.details || data.error || 'An unknown error occurred during analysis.');
                   setIsLoading(false);
+                  toast({
+                    title: "Analysis Error",
+                    description: data.details || data.error || 'An unknown error occurred during analysis.',
+                    variant: "destructive",
+                  });
                   return; // Exit the loop
                 }
               }
@@ -157,6 +174,11 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
           console.error('Stream processing error:', err);
           setError('Failed to connect to the analysis service.');
           setIsLoading(false);
+          toast({
+            title: "Analysis Error",
+            description: 'Failed to connect to the analysis service.',
+            variant: "destructive",
+          });
         }
       }
     };
@@ -166,7 +188,7 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
     return () => {
       controller.abort();
     };
-  }, [domain, subdomains, setDomainId, setBrandContext, customPaths]);
+  }, [domain, subdomains, setDomainId, setBrandContext, customPaths, priorityUrls, priorityPaths]);
 
   if (error) {
     return (
@@ -237,6 +259,39 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
                   </div>
                 </div>
               )}
+              {priorityUrls && priorityUrls.length > 0 ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-2">
+                  <div className="font-semibold text-green-800 mb-1">Priority URLs Being Crawled First</div>
+                  <div className="flex flex-wrap gap-2">
+                    {priorityUrls.map((url, idx) => (
+                      <Badge key={idx} className="bg-green-100 text-green-800 border-green-200">
+                        {url.length > 40 ? url.substring(0, 40) + '...' : url}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 mb-2 text-xs text-gray-600">
+                  No priority URLs specified
+                </div>
+              )}
+              {priorityPaths && priorityPaths.length > 0 ? (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-2">
+                  <div className="font-semibold text-purple-800 mb-1">Priority Paths Being Crawled First</div>
+                  <div className="flex flex-wrap gap-2">
+                    {priorityPaths.map((path, idx) => (
+                      <Badge key={idx} className="bg-purple-100 text-purple-800 border-purple-200">
+                        {path}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 mb-2 text-xs text-gray-600">
+                  No priority paths specified
+                </div>
+              )}
+
               {isLoading ? (
                 <>
                   {/* Progress Section */}

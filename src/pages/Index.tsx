@@ -32,6 +32,9 @@ const Index = () => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [resumeData, setResumeData] = useState<OnboardingStepData | null>(null);
   const [customPaths, setCustomPaths] = useState<string[]>([]);
+  const [priorityUrls, setPriorityUrls] = useState<string[]>([]);
+  const [priorityPaths, setPriorityPaths] = useState<string[]>([]);
+  const [isSavingMain, setIsSavingMain] = useState(false);
 
   console.log('Current step:', currentStep, 'Domain ID:', domainId, 'Domain:', domain);
 
@@ -121,56 +124,7 @@ const Index = () => {
     initializeOnboarding();
   }, [searchParams]);
 
-  // Auto-save progress when state changes
-  useEffect(() => {
-    if (domainId > 0 && isInitialized && !isCheckingResume && currentStep > 0) {
-      const stepData: OnboardingStepData = {
-        domain,
-        domainId,
-        brandContext,
-        selectedKeywords,
-        generatedPhrases,
-        queryResults,
-        queryStats
-      };
-
-      console.log('Auto-saving progress for step:', currentStep, 'data:', stepData);
-      
-      // Save to onboarding progress for resume capability
-      onboardingService.autoSaveProgress(domainId, currentStep, stepData);
-      
-      // Also save to main domain tables for dashboard access
-      saveToMainTables(domainId, stepData);
-    }
-
-    // Cleanup auto-save on unmount
-    return () => {
-      onboardingService.cancelAutoSave();
-    };
-  }, [domainId, currentStep, domain, brandContext, selectedKeywords, generatedPhrases, queryResults, queryStats, isInitialized, isCheckingResume]);
-
-  // Function to save data to main domain tables
-  const saveToMainTables = async (domainId: number, stepData: OnboardingStepData) => {
-    try {
-      console.log('Saving onboarding data to main domain tables...');
-      const response = await fetch(`https://phrase-score-insight.onrender.com/api/onboarding/save-to-main/${domainId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(stepData)
-      });
-      
-      if (!response.ok) {
-        console.error('Failed to save to main tables:', await response.text());
-      } else {
-        console.log('Successfully saved to main domain tables');
-      }
-    } catch (error) {
-      console.error('Error saving to main tables:', error);
-    }
-  };
-
+  // Add saveToMainTables helper
   const nextStep = async () => {
     if (currentStep < steps.length - 1) {
       const newStep = currentStep + 1;
@@ -191,7 +145,6 @@ const Index = () => {
         try {
           console.log('Saving progress for step:', newStep);
           await onboardingService.saveProgress(domainId, newStep, stepData);
-          await saveToMainTables(domainId, stepData);
         } catch (error) {
           console.error('Failed to save progress:', error);
         }
@@ -218,7 +171,6 @@ const Index = () => {
         
         try {
           await onboardingService.saveProgress(domainId, newStep, stepData);
-          await saveToMainTables(domainId, stepData);
         } catch (error) {
           console.error('Failed to save progress:', error);
         }
@@ -228,6 +180,7 @@ const Index = () => {
 
   const completeAnalysis = async () => {
     if (domainId > 0) {
+      setIsSavingMain(true);
       // Mark onboarding as completed
       const stepData: OnboardingStepData = {
         domain,
@@ -242,15 +195,17 @@ const Index = () => {
       try {
         // Save progress and mark as completed
         await onboardingService.saveProgress(domainId, currentStep, stepData, true);
-        
-        // Save to main tables (this ensures dashboard has access to data)
-        await saveToMainTables(domainId, stepData);
+        // Navigate to dashboard after successful save
+        navigate(`/dashboard/${domainId}`);
       } catch (error) {
         console.error('Failed to mark onboarding as complete:', error);
+        setIsSavingMain(false);
+        // Optionally show error toast here
       }
+    } else {
+      // If no domainId, just navigate
+      navigate('/dashboard');
     }
-    
-    navigate(`/dashboard/${domainId}`);
   };
 
   const handleResume = async (stepData: OnboardingStepData, resumeStep: number) => {
@@ -392,7 +347,7 @@ const Index = () => {
                   {Math.round(progressPercentage)}% Complete
                 </div>
               </div>
-              <Button
+              <Button 
                 variant="outline"
                 className="ml-4 px-4 py-2 border-blue-600 text-blue-700 hover:bg-blue-50 hover:border-blue-700"
                 onClick={() => navigate('/')}
@@ -481,6 +436,10 @@ const Index = () => {
           setSubdomains={setSubdomains}
           customPaths={customPaths}
           setCustomPaths={setCustomPaths}
+          priorityUrls={priorityUrls}
+          setPriorityUrls={setPriorityUrls}
+          priorityPaths={priorityPaths}
+          setPriorityPaths={setPriorityPaths}
           onNext={nextStep} 
         />
       )}
@@ -492,6 +451,8 @@ const Index = () => {
           domainId={domainId}
           setBrandContext={setBrandContext}
           customPaths={customPaths}
+          priorityUrls={priorityUrls}
+          priorityPaths={priorityPaths}
           onNext={nextStep}
           onPrev={prevStep}
         />
@@ -501,7 +462,28 @@ const Index = () => {
             domainId={domainId}
             selectedKeywords={selectedKeywords}
             setSelectedKeywords={setSelectedKeywords}
-            onNext={nextStep}
+            isSaving={isSavingMain}
+            onNext={async () => {
+              setIsSavingMain(true);
+              const stepData = {
+                domain,
+                domainId,
+                brandContext,
+                selectedKeywords,
+                generatedPhrases,
+                queryResults,
+                queryStats
+              };
+              try {
+                await onboardingService.saveProgress(domainId, 3, stepData);
+                setIsSavingMain(false);
+                nextStep();
+              } catch (error) {
+                setIsSavingMain(false);
+                // Optionally show error toast here
+                console.error('Failed to save keywords before continuing:', error);
+              }
+            }}
             onPrev={prevStep}
           />
         )}
@@ -530,6 +512,7 @@ const Index = () => {
             queryStats={queryStats}
             onNext={completeAnalysis}
             onPrev={prevStep}
+            isSaving={isSavingMain}
           />
         )}
       </main>

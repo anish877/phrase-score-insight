@@ -20,7 +20,7 @@ const ResumeOnboarding: React.FC<ResumeOnboardingProps> = ({
   onCancel
 }) => {
   const [resumeCheck, setResumeCheck] = useState<ResumeCheckResult | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -40,24 +40,35 @@ const ResumeOnboarding: React.FC<ResumeOnboardingProps> = ({
     }
   };
 
-  const handleResume = () => {
+  const handleResume = async () => {
     if (resumeCheck?.stepData && typeof resumeCheck.currentStep === 'number') {
-      console.log('Resuming onboarding with data:', resumeCheck.stepData);
-      onResume(resumeCheck.stepData, resumeCheck.currentStep);
+      try {
+        setIsLoading(true);
+        onResume(resumeCheck.stepData, resumeCheck.currentStep);
+        // Show toast for success (if toast system is available)
+      } catch (err) {
+        console.error('Failed to resume onboarding:', err);
+        setError(err instanceof Error ? err.message : 'Failed to resume onboarding');
+        // Show toast for error (if toast system is available)
+      } finally {
+        setIsLoading(false);
+      }
     } else {
       console.error('Invalid resume data:', resumeCheck);
-      setError('Invalid resume data received');
     }
   };
 
   const handleReset = async () => {
     try {
       console.log('Resetting onboarding progress for domain:', domainId);
+      setIsLoading(true);
       await onboardingService.resetProgress(domainId);
       onReset();
     } catch (err) {
       console.error('Failed to reset progress:', err);
       setError(err instanceof Error ? err.message : 'Failed to reset progress');
+    } finally {
+      setIsLoading(false);
     }
   };
 

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle, Globe, Shield, TrendingUp, Clock } from 'lucide-react';
+import { CheckCircle, Globe, Shield, TrendingUp, Clock, Plus, Upload } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
 
 interface DomainSubmissionProps {
   domain: string;
@@ -13,6 +15,10 @@ interface DomainSubmissionProps {
   setCustomPaths?: (paths: string[]) => void;
   subdomains?: string[];
   setSubdomains?: (subdomains: string[]) => void;
+  priorityUrls?: string[];
+  setPriorityUrls?: (urls: string[]) => void;
+  priorityPaths?: string[];
+  setPriorityPaths?: (paths: string[]) => void;
 }
 
 const DomainSubmission: React.FC<DomainSubmissionProps> = ({ 
@@ -22,72 +28,222 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
   customPaths: customPathsProp,
   setCustomPaths: setCustomPathsProp,
   subdomains,
-  setSubdomains
+  setSubdomains,
+  priorityUrls: priorityUrlsProp,
+  setPriorityUrls: setPriorityUrlsProp,
+  priorityPaths: priorityPathsProp,
+  setPriorityPaths: setPriorityPathsProp
 }) => {
   const [domainError, setDomainError] = useState('');
-  const [customPaths, setCustomPaths] = useState<string[]>(customPathsProp || []);
-  const [customPathInput, setCustomPathInput] = useState('');
-  const [customPathsError, setCustomPathsError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [priorityUrls, setPriorityUrls] = useState<string[]>(priorityUrlsProp || []);
+  const [priorityUrlInput, setPriorityUrlInput] = useState('');
+  const [priorityUrlError, setPriorityUrlError] = useState('');
+  const [priorityPaths, setPriorityPaths] = useState<string[]>(priorityPathsProp || []);
+  const [priorityPathInput, setPriorityPathInput] = useState('');
+  const [priorityPathError, setPriorityPathError] = useState('');
+  const [showBulkUrlInput, setShowBulkUrlInput] = useState(false);
+  const [showBulkPathInput, setShowBulkPathInput] = useState(false);
+  const [bulkUrlInput, setBulkUrlInput] = useState('');
+  const [bulkPathInput, setBulkPathInput] = useState('');
+  const { toast } = useToast();
 
-  useEffect(() => {
-    if (customPathsProp && setCustomPathsProp) {
-      setCustomPaths(customPathsProp);
-    }
-  }, [customPathsProp]);
-
-  const validateDomain = (domain: string) => {
+  const validateDomainOrUrl = (value: string) => {
     const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?:\.[a-zA-Z]{2,})+$/;
-    return domainRegex.test(domain);
+    const urlRegex = /^(https?:\/\/)?([\w-]+\.)+[\w-]+(\/[\w-./?%&=]*)?$/;
+    return domainRegex.test(value) || urlRegex.test(value);
   };
 
   const handleDomainChange = (value: string) => {
     setDomain(value);
     setDomainError('');
-    if (value && !validateDomain(value)) {
-      setDomainError('Please enter a valid domain (e.g., example.com)');
+    if (value && !validateDomainOrUrl(value)) {
+      setDomainError('Please enter a valid domain (e.g., example.com) or full URL (e.g., https://example.com/page)');
     }
   };
 
-  const addCustomPath = (raw: string) => {
+  const isFullUrl = (domain: string) => domain.startsWith('http://') || domain.startsWith('https://');
+
+  const validatePriorityUrl = (value: string) => {
+    const urlRegex = /^(https?:\/\/)?([\w-]+\.)+[\w-]+(\/[\w-./?%&=]*)?$/;
+    return urlRegex.test(value);
+  };
+
+  const addPriorityUrl = (raw: string) => {
     let value = raw.trim();
-    if (!value.startsWith('/')) {
-      setCustomPathsError('Path must start with "/"');
+    
+    if (!validatePriorityUrl(value)) {
+      setPriorityUrlError('Please enter a valid URL (e.g., https://example.com/page)');
       return;
     }
-    if (customPaths.includes(value)) {
-      setCustomPathsError('Path already added');
+    
+    if (priorityUrls.includes(value)) {
+      setPriorityUrlError('URL already added');
       return;
     }
-    setCustomPaths([...customPaths, value]);
-    if (setCustomPathsProp) setCustomPathsProp([...customPaths, value]);
-    setCustomPathInput('');
-    setCustomPathsError('');
+    
+    const newPriorityUrls = [...priorityUrls, value];
+    setPriorityUrls(newPriorityUrls);
+    if (setPriorityUrlsProp) setPriorityUrlsProp(newPriorityUrls);
+    setPriorityUrlInput('');
+    setPriorityUrlError('');
   };
 
-  const removeCustomPath = (path: string) => {
-    const updated = customPaths.filter(p => p !== path);
-    setCustomPaths(updated);
-    if (setCustomPathsProp) setCustomPathsProp(updated);
-  };
-
-  const handleCustomPathInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCustomPathInput(e.target.value);
-    setCustomPathsError('');
-  };
-
-  const handleCustomPathKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      if (customPathInput.trim()) {
-        addCustomPath(customPathInput);
+  const addBulkUrls = () => {
+    if (!bulkUrlInput.trim()) return;
+    
+    const urls = bulkUrlInput
+      .split(/[\n,]/)
+      .map(url => url.trim())
+      .filter(url => url.length > 0);
+    
+    let addedCount = 0;
+    let errorCount = 0;
+    
+    urls.forEach(url => {
+      if (validatePriorityUrl(url) && !priorityUrls.includes(url)) {
+        const newPriorityUrls = [...priorityUrls, url];
+        setPriorityUrls(newPriorityUrls);
+        if (setPriorityUrlsProp) setPriorityUrlsProp(newPriorityUrls);
+        addedCount++;
+      } else {
+        errorCount++;
       }
+    });
+    
+    setBulkUrlInput('');
+    setShowBulkUrlInput(false);
+    
+    if (addedCount > 0) {
+      toast({ 
+        title: 'URLs Added', 
+        description: `Successfully added ${addedCount} URLs${errorCount > 0 ? `, ${errorCount} invalid URLs skipped` : ''}` 
+      });
+    } else if (errorCount > 0) {
+      toast({ 
+        title: 'No URLs Added', 
+        description: 'All URLs were invalid or already added', 
+        variant: 'destructive' 
+      });
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const removePriorityUrl = (url: string) => {
+    const newPriorityUrls = priorityUrls.filter(u => u !== url);
+    setPriorityUrls(newPriorityUrls);
+    if (setPriorityUrlsProp) setPriorityUrlsProp(newPriorityUrls);
+  };
+
+  const validatePriorityPath = (value: string) => {
+    const pathRegex = /^\/[\w-./?%&=]*$/;
+    return pathRegex.test(value);
+  };
+
+  const addPriorityPath = (raw: string) => {
+    let value = raw.trim();
+    
+    if (!value.startsWith('/')) {
+      value = `/${value}`;
+    }
+    
+    if (!validatePriorityPath(value)) {
+      setPriorityPathError('Please enter a valid path (e.g., /about, /services)');
+      return;
+    }
+    
+    if (priorityPaths.includes(value)) {
+      setPriorityPathError('Path already added');
+      return;
+    }
+    
+    const newPriorityPaths = [...priorityPaths, value];
+    setPriorityPaths(newPriorityPaths);
+    if (setPriorityPathsProp) setPriorityPathsProp(newPriorityPaths);
+    setPriorityPathInput('');
+    setPriorityPathError('');
+  };
+
+  const addBulkPaths = () => {
+    if (!bulkPathInput.trim()) return;
+    
+    const paths = bulkPathInput
+      .split(/[\n,]/)
+      .map(path => path.trim())
+      .filter(path => path.length > 0);
+    
+    let addedCount = 0;
+    let errorCount = 0;
+    
+    paths.forEach(path => {
+      let value = path;
+      if (!value.startsWith('/')) {
+        value = `/${value}`;
+      }
+      
+      if (validatePriorityPath(value) && !priorityPaths.includes(value)) {
+        const newPriorityPaths = [...priorityPaths, value];
+        setPriorityPaths(newPriorityPaths);
+        if (setPriorityPathsProp) setPriorityPathsProp(newPriorityPaths);
+        addedCount++;
+      } else {
+        errorCount++;
+      }
+    });
+    
+    setBulkPathInput('');
+    setShowBulkPathInput(false);
+    
+    if (addedCount > 0) {
+      toast({ 
+        title: 'Paths Added', 
+        description: `Successfully added ${addedCount} paths${errorCount > 0 ? `, ${errorCount} invalid paths skipped` : ''}` 
+      });
+    } else if (errorCount > 0) {
+      toast({ 
+        title: 'No Paths Added', 
+        description: 'All paths were invalid or already added', 
+        variant: 'destructive' 
+      });
+    }
+  };
+
+  const removePriorityPath = (path: string) => {
+    const newPriorityPaths = priorityPaths.filter(p => p !== path);
+    setPriorityPaths(newPriorityPaths);
+    if (setPriorityPathsProp) setPriorityPathsProp(newPriorityPaths);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!domain.trim() || !!domainError) return;
-    onNext();
+    setIsLoading(true);
+    try {
+      const priorityPathsAsUrls = priorityPaths.map(path => `https://${domain}${path}`);
+      const allPriorityUrls = [...priorityUrls, ...priorityPathsAsUrls];
+      
+      const response = await fetch('https://phrase-score-insight.onrender.com/api/domain', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: domain,
+          subdomains: subdomains?.length > 0 ? subdomains : undefined,
+          priorityUrls: allPriorityUrls.length > 0 ? allPriorityUrls : undefined
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit domain');
+      }
+
+      await onNext();
+      toast({ title: 'Domain submitted', description: 'Domain analysis started successfully.' });
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to submit domain. Please try again.', variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const features = [
@@ -167,7 +323,7 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
                     <Input
                       id="domain"
                       type="text"
-                      placeholder="yourdomain.com"
+                      placeholder="yourdomain.com or https://yourdomain.com/page"
                       value={domain}
                       onChange={(e) => handleDomainChange(e.target.value)}
                       className={`h-14 text-lg px-4 border-2 transition-all duration-200 ${
@@ -187,37 +343,214 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
                     <p className="text-sm text-red-600 mt-2">{domainError}</p>
                   )}
                   <p className="text-sm text-slate-500">
-                    Enter without http:// or https:// (e.g., example.com)
+                    Enter a domain (e.g., example.com) or a full URL (e.g., https://example.com/page)
                   </p>
                 </div>
-                <div className="space-y-2">
-                  <label htmlFor="custom-paths" className="block text-sm font-semibold text-slate-700 mb-1">
-                    Custom Relevant Paths (optional)
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="custom-paths"
-                      type="text"
-                      placeholder="Type a path (e.g. /about) and press Enter"
-                      value={customPathInput}
-                      onChange={handleCustomPathInput}
-                      onKeyDown={handleCustomPathKeyDown}
-                      className="h-12 text-base px-4 border-2 transition-all duration-200 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
-                    />
-                    <Button type="button" onClick={() => customPathInput.trim() && addCustomPath(customPathInput)} disabled={!customPathInput.trim()} className="h-12">Add</Button>
-                  </div>
-                  <p className="text-xs text-slate-400">Add any number of relevant paths to prioritize during crawling. Each must start with '/'.</p>
-                  {customPathsError && <p className="text-sm text-red-600 mt-1">{customPathsError}</p>}
-                  {customPaths.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {customPaths.map((p, idx) => (
-                        <Badge key={idx} className="bg-purple-100 text-purple-800 border-purple-200 cursor-pointer" onClick={() => removeCustomPath(p)} title="Remove">
-                          {p} <span className="ml-1 text-xs">×</span>
-                        </Badge>
-                      ))}
+                {domain && !domainError && (
+                  <div className="space-y-6">
+                    <div className="space-y-3">
+                      <label className="block text-sm font-semibold text-slate-700">
+                        Priority URLs (Optional)
+                      </label>
+                      <p className="text-xs text-slate-500 mb-3">
+                        Add specific full URLs to prioritize during crawling (e.g., https://example.com/page)
+                      </p>
+                      
+                      {!showBulkUrlInput ? (
+                        <div className="flex gap-2">
+                          <Input
+                            type="text"
+                            placeholder="Enter full URL (https://example.com/page)"
+                            value={priorityUrlInput}
+                            onChange={(e) => {
+                              setPriorityUrlInput(e.target.value);
+                              setPriorityUrlError('');
+                            }}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                if (priorityUrlInput.trim()) {
+                                  addPriorityUrl(priorityUrlInput);
+                                }
+                              }
+                            }}
+                            className="flex-1"
+                          />
+                          <Button 
+                            type="button" 
+                            onClick={() => priorityUrlInput.trim() && addPriorityUrl(priorityUrlInput)}
+                            disabled={!priorityUrlInput.trim()}
+                            className="px-4"
+                          >
+                            Add URL
+                          </Button>
+                          <Button 
+                            type="button" 
+                            variant="outline"
+                            onClick={() => setShowBulkUrlInput(true)}
+                            className="px-4"
+                          >
+                            <Upload className="h-4 w-4 mr-2" />
+                            Bulk Add
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <Textarea
+                            placeholder="Enter multiple URLs, one per line or separated by commas&#10;https://example.com/page1&#10;https://example.com/page2&#10;https://example.com/page3"
+                            value={bulkUrlInput}
+                            onChange={(e) => setBulkUrlInput(e.target.value)}
+                            className="min-h-[120px] resize-none"
+                          />
+                          <div className="flex gap-2">
+                            <Button 
+                              type="button" 
+                              onClick={addBulkUrls}
+                              disabled={!bulkUrlInput.trim()}
+                              className="flex-1"
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Add All URLs
+                            </Button>
+                            <Button 
+                              type="button" 
+                              variant="outline"
+                              onClick={() => {
+                                setShowBulkUrlInput(false);
+                                setBulkUrlInput('');
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {priorityUrlError && (
+                        <p className="text-sm text-red-600">{priorityUrlError}</p>
+                      )}
+                      {priorityUrls.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium text-slate-600">Priority URLs ({priorityUrls.length}):</p>
+                          <div className="flex flex-wrap gap-2">
+                            {priorityUrls.map((url, index) => (
+                              <Badge 
+                                key={index} 
+                                className="bg-blue-100 text-blue-800 border-blue-200 cursor-pointer hover:bg-blue-200"
+                                onClick={() => removePriorityUrl(url)}
+                              >
+                                {url.length > 40 ? url.substring(0, 40) + '...' : url}
+                                <span className="ml-1 text-xs">×</span>
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+
+                    <div className="space-y-3">
+                      <label className="block text-sm font-semibold text-slate-700">
+                        Priority Paths (Optional)
+                      </label>
+                      <p className="text-xs text-slate-500 mb-3">
+                        Add specific paths to prioritize during crawling (e.g., /about, /services)
+                      </p>
+                      
+                      {!showBulkPathInput ? (
+                        <div className="flex gap-2">
+                          <Input
+                            type="text"
+                            placeholder="Enter path (/about or about)"
+                            value={priorityPathInput}
+                            onChange={(e) => {
+                              setPriorityPathInput(e.target.value);
+                              setPriorityPathError('');
+                            }}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                if (priorityPathInput.trim()) {
+                                  addPriorityPath(priorityPathInput);
+                                }
+                              }
+                            }}
+                            className="flex-1"
+                          />
+                          <Button 
+                            type="button" 
+                            onClick={() => priorityPathInput.trim() && addPriorityPath(priorityPathInput)}
+                            disabled={!priorityPathInput.trim()}
+                            className="px-4"
+                          >
+                            Add Path
+                          </Button>
+                          <Button 
+                            type="button" 
+                            variant="outline"
+                            onClick={() => setShowBulkPathInput(true)}
+                            className="px-4"
+                          >
+                            <Upload className="h-4 w-4 mr-2" />
+                            Bulk Add
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <Textarea
+                            placeholder="Enter multiple paths, one per line or separated by commas&#10;/about&#10;/services&#10;/contact"
+                            value={bulkPathInput}
+                            onChange={(e) => setBulkPathInput(e.target.value)}
+                            className="min-h-[120px] resize-none"
+                          />
+                          <div className="flex gap-2">
+                            <Button 
+                              type="button" 
+                              onClick={addBulkPaths}
+                              disabled={!bulkPathInput.trim()}
+                              className="flex-1"
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Add All Paths
+                            </Button>
+                            <Button 
+                              type="button" 
+                              variant="outline"
+                              onClick={() => {
+                                setShowBulkPathInput(false);
+                                setBulkPathInput('');
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {priorityPathError && (
+                        <p className="text-sm text-red-600">{priorityPathError}</p>
+                      )}
+                      {priorityPaths.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium text-slate-600">Priority Paths ({priorityPaths.length}):</p>
+                          <div className="flex flex-wrap gap-2">
+                            {priorityPaths.map((path, index) => (
+                              <Badge 
+                                key={index} 
+                                className="bg-green-100 text-green-800 border-green-200 cursor-pointer hover:bg-green-200"
+                                onClick={() => removePriorityPath(path)}
+                              >
+                                {path}
+                                <span className="ml-1 text-xs">×</span>
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                    </div>
+                  </div>
+                )}
+
 
                 {/* Analysis Preview */}
                 <div className="bg-slate-50 rounded-lg p-6 border border-slate-200">
@@ -245,9 +578,9 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
                 <Button 
                   type="submit" 
                   className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg transition-all duration-200"
-                  disabled={!domain.trim() || !!domainError}
+                  disabled={!domain.trim() || !!domainError || isLoading}
                 >
-                  Begin AI Visibility Analysis
+                  {isLoading ? 'Processing...' : 'Begin AI Visibility Analysis'}
                 </Button>
               </form>
             </CardContent>

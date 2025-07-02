@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { Loader2, TrendingUp, TrendingDown, Target, Users, Globe, AlertCircle } from 'lucide-react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
+import { useToast } from '@/components/ui/use-toast';
 
 interface DashboardProps {
   domain: string;
@@ -71,20 +72,31 @@ interface DomainData {
 }
 
 interface CompetitorAnalysis {
-  domain: string;
-  visibilityScore: number;
-  mentionRate: number;
-  avgRelevance: number;
-  avgAccuracy: number;
-  avgSentiment: number;
-  keyStrengths: string[];
-  keyWeaknesses: string[];
-  recommendations: string[];
-  comparison: {
+  domain?: string;
+  visibilityScore?: number;
+  mentionRate?: number;
+  avgRelevance?: number;
+  avgAccuracy?: number;
+  avgSentiment?: number;
+  keyStrengths?: string[];
+  keyWeaknesses?: string[];
+  comparison?: {
     better: string[];
     worse: string[];
     similar: string[];
   };
+  summary?: string;
+  metricsTable?: Array<Record<string, unknown>>;
+  keywordOverlap?: { percent: number; keywords: string[] };
+  phraseOverlap?: { percent: number; phrases: string[] };
+  aiVisibility?: Array<{ domain: string; score: number; mentionRate: number }>;
+  swot?: {
+    target: { strengths: string[]; weaknesses: string[]; opportunities: string[]; threats: string[] };
+    competitor: { strengths: string[]; weaknesses: string[]; opportunities: string[]; threats: string[] };
+  };
+  recommendations?: Array<{ action: string; impact: string; effort: string }>;
+  marketMap?: Array<{ domain: string; position: string; justification: string }>;
+  recentNews?: Array<{ domain: string; headline: string; url: string }>;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({
@@ -101,6 +113,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [isAnalyzingCompetitor, setIsAnalyzingCompetitor] = useState(false);
   const [competitorAnalysis, setCompetitorAnalysis] = useState<CompetitorAnalysis | null>(null);
   const [competitorError, setCompetitorError] = useState<string | null>(null);
+  const { toast } = useToast();
 
   // Fetch domain data from database
   useEffect(() => {
@@ -123,15 +136,23 @@ const Dashboard: React.FC<DashboardProps> = ({
         
         const data = await response.json();
         setDomainData(data);
+        toast({
+          title: "Dashboard Data Loaded",
+          description: "Successfully loaded dashboard data from the database.",
+        });
       } catch (error) {
         console.error('Error fetching domain data:', error);
+        toast({
+          title: "Dashboard Data Load Error",
+          description: "Failed to load dashboard data from the database. Please try again later.",
+        });
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchDomainData();
-  }, [domain]);
+  }, [domain, toast]);
 
   // Calculate real AI Visibility Score from actual data
   const calculateVisibilityScore = () => {
@@ -271,6 +292,10 @@ const Dashboard: React.FC<DashboardProps> = ({
           if (ev.event === 'analysis') {
             const data = JSON.parse(ev.data);
             setCompetitorAnalysis(data);
+            toast({
+              title: "Competitor Analysis Completed",
+              description: "Successfully completed competitor analysis."
+            });
           } else if (ev.event === 'error') {
             const data = JSON.parse(ev.data);
             setCompetitorError(data.error || 'Analysis failed');
@@ -612,78 +637,138 @@ const Dashboard: React.FC<DashboardProps> = ({
 
               {competitorAnalysis && (
                 <div className="space-y-6">
-                  {/* Competitor Overview */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-slate-50 rounded-lg p-6">
-                      <h3 className="font-semibold mb-4">Your Domain ({domain})</h3>
-                      <div className="text-2xl font-bold text-purple-600 mb-2">{visibilityScore}%</div>
-                      <Progress value={visibilityScore} className="h-3" />
-                      <div className="text-sm text-slate-600 mt-2">
-                        {domainData?.aiQueryResults?.filter(r => r.presence === 1).length || 0} mentions out of {domainData?.aiQueryResults?.length || 0} queries
-                      </div>
-                    </div>
-                    <div className="bg-slate-50 rounded-lg p-6">
-                      <h3 className="font-semibold mb-4">Competitor ({competitorAnalysis.domain})</h3>
-                      <div className="text-2xl font-bold text-blue-600 mb-2">{competitorAnalysis.visibilityScore}%</div>
-                      <Progress value={competitorAnalysis.visibilityScore} className="h-3" />
-                      <div className="text-sm text-slate-600 mt-2">
-                        {competitorAnalysis.mentionRate}% mention rate
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Comparison Summary */}
-                  <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6">
-                    <h3 className="font-semibold mb-4">AI Analysis Summary</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <h4 className="font-medium text-green-600 mb-2">Your Strengths</h4>
-                        <ul className="text-sm space-y-1">
-                          {competitorAnalysis.comparison.better.map((item, index) => (
-                            <li key={index} className="flex items-center">
-                              <TrendingUp className="w-4 h-4 text-green-600 mr-2" />
-                              {item}
-                            </li>
+                  <Tabs defaultValue="summary" className="w-full">
+                    <TabsList className="mb-4 grid grid-cols-8">
+                      <TabsTrigger value="summary">Summary</TabsTrigger>
+                      <TabsTrigger value="metrics">Metrics</TabsTrigger>
+                      <TabsTrigger value="keywordOverlap">Keyword Overlap</TabsTrigger>
+                      <TabsTrigger value="phraseOverlap">Phrase Overlap</TabsTrigger>
+                      <TabsTrigger value="aiVisibility">AI Visibility</TabsTrigger>
+                      <TabsTrigger value="swot">SWOT</TabsTrigger>
+                      <TabsTrigger value="recommendations">Recommendations</TabsTrigger>
+                      <TabsTrigger value="marketMap">Market Map</TabsTrigger>
+                      <TabsTrigger value="recentNews">News</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="summary">
+                      <p className="text-slate-700 whitespace-pre-line">{competitorAnalysis?.summary || 'No summary available.'}</p>
+                    </TabsContent>
+                    <TabsContent value="metrics">
+                      <table className="min-w-full text-sm border">
+                        <thead>
+                          <tr>
+                            {competitorAnalysis?.metricsTable && competitorAnalysis.metricsTable[0] && Object.keys(competitorAnalysis.metricsTable[0]).map((key) => (
+                              <th key={key} className="px-2 py-1 border-b bg-slate-100 text-slate-700">{key}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {competitorAnalysis?.metricsTable?.map((row, i) => (
+                            <tr key={i} className="border-b">
+                              {Object.values(row).map((val, j) => (
+                                <td key={j} className="px-2 py-1">{String(val)}</td>
+                              ))}
+                            </tr>
                           ))}
+                        </tbody>
+                      </table>
+                    </TabsContent>
+                    <TabsContent value="keywordOverlap">
+                      <div>
+                        <div className="font-semibold mb-2">{competitorAnalysis?.keywordOverlap?.percent || 0}% overlap</div>
+                        <ul className="list-disc ml-6">
+                          {competitorAnalysis?.keywordOverlap?.keywords?.map((kw, i) => <li key={i}>{kw}</li>)}
                         </ul>
                       </div>
+                    </TabsContent>
+                    <TabsContent value="phraseOverlap">
                       <div>
-                        <h4 className="font-medium text-red-600 mb-2">Areas to Improve</h4>
-                        <ul className="text-sm space-y-1">
-                          {competitorAnalysis.comparison.worse.map((item, index) => (
-                            <li key={index} className="flex items-center">
-                              <TrendingDown className="w-4 h-4 text-red-600 mr-2" />
-                              {item}
-                            </li>
-                          ))}
+                        <div className="font-semibold mb-2">{competitorAnalysis?.phraseOverlap?.percent || 0}% overlap</div>
+                        <ul className="list-disc ml-6">
+                          {competitorAnalysis?.phraseOverlap?.phrases?.map((ph, i) => <li key={i}>{ph}</li>)}
                         </ul>
                       </div>
-                      <div>
-                        <h4 className="font-medium text-blue-600 mb-2">Similar Performance</h4>
-                        <ul className="text-sm space-y-1">
-                          {competitorAnalysis.comparison.similar.map((item, index) => (
-                            <li key={index} className="flex items-center">
-                              <Target className="w-4 h-4 text-blue-600 mr-2" />
-                              {item}
-                            </li>
+                    </TabsContent>
+                    <TabsContent value="aiVisibility">
+                      <table className="min-w-full text-sm border">
+                        <thead>
+                          <tr>
+                            <th className="px-2 py-1 border-b bg-slate-100 text-slate-700">Domain</th>
+                            <th className="px-2 py-1 border-b bg-slate-100 text-slate-700">Score</th>
+                            <th className="px-2 py-1 border-b bg-slate-100 text-slate-700">Mention Rate</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {competitorAnalysis?.aiVisibility?.map((row, i) => (
+                            <tr key={i} className="border-b">
+                              <td className="px-2 py-1">{row.domain}</td>
+                              <td className="px-2 py-1">{row.score}</td>
+                              <td className="px-2 py-1">{row.mentionRate}</td>
+                            </tr>
                           ))}
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* AI Recommendations */}
-                  <div className="bg-white border border-slate-200 rounded-lg p-6">
-                    <h3 className="font-semibold mb-4">AI Recommendations</h3>
-                    <div className="space-y-3">
-                      {competitorAnalysis.recommendations.map((rec, index) => (
-                        <div key={index} className="flex items-start">
-                          <div className="w-2 h-2 bg-blue-600 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                          <p className="text-sm text-slate-700">{rec}</p>
+                        </tbody>
+                      </table>
+                    </TabsContent>
+                    <TabsContent value="swot">
+                      <div className="grid grid-cols-2 gap-6">
+                        <div>
+                          <div className="font-bold mb-2">Your Domain</div>
+                          <div className="mb-1 font-semibold">Strengths</div>
+                          <ul className="list-disc ml-6 mb-2">{competitorAnalysis?.swot?.target?.strengths?.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                          <div className="mb-1 font-semibold">Weaknesses</div>
+                          <ul className="list-disc ml-6 mb-2">{competitorAnalysis?.swot?.target?.weaknesses?.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                          <div className="mb-1 font-semibold">Opportunities</div>
+                          <ul className="list-disc ml-6 mb-2">{competitorAnalysis?.swot?.target?.opportunities?.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                          <div className="mb-1 font-semibold">Threats</div>
+                          <ul className="list-disc ml-6">{competitorAnalysis?.swot?.target?.threats?.map((s, i) => <li key={i}>{s}</li>)}</ul>
                         </div>
-                      ))}
-                    </div>
-                  </div>
+                        <div>
+                          <div className="font-bold mb-2">Competitor</div>
+                          <div className="mb-1 font-semibold">Strengths</div>
+                          <ul className="list-disc ml-6 mb-2">{competitorAnalysis?.swot?.competitor?.strengths?.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                          <div className="mb-1 font-semibold">Weaknesses</div>
+                          <ul className="list-disc ml-6 mb-2">{competitorAnalysis?.swot?.competitor?.weaknesses?.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                          <div className="mb-1 font-semibold">Opportunities</div>
+                          <ul className="list-disc ml-6 mb-2">{competitorAnalysis?.swot?.competitor?.opportunities?.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                          <div className="mb-1 font-semibold">Threats</div>
+                          <ul className="list-disc ml-6">{competitorAnalysis?.swot?.competitor?.threats?.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                        </div>
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="recommendations">
+                      <ul className="space-y-2">
+                        {(competitorAnalysis?.recommendations ?? []).map((rec, i) => (
+                          typeof rec === 'object' && rec !== null && 'action' in rec ? (
+                            <li key={i} className="flex items-center gap-2">
+                              <span className="font-medium">{rec.action}</span>
+                              <Badge className={rec.impact === 'high' ? 'bg-green-100 text-green-800' : rec.impact === 'medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}>{rec.impact}</Badge>
+                              <Badge className={rec.effort === 'low' ? 'bg-green-50 text-green-700' : rec.effort === 'medium' ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-700'}>{rec.effort}</Badge>
+                            </li>
+                          ) : null
+                        ))}
+                      </ul>
+                    </TabsContent>
+                    <TabsContent value="marketMap">
+                      <ul className="space-y-2">
+                        {competitorAnalysis?.marketMap?.map((m, i) => (
+                          <li key={i} className="flex items-center gap-2">
+                            <span className="font-medium">{m.domain}</span>
+                            <Badge className={m.position === 'leader' ? 'bg-green-100 text-green-800' : m.position === 'challenger' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}>{m.position}</Badge>
+                            <span className="text-xs text-slate-500">{m.justification}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </TabsContent>
+                    <TabsContent value="recentNews">
+                      <ul className="space-y-2">
+                        {competitorAnalysis?.recentNews?.map((n, i) => (
+                          <li key={i}>
+                            <a href={n.url} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline font-medium">{n.headline}</a>
+                            <span className="ml-2 text-xs text-slate-500">({n.domain})</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </TabsContent>
+                  </Tabs>
                 </div>
               )}
             </CardContent>

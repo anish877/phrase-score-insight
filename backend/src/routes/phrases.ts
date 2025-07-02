@@ -28,12 +28,15 @@ router.get('/:domainId', async (req, res) => {
       select: { id: true, term: true }
     });
 
+    console.log(`Found ${keywords.length} selected keywords for domain ${domainId}:`, keywords.map(k => k.term));
+
     // Fetch domain and context
     const domainObj = await prisma.domain.findUnique({ where: { id: domainId } });
     const domain = domainObj?.url || '';
     const context = domainObj?.context || '';
 
     if (!keywords.length) {
+      console.log(`No selected keywords found for domain ${domainId}`);
       sendEvent('error', { error: 'No selected keywords found' });
       res.end();
       return;

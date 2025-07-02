@@ -77,13 +77,15 @@ export const apiService = {
 
   async getKeywords(domainId: number): Promise<{ keywords: Keyword[], selected: string[] }> {
     const response = await fetch(`${API_BASE_URL}/keywords/${domainId}`);
-    console.log(response);
+    console.log('getKeywords response:', response);
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.details || error.error || 'Failed to fetch keywords');
     }
 
-    return response.json();
+    const data = await response.json();
+    console.log('getKeywords data:', data);
+    return data;
   },
 
   async updateKeywordSelection(domainId: number, selectedKeywords: string[]): Promise<void> {

@@ -36,10 +36,26 @@ async function crawlWebsiteWithProgress(
   domain: string, 
   maxPages = 8,
   onProgress?: ProgressCallback,
-  relevantPaths?: string[]
+  relevantPaths?: string[],
+  priorityUrls?: string[]
 ): Promise<{contentBlocks: string[], urls: string[]}> {
   const visited = new Set<string>();
-  const queue: string[] = [`https://${domain}`, `https://www.${domain}`];
+  const queue: string[] = [];
+  
+  // Add priority URLs first if provided
+  if (priorityUrls && priorityUrls.length > 0) {
+    queue.push(...priorityUrls);
+    onProgress?.({
+      phase: 'discovery',
+      step: `Prioritizing ${priorityUrls.length} specified URLs...`,
+      progress: 5,
+      stats: { pagesScanned: 0, contentBlocks: 0, keyEntities: 0, confidenceScore: 0 }
+    });
+  }
+  
+  // Add default domain URLs
+  queue.push(`https://${domain}`, `https://www.${domain}`);
+  
   const contentBlocks: string[] = [];
   const discoveredUrls: string[] = [];
   let stats = { pagesScanned: 0, contentBlocks: 0, keyEntities: 0, confidenceScore: 0 };
@@ -61,7 +77,7 @@ async function crawlWebsiteWithProgress(
 
   onProgress?.({
     phase: 'discovery',
-    step: 'Scanning site architecture...',
+    step: priorityUrls && priorityUrls.length > 0 ? 'Starting with priority URLs...' : 'Scanning site architecture...',
     progress: 10,
     stats
   });
@@ -98,6 +114,9 @@ async function crawlWebsiteWithProgress(
       visited.add(url);
       discoveredUrls.push(url);
       stats.pagesScanned = visited.size;
+      
+      // Check if this is a priority URL
+      const isPriorityUrl = priorityUrls && priorityUrls.includes(url);
       
       const $ = cheerio.load(response.data);
 
@@ -166,7 +185,7 @@ async function crawlWebsiteWithProgress(
       const currentProgress = 20 + (visited.size * progressIncrement);
       onProgress?.({
         phase: 'content',
-        step: `Analyzing page ${visited.size}/${maxPages}...`,
+        step: `${isPriorityUrl ? 'Priority ' : ''}Analyzing page ${visited.size}/${maxPages}...`,
         progress: Math.min(70, currentProgress),
         stats
       });
@@ -225,7 +244,8 @@ async function crawlWebsiteWithProgress(
 export async function crawlAndExtractWithGemini(
   domains: string[] | string,
   onProgress?: ProgressCallback,
-  customPaths?: string[]
+  customPaths?: string[],
+  priorityUrls?: string[]
 ): Promise<GeminiExtractionResult> {
   if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY not configured');
@@ -243,11 +263,14 @@ export async function crawlAndExtractWithGemini(
       const domain = domainList[i];
       onProgress?.({
         phase: 'discovery',
-        step: `Crawling subdomain ${domain} (${i + 1}/${domainList.length})...`,
+        step: `Crawling domain ${domain}${priorityUrls && priorityUrls.length > 0 ? ` (with ${priorityUrls.length} priority URLs)` : ''} (${i + 1}/${domainList.length})...`,
         progress: Math.round((i / domainList.length) * 15),
         stats: { pagesScanned: totalPages, contentBlocks: totalBlocks, keyEntities: 0, confidenceScore: 0 }
       });
-      const { contentBlocks, urls } = await crawlWebsiteWithProgress(domain, 8, onProgress, customPaths);
+      
+      // If priorityUrls are provided, crawl them first, then the rest of the domain
+      const maxPages = priorityUrls && priorityUrls.length > 0 ? 8 : 8; // Allow full domain crawl
+      const { contentBlocks, urls } = await crawlWebsiteWithProgress(domain, maxPages, onProgress, customPaths, priorityUrls);
       allContentBlocks = allContentBlocks.concat(contentBlocks);
       allUrls = allUrls.concat(urls);
       totalPages += urls.length;

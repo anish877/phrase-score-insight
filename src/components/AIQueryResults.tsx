@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useToast } from '@/components/ui/use-toast';
 
 export interface AIQueryResult {
   model: string;
@@ -76,6 +77,11 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [resultsPerPage, setResultsPerPage] = useState(25);
 
+  // Add useState for loading
+  const [isSaving, setIsSaving] = useState(false);
+
+  const { toast } = useToast();
+
   const aiModels = [
     { name: 'GPT-4o', color: 'bg-blue-100 text-blue-800' },
     { name: 'Claude 3', color: 'bg-green-100 text-green-800' },
@@ -103,7 +109,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
     // Reset all state
     setIsAnalyzing(true);
     setProgress(0);
-    setCurrentPhrase('Initializing analysis...');
+    setCurrentPhrase('Initializing analysis... (This may take a few minutes for large jobs)');
     setError(null);
     resultsRef.current = [];
     setResults([]);
@@ -116,11 +122,11 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
     // Add connection timeout
     const connectionTimeout = setTimeout(() => {
       if (resultsRef.current.length === 0) {
-        setError('Connection timeout. Please try again.');
+        setError('Connection timeout. The analysis engine took too long to start. For large jobs, please wait a few minutes before retrying.');
         setIsAnalyzing(false);
         ctrl.abort();
       }
-    }, 60000); // 60 second connection timeout
+    }, 300000); // 5 minute connection timeout
 
     // Add overall timeout for large datasets
     const overallTimeout = setTimeout(() => {
@@ -149,6 +155,10 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
           if (setQueryStats && stats) setQueryStats(stats);
           setModelStatus({ 'GPT-4o': 'Done', 'Claude 3': 'Done', 'Gemini 1.5': 'Done' });
           ctrl.abort();
+          toast({
+            title: "Analysis Complete",
+            description: "The analysis completed successfully.",
+          });
           return;
         }
         if (ev.event === 'result') {
@@ -209,6 +219,11 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
           }
           setIsAnalyzing(false);
           ctrl.abort();
+          toast({
+            title: "Analysis Error",
+            description: error,
+            variant: "destructive",
+          });
         }
       },
       onclose() {
@@ -234,6 +249,11 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
           setError('Connection error. Please try again.');
         }
         ctrl.abort();
+        toast({
+          title: "Connection Error",
+          description: error,
+          variant: "destructive",
+        });
       }
     });
 

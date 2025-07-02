@@ -30,7 +30,8 @@ router.get('/:domainId', async (req: Request, res: Response) => {
 
     // If we already have keywords, return them
     if (domain.keywords.length > 0) {
-      console.log('Returning existing keywords');
+      console.log('Returning existing keywords:', domain.keywords.length);
+      console.log('Selected keywords:', domain.keywords.filter(k => k.isSelected).map(k => k.term));
        res.json({ keywords: domain.keywords });
        return
     }
@@ -55,7 +56,8 @@ router.get('/:domainId', async (req: Request, res: Response) => {
             volume: kw.volume,
             difficulty: kw.difficulty,
             cpc: kw.cpc,
-            domainId
+            domainId,
+            isSelected: false // Explicitly set default value
           }
         })
       )
@@ -70,7 +72,9 @@ router.get('/:domainId', async (req: Request, res: Response) => {
 // PATCH /keywords/:domainId/selection - update selected keywords
 router.patch('/:domainId/selection', async (req: Request, res: Response) => {
   const domainId = Number(req.params.domainId);
-  const { selectedKeywords } = req.body;
+  let { selectedKeywords } = req.body;
+
+  console.log(`Updating keyword selection for domain ${domainId}:`, selectedKeywords);
 
   if (!domainId || !Array.isArray(selectedKeywords)) {
     res.status(400).json({ error: 'Domain ID and selectedKeywords array are required' });
@@ -78,26 +82,50 @@ router.patch('/:domainId/selection', async (req: Request, res: Response) => {
   }
 
   try {
-    // First, unselect all keywords for this domain
+    // Normalize keywords to lowercase for comparison
+    const selectedKeywordsLower = selectedKeywords.map((k: string) => k.trim().toLowerCase());
+
+    // Fetch all keywords for the domain
+    const existingKeywords = await prisma.keyword.findMany({ where: { domainId } });
+
+    // Add missing keywords (preserve original casing)
+    for (const kw of selectedKeywords) {
+      if (!existingKeywords.some(k => k.term.toLowerCase() === kw.trim().toLowerCase())) {
+        await prisma.keyword.create({
+          data: {
+            term: kw.trim(),
+            volume: 0,
+            difficulty: 'N/A',
+            cpc: 0,
+            domainId,
+            isSelected: true,
+          }
+        });
+      }
+    }
+
+    // Unselect all
     await prisma.keyword.updateMany({
       where: { domainId },
       data: { isSelected: false }
     });
+    console.log(`Unselected all keywords for domain ${domainId}`);
 
-    // Then, select the specified keywords
-    await prisma.keyword.updateMany({
-      where: {
-        domainId,
-        term: { in: selectedKeywords }
-      },
-      data: { isSelected: true }
-    });
+    // Select all in the list (case-insensitive)
+    // Prisma does not support 'in' with mode: 'insensitive', so update individually
+    for (const kw of selectedKeywords) {
+      await prisma.keyword.updateMany({
+        where: {
+          domainId,
+          term: { equals: kw.trim(), mode: 'insensitive' }
+        },
+        data: { isSelected: true }
+      });
+    }
 
     // Return updated keywords
-    const updatedKeywords = await prisma.keyword.findMany({
-      where: { domainId }
-    });
-
+    const updatedKeywords = await prisma.keyword.findMany({ where: { domainId } });
+    console.log(`Returning ${updatedKeywords.length} keywords, ${updatedKeywords.filter(k => k.isSelected).length} selected`);
     res.json({ keywords: updatedKeywords });
   } catch (err: any) {
     console.error('Keyword selection update error:', err);
@@ -134,6 +162,8 @@ router.get('/stream/:domainId', async (req: Request, res: Response) => {
 
     // If we already have keywords, stream them
     if (domain.keywords.length > 0) {
+      console.log(`Streaming ${domain.keywords.length} existing keywords for domain ${domainId}`);
+      console.log('Selected keywords:', domain.keywords.filter(k => k.isSelected).map(k => k.term));
       sendEvent('progress', { message: 'Loading existing keywords...' });
       for (const kw of domain.keywords) {
         sendEvent('keyword', kw);
@@ -173,7 +203,8 @@ router.get('/stream/:domainId', async (req: Request, res: Response) => {
           volume: kw.volume,
           difficulty: kw.difficulty,
           cpc: kw.cpc,
-          domainId
+          domainId,
+          isSelected: false // Explicitly set default value
         }
       });
       // Stream to client

@@ -36,6 +36,7 @@ const Index = () => {
   const [priorityUrls, setPriorityUrls] = useState<string[]>([]);
   const [priorityPaths, setPriorityPaths] = useState<string[]>([]);
   const [isSavingMain, setIsSavingMain] = useState(false);
+  const [resumeStep, setResumeStep] = useState<number | undefined>(undefined);
 
   console.log('Current step:', currentStep, 'Domain ID:', domainId, 'Domain:', domain);
 
@@ -83,19 +84,22 @@ const Index = () => {
     const initializeOnboarding = async () => {
       // Check if we have a domainId from URL params (for resuming)
       const urlDomainId = searchParams.get('domainId');
+      const urlVersionId = searchParams.get('versionId');
       if (urlDomainId) {
         const domainIdNum = parseInt(urlDomainId);
+        const versionIdNum = urlVersionId ? parseInt(urlVersionId) : undefined;
         if (domainIdNum > 0) {
           setIsCheckingResume(true);
           try {
-            console.log('Checking resume for domainId:', domainIdNum);
-            const resumeCheck = await onboardingService.checkResume(domainIdNum);
+            console.log('Checking resume for domainId:', domainIdNum, 'versionId:', versionIdNum);
+            const resumeCheck = await onboardingService.checkResume(domainIdNum, versionIdNum);
             console.log('Resume check result:', resumeCheck);
             
             if (resumeCheck.canResume) {
               setShowResumeDialog(true);
               setDomainId(domainIdNum);
               setResumeData(resumeCheck.stepData || null);
+              setResumeStep(typeof resumeCheck.currentStep === 'number' ? resumeCheck.currentStep : undefined);
             } else if (resumeCheck.redirectTo) {
               // Redirect to dashboard if completed
               console.log('Redirecting to dashboard:', resumeCheck.redirectTo);
@@ -110,6 +114,7 @@ const Index = () => {
               if (resumeCheck.stepData?.domainId) {
                 setDomainId(resumeCheck.stepData.domainId);
               }
+              setResumeStep(undefined);
             }
           } catch (error) {
             console.error('Failed to check resume status:', error);
@@ -320,6 +325,9 @@ const Index = () => {
       <div className="min-h-screen bg-slate-50 py-8">
         <ResumeOnboarding
           domainId={domainId}
+          versionId={versionId}
+          resumeData={resumeData}
+          resumeStep={resumeStep}
           onResume={handleResume}
           onReset={handleReset}
           onCancel={handleCancelResume}

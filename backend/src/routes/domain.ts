@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma';
-import { crawlAndExtractWithGemini, ProgressCallback } from '../services/geminiService';
+import { crawlAndExtractWithGpt4o, ProgressCallback } from '../services/geminiService';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -94,9 +94,12 @@ router.post('/', async (req: Request, res: Response) => {
     return;
   }
 
-  // Determine crawl target based on priorityUrls
-  const isFullUrl = (url: string) => url.startsWith('http://') || url.startsWith('https://');
-  const crawlTarget = isFullUrl(url) ? url : `https://${url}`;
+  // Enforce that url is a domain, not a full URL
+  const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}$/;
+  if (!domainRegex.test(url)) {
+    res.status(400).json({ error: 'Please provide a valid domain (not a full URL) in the first input.' });
+    return;
+  }
 
   // If subdomains provided, pass array to extraction logic
   // Otherwise, use main domain only
@@ -218,9 +221,18 @@ router.post('/', async (req: Request, res: Response) => {
       sendEvent({ type: 'progress', ...progressData, step: enhancedMessage });
     };
 
-    // 3. Run Gemini extraction with progress streaming
-    const extraction = await crawlAndExtractWithGemini(domainsToExtract, onProgress, customPaths, priorityUrls);
-
+    // Determine crawl mode
+    const hasPriorityUrls = Array.isArray(priorityUrls) && priorityUrls.length > 0;
+    const hasCustomPaths = Array.isArray(customPaths) && customPaths.length > 0;
+    let extraction;
+    let totalTokenUsage = 0;
+    if (!hasPriorityUrls && !hasCustomPaths) {
+      extraction = await crawlAndExtractWithGpt4o(domainsToExtract, onProgress);
+    } else {
+      extraction = await crawlAndExtractWithGpt4o(domainsToExtract, onProgress, customPaths, priorityUrls);
+    }
+    totalTokenUsage += extraction.tokenUsage || 0;
+    
     // 4. Fix keyEntities: sum if object, else use as is
     let keyEntitiesValue = extraction.keyEntities;
     if (typeof keyEntitiesValue === 'object' && keyEntitiesValue !== null) {
@@ -237,6 +249,7 @@ router.post('/', async (req: Request, res: Response) => {
         keyEntities: keyEntitiesValue,
         confidenceScore: extraction.confidenceScore,
         extractedContext: extraction.extractedContext,
+        tokenUsage: extraction.tokenUsage || 0,
       },
     });
 
@@ -253,7 +266,8 @@ router.post('/', async (req: Request, res: Response) => {
         domain, 
         domainVersion,
         extraction: crawlResult,
-        isNewVersion 
+        isNewVersion,
+        tokenUsage: totalTokenUsage
       } 
     });
     res.end();
@@ -345,73 +359,93 @@ router.get('/:id', async (req: Request, res: Response) => {
 
 // GET /domain/:id/versions - get all versions for a domain
 router.get('/:id/versions', asyncHandler(async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!id) { res.status(400).json({ error: 'Domain id is required' }); return; }
+  const domainId = Number(req.params.id);
   
+  if (!domainId) {
+    return res.status(400).json({ error: 'Domain ID is required' });
+  }
+
   try {
     const versions = await prisma.domainVersion.findMany({
-      where: { domainId: id },
+      where: { domainId },
+      orderBy: { version: 'desc' },
       include: {
-        dashboardAnalyses: true,
-        crawlResults: { orderBy: { createdAt: 'desc' }, take: 1 },
         keywords: {
           include: {
             phrases: {
-              include: { aiQueryResults: true }
+              include: {
+                aiQueryResults: true
+              }
             }
           }
         }
-      },
-      orderBy: { version: 'desc' }
+      }
     });
-    
-    // For each version, include metrics (from dashboardAnalyses[0] or calculated)
-    const result = await Promise.all(versions.map(async (v) => {
-      let metrics = null;
-      if (v.dashboardAnalyses && v.dashboardAnalyses.length > 0) {
-        metrics = v.dashboardAnalyses[0].metrics;
-      } else {
-        // Calculate metrics on the fly if not present
-        const aiQueryResults = v.keywords.flatMap((k: any) => k.phrases.flatMap((p: any) => p.aiQueryResults));
-        const totalQueries = aiQueryResults.length;
-        const mentions = aiQueryResults.filter((r: any) => r.presence === 1).length;
-        const mentionRate = totalQueries > 0 ? (mentions / totalQueries) * 100 : 0;
-        const avgRelevance = totalQueries > 0 ? aiQueryResults.reduce((sum: number, r: any) => sum + r.relevance, 0) / totalQueries : 0;
-        const avgAccuracy = totalQueries > 0 ? aiQueryResults.reduce((sum: number, r: any) => sum + r.accuracy, 0) / totalQueries : 0;
-        const avgSentiment = totalQueries > 0 ? aiQueryResults.reduce((sum: number, r: any) => sum + r.sentiment, 0) / totalQueries : 0;
-        const avgOverall = totalQueries > 0 ? aiQueryResults.reduce((sum: number, r: any) => sum + r.overall, 0) / totalQueries : 0;
-        const visibilityScore = Math.round(
-          Math.min(
-            100,
-            Math.max(
-              0,
-              (mentionRate * 0.25) + (avgRelevance * 10) + (avgSentiment * 5)
-            )
-          )
-        );
-        metrics = {
-          visibilityScore,
-          mentionRate,
-          avgRelevance,
-          avgAccuracy,
-          avgSentiment,
-          avgOverall,
-          totalQueries
+
+    // Calculate metrics for each version
+    const versionsWithMetrics = versions.map((version: any) => {
+      // Flatten AI query results from keywords -> phrases -> aiQueryResults
+      const aiResults = version.keywords.flatMap((k: any) => k.phrases.flatMap((p: any) => p.aiQueryResults));
+      const totalQueries = aiResults.length;
+      
+      if (totalQueries === 0) {
+        return {
+          ...version,
+          metrics: {
+            visibilityScore: 0,
+            mentionRate: 0,
+            avgRelevance: 0,
+            avgAccuracy: 0,
+            avgSentiment: 0,
+            avgOverall: 0,
+            totalQueries: 0,
+            keywordCount: (version.keywords || []).length,
+            phraseCount: (version.keywords || []).reduce((sum: number, k: any) => sum + (k.phrases || []).length, 0)
+          }
         };
       }
+
+      const mentions = aiResults.filter((r: any) => r.presence === 1).length;
+      const mentionRate = (mentions / totalQueries) * 100;
+      
+      const avgRelevance = aiResults.reduce((sum: number, r: any) => sum + (r.relevance || 0), 0) / totalQueries;
+      const avgAccuracy = aiResults.reduce((sum: number, r: any) => sum + (r.accuracy || 0), 0) / totalQueries;
+      const avgSentiment = aiResults.reduce((sum: number, r: any) => sum + (r.sentiment || 0), 0) / totalQueries;
+      const avgOverall = aiResults.reduce((sum: number, r: any) => sum + (r.overall || 0), 0) / totalQueries;
+      
+      // Calculate visibility score based on mention rate and average scores
+      const visibilityScore = Math.min(100, Math.max(0, 
+        (mentionRate * 0.6) + 
+        (avgRelevance * 10) + 
+        (avgAccuracy * 5) + 
+        (avgSentiment * 5) + 
+        (avgOverall * 10)
+      ));
+
       return {
-        id: v.id,
-        version: v.version,
-        name: v.name,
-        createdAt: v.createdAt,
-        metrics
+        ...version,
+        metrics: {
+          visibilityScore: Math.round(visibilityScore),
+          mentionRate: Math.round(mentionRate * 10) / 10,
+          avgRelevance: Math.round(avgRelevance * 10) / 10,
+          avgAccuracy: Math.round(avgAccuracy * 10) / 10,
+          avgSentiment: Math.round(avgSentiment * 10) / 10,
+          avgOverall: Math.round(avgOverall * 10) / 10,
+          totalQueries,
+          keywordCount: (version.keywords || []).length,
+          phraseCount: (version.keywords || []).reduce((sum: number, k: any) => sum + (k.phrases || []).length, 0)
+        }
       };
-    }));
-    
-    res.json({ versions: result });
-  } catch (err: any) {
-    console.error('Domain versions fetch error:', err);
-    res.status(500).json({ error: 'Failed to fetch domain versions', details: err.message });
+    });
+
+    res.json({ versions: versionsWithMetrics });
+
+  } catch (error: any) {
+    console.error('Domain versions fetch error:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch domain versions', 
+      details: error.message 
+    });
   }
 }));
 

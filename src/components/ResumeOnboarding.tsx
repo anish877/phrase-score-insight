@@ -8,6 +8,9 @@ import { onboardingService, ResumeCheckResult, OnboardingStepData } from '@/serv
 
 interface ResumeOnboardingProps {
   domainId: number;
+  versionId?: number | null;
+  resumeData?: OnboardingStepData | null;
+  resumeStep?: number;
   onResume: (stepData: OnboardingStepData, currentStep: number) => void;
   onReset: () => void;
   onCancel: () => void;
@@ -15,6 +18,9 @@ interface ResumeOnboardingProps {
 
 const ResumeOnboarding: React.FC<ResumeOnboardingProps> = ({
   domainId,
+  versionId,
+  resumeData,
+  resumeStep,
   onResume,
   onReset,
   onCancel
@@ -24,14 +30,25 @@ const ResumeOnboarding: React.FC<ResumeOnboardingProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (resumeData && typeof resumeStep === 'number') {
+      setResumeCheck({
+        canResume: true,
+        currentStep: resumeStep,
+        stepData: resumeData,
+        lastActivity: undefined,
+        dataIntegrity: undefined,
+      });
+      return;
+    }
     checkResumeStatus();
-  }, [domainId]);
+    // eslint-disable-next-line
+  }, [domainId, versionId, resumeData, resumeStep]);
 
   const checkResumeStatus = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const result = await onboardingService.checkResume(domainId);
+      const result = await onboardingService.checkResume(domainId, versionId);
       setResumeCheck(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to check resume status');

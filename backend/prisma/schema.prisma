@@ -63,6 +63,7 @@ model CrawlResult {
   keyEntities Int
   confidenceScore Float
   extractedContext String  @db.Text
+  tokenUsage     Int?     // Add this line to persist GPT token usage
   createdAt DateTime @default(now())
 }
 

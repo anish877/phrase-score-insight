@@ -341,9 +341,15 @@ router.get('/active', asyncHandler(async (req: Request, res: Response) => {
       }
     });
 
-    console.log(`Found ${activeSessions.length} active onboarding sessions`);
+    // Add domainVersionId to each session (already present, but ensure it's included in the response)
+    const sessionsWithVersion = activeSessions.map(session => ({
+      ...session,
+      domainVersionId: session.domainVersionId
+    }));
 
-    res.json({ activeSessions });
+    console.log(`Found ${sessionsWithVersion.length} active onboarding sessions`);
+
+    res.json({ activeSessions: sessionsWithVersion });
   } catch (error) {
     console.error('Error fetching active sessions:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -492,7 +498,7 @@ router.post('/save-to-main/:domainId', asyncHandler(async (req: Request, res: Re
         (avgSentiment * 20)
       );
 
-      const modelPerformance = ['GPT-4o', 'Claude 3', 'Gemini 1.5'].map(model => {
+      const modelPerformance = ['GPT-4o Mini', 'Claude 3', 'Gemini 1.5'].map(model => {
         const modelResults = stepData.queryResults.filter((r: any) => r.model === model);
         const modelPresence = modelResults.filter((r: any) => r.scores.presence === 1).length;
         const modelAvgRelevance = modelResults.reduce((sum: number, r: any) => sum + r.scores.relevance, 0) / modelResults.length;

@@ -80,9 +80,11 @@ class OnboardingService {
   }
 
   // Check if onboarding can be resumed
-  async checkResume(domainId: number): Promise<ResumeCheckResult> {
+  async checkResume(domainId: number, versionId?: number): Promise<ResumeCheckResult> {
     try {
-      const response = await fetch(`${this.baseUrl}/resume/${domainId}`);
+      let url = `${this.baseUrl}/resume/${domainId}`;
+      if (versionId) url += `?versionId=${versionId}`;
+      const response = await fetch(url);
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -116,7 +118,7 @@ class OnboardingService {
   }
 
   // Get active onboarding sessions
-  async getActiveSessions(): Promise<{ activeSessions: Array<{ domain: any; currentStep: number; lastActivity: string }> }> {
+  async getActiveSessions(): Promise<{ activeSessions: Array<{ domain: any; currentStep: number; lastActivity: string; domainVersionId?: number | null }> }> {
     try {
       const response = await fetch(`${this.baseUrl}/active`);
       

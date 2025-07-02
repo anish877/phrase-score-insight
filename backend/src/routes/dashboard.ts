@@ -1278,7 +1278,8 @@ router.get('/all', asyncHandler(async (req: Request, res: Response) => {
           contentBlocks: latestVersion.crawlResults[0].contentBlocks,
           keyEntities: latestVersion.crawlResults[0].keyEntities,
           confidenceScore: latestVersion.crawlResults[0].confidenceScore,
-          extractedContext: latestVersion.crawlResults[0].extractedContext
+          extractedContext: latestVersion.crawlResults[0].extractedContext,
+          tokenUsage: latestVersion.crawlResults[0].tokenUsage || 0 // Add token usage to extraction
         } : null,
         metrics: {
           visibilityScore: comprehensiveMetrics.visibilityScore,
@@ -1397,12 +1398,13 @@ router.get('/:domainId', asyncHandler(async (req: Request, res: Response) => {
         lastAnalyzed: targetData.dashboardAnalyses[0]?.updatedAt || targetData.updatedAt,
         industry: domain.context ? 'Technology' : 'General',
         description: domain.context || 'Domain analysis and AI visibility tracking',
-        crawlResults: targetData.crawlResults[0] ? {
+        extraction: targetData.crawlResults[0] ? {
           pagesScanned: targetData.crawlResults[0].pagesScanned,
           contentBlocks: targetData.crawlResults[0].contentBlocks,
           keyEntities: targetData.crawlResults[0].keyEntities,
           confidenceScore: targetData.crawlResults[0].confidenceScore,
-          extractedContext: targetData.crawlResults[0].extractedContext
+          extractedContext: targetData.crawlResults[0].extractedContext,
+          tokenUsage: targetData.crawlResults[0].tokenUsage || 0 // Add token usage to extraction
         } : null,
         keywords: targetData.keywords.map((keyword: any) => ({
           id: keyword.id,
@@ -1882,12 +1884,13 @@ Return ONLY a valid JSON object in this exact format:
       lastAnalyzed: domain.updatedAt,
       industry: domain.context ? 'Technology' : 'General',
       description: domain.context || 'Domain analysis and AI visibility tracking',
-      crawlResults: domain.crawlResults[0] ? {
+      extraction: domain.crawlResults[0] ? {
         pagesScanned: domain.crawlResults[0].pagesScanned,
         contentBlocks: domain.crawlResults[0].contentBlocks,
         keyEntities: domain.crawlResults[0].keyEntities,
         confidenceScore: domain.crawlResults[0].confidenceScore,
-        extractedContext: domain.crawlResults[0].extractedContext
+        extractedContext: domain.crawlResults[0].extractedContext,
+        tokenUsage: domain.crawlResults[0].tokenUsage || 0 // Add token usage to extraction
       } : null,
       keywords: domain.keywords.map((keyword: any) => ({
         id: keyword.id,

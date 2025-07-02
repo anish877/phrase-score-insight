@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma';
-import { generateKeywordsForDomain } from '../services/geminiService';
-import { crawlAndExtractWithGemini } from '../services/geminiService';
+import { gptService } from '../services/geminiService';
+import { crawlAndExtractWithGpt4o } from '../services/geminiService';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -36,8 +36,8 @@ router.get('/:domainId', async (req: Request, res: Response) => {
        return
     }
 
-    // Otherwise, generate keywords using Gemini and save
-    console.log('No existing keywords, generating with Gemini for domain:', domainId, 'versionId:', versionId);
+    // Otherwise, generate keywords using GPT-4o Mini and save
+    console.log('No existing keywords, generating with GPT-4o Mini for domain:', domainId, 'versionId:', versionId);
     
     // Get domain for context
     const domain = await prisma.domain.findUnique({
@@ -53,17 +53,17 @@ router.get('/:domainId', async (req: Request, res: Response) => {
     // Get context from domain or extract if missing
     let context = domain.context;
     if (!context) {
-      // Use Gemini to extract context if not present
-      const extraction = await crawlAndExtractWithGemini(domain.url);
+      // Use GPT-4o Mini to extract context if not present
+      const extraction = await crawlAndExtractWithGpt4o(domain.url);
       context = extraction.extractedContext;
       await prisma.domain.update({ where: { id: domainId }, data: { context } });
     }
     
-    const geminiKeywords = await generateKeywordsForDomain(domain.url, context);
+    const gptKeywords = await gptService.generateKeywordsForDomain(domain.url, context);
     
     // Save keywords to database with version support
     const savedKeywords = await Promise.all(
-      geminiKeywords.map(kw =>
+      gptKeywords.keywords.map(kw =>
         prisma.keyword.create({
           data: {
             term: kw.term,
@@ -215,18 +215,18 @@ router.get('/stream/:domainId', async (req: Request, res: Response) => {
     let context = domain.context;
     if (!context) {
       sendEvent('progress', { message: 'Extracting comprehensive brand context with advanced AI analysis...' });
-      const extraction = await crawlAndExtractWithGemini(domain.url);
+      const extraction = await crawlAndExtractWithGpt4o(domain.url);
       context = extraction.extractedContext;
       await prisma.domain.update({ where: { id: domainId }, data: { context } });
     }
 
     sendEvent('progress', { message: 'Generating high-impact keywords using advanced SEO intelligence...' });
-    const geminiKeywords = await generateKeywordsForDomain(domain.url, context);
+    const gptKeywords = await gptService.generateKeywordsForDomain(domain.url, context);
     
     sendEvent('progress', { message: 'Categorizing keywords by search intent and user behavior patterns...' });
     
     // Use all AI-generated keywords, not just top 10
-    const allKeywords = geminiKeywords;
+    const allKeywords = gptKeywords.keywords;
 
     sendEvent('progress', { message: `Processing ${allKeywords.length} AI-generated keywords with real-world SEO metrics...` });
 
@@ -249,11 +249,11 @@ router.get('/stream/:domainId', async (req: Request, res: Response) => {
       
       // Send progress update every 10 keywords
       if ((i + 1) % 10 === 0) {
-        sendEvent('progress', { message: `Processed ${i + 1}/${allKeywords.length} keywords - Optimizing for search intent and conversion potential...` });
+        sendEvent('progress', { message: `Processed ${i + 1}/${allKeywords.length} keywords...` });
       }
     }
 
-    sendEvent('progress', { message: `Advanced AI keyword discovery complete! Generated ${allKeywords.length} high-impact keywords optimized for search visibility and conversion.` });
+    sendEvent('progress', { message: `Advanced AI keyword generation complete! Generated ${allKeywords.length} high-value keywords with realistic SEO metrics.` });
     sendEvent('complete', {});
     res.end();
   } catch (err: any) {

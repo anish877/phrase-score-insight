@@ -72,15 +72,14 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
     if (setPriorityPathsProp) setPriorityPathsProp(priorityPaths);
   }, [customPaths, priorityUrls, priorityPaths, setCustomPathsProp, setPriorityUrlsProp, setPriorityPathsProp]);
 
-  const validateDomainOrUrl = (value: string) => {
+  const validateDomain = (value: string) => {
+    // Only allow domains, not full URLs
     const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}$/;
-    const urlRegex = /^https?:\/\/[^\s/$.?#].[^\s]*$/;
-    return domainRegex.test(value) || urlRegex.test(value);
+    return domainRegex.test(value);
   };
 
   const handleDomainChange = (value: string) => {
     setDomain(value);
-    // Clear domain check result when domain changes
     setDomainCheckResult(null);
   };
 
@@ -191,7 +190,16 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
     if (!domain.trim()) {
       toast({
         title: "Domain required",
-        description: "Please enter a domain or URL to check",
+        description: "Please enter a domain",
+        variant: "destructive"
+      });
+      return null;
+    }
+
+    if (!validateDomain(domain.trim())) {
+      toast({
+        title: "Invalid domain",
+        description: "Please enter a valid domain (not a full URL)",
         variant: "destructive"
       });
       return null;
@@ -282,16 +290,16 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
     if (!domain.trim()) {
       toast({
         title: "Domain required",
-        description: "Please enter a domain or URL",
+        description: "Please enter a domain",
         variant: "destructive"
       });
       return;
     }
 
-    if (!validateDomainOrUrl(domain)) {
+    if (!validateDomain(domain.trim())) {
       toast({
         title: "Invalid domain",
-        description: "Please enter a valid domain or URL",
+        description: "Please enter a valid domain (not a full URL)",
         variant: "destructive"
       });
       return;
@@ -302,11 +310,8 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
     
     if (result) {
       if (result.exists) {
-        // Domain exists - show version dialog (this will be handled by checkDomain)
-        // The version dialog will be shown automatically when result.exists is true
         return;
       } else {
-        // Domain doesn't exist, proceed to next step
         onNext();
       }
     }
@@ -341,7 +346,7 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
               Domain or URL
             </CardTitle>
             <CardDescription>
-              Enter your website domain (e.g., example.com) or full URL (e.g., https://example.com)
+              Enter your website domain (e.g., example.com). Do NOT enter a full URL.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -349,7 +354,7 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
               <div className="flex-1">
                 <Input
                   type="text"
-                  placeholder="example.com or https://example.com"
+                  placeholder="example.com"
                   value={domain}
                   onChange={(e) => handleDomainChange(e.target.value)}
                   className="h-12 text-lg"

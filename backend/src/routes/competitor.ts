@@ -1,16 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const router = Router();
 const prisma = new PrismaClient();
 
-// Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
 // POST /competitor/analyze - Analyze competitor using AI
-router.post('/analyze', async (req: Request, res: Response) => {
+router.post('/analyze', async (req, res) => {
   const { targetDomain, competitorDomain, context, keywords, phrases } = req.body;
 
   if (!targetDomain || !competitorDomain) {
@@ -101,16 +96,17 @@ Be realistic, use all provided data, and do not add any extra text.
     sendEvent({ event: 'progress', message: 'Running AI analysis...', progress: 60 });
 
     // Run AI analysis
-    const result = await model.generateContent(analysisPrompt);
-    const response = await result.response;
-    const text = response.text();
+    // Replace GoogleGenerativeAI/model with OpenAI GPT-4o Mini logic for competitor analysis
+    // TODO: Call OpenAI API here and assign the response text to aiResponseText
+    let aiResponseText = '';
+    // aiResponseText = await callOpenAIGpt4oMini(analysisPrompt, ...);
 
     sendEvent({ event: 'progress', message: 'Processing analysis results...', progress: 90 });
 
     // Parse JSON response
     let analysisData;
     try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const jsonMatch = aiResponseText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         analysisData = JSON.parse(jsonMatch[0]);
       } else {

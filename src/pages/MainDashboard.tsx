@@ -32,6 +32,7 @@ interface ActiveOnboardingSession {
   };
   currentStep: number;
   lastActivity: string;
+  domainVersionId?: number | null;
 }
 
 const ProfessionalDashboard = () => {
@@ -320,8 +321,8 @@ const ProfessionalDashboard = () => {
                 className="group border-0 shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 bg-gradient-to-br from-white to-slate-50 overflow-hidden cursor-pointer"
                 role="button"
                 tabIndex={0}
-                onClick={() => navigate(`/analyze?domainId=${session.domain.id}`)}
-                onKeyPress={e => { if (e.key === 'Enter' || e.key === ' ') navigate(`/analyze?domainId=${session.domain.id}`); }}
+                onClick={() => navigate(`/analyze?domainId=${session.domain.id}${session.domainVersionId ? `&versionId=${session.domainVersionId}` : ''}`)}
+                onKeyPress={e => { if (e.key === 'Enter' || e.key === ' ') navigate(`/analyze?domainId=${session.domain.id}${session.domainVersionId ? `&versionId=${session.domainVersionId}` : ''}`); }}
                 aria-label={`Resume analysis for ${domain.url}`}
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>

@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, TrendingUp, TrendingDown, Calendar, Globe, BarChart3, Eye, MessageSquare, Star, Users, Target, AlertTriangle, Lightbulb, RefreshCw, Activity, Shield, Award, Zap, Link as LinkIcon, FileText, LayoutDashboard, Search, Target as TargetIcon, BarChart3 as BarChart3Icon, Cpu, FileText as FileTextIcon, Users as UsersIcon, MessageSquare as MessageSquareIcon, History, Settings, ChevronRight, Home, Layers, TrendingUp as TrendingUpIcon, Activity as ActivityIcon, Globe as GlobeIcon, Zap as ZapIcon, Shield as ShieldIcon, Award as AwardIcon } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Calendar, Globe, BarChart3, Eye, MessageSquare, Star, Users, Target, AlertTriangle, Lightbulb, RefreshCw, Activity, Shield, Award, Zap, Link as LinkIcon, FileText, LayoutDashboard, Search, Target as TargetIcon, BarChart3 as BarChart3Icon, Cpu, FileText as FileTextIcon, Users as UsersIcon, MessageSquare as MessageSquareIcon, History, Settings, ChevronRight, Home, Layers, TrendingUp as TrendingUpIcon, Activity as ActivityIcon, Globe as GlobeIcon, Zap as ZapIcon, Shield as ShieldIcon, Award as AwardIcon, Calculator } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, Legend } from 'recharts';
 import type { Keyword } from '@/services/api';
 import type { AIQueryResult } from '@/components/AIQueryResults';
@@ -114,6 +114,9 @@ interface DomainData {
     marketTrends: string[];
     growthOpportunities: string[];
     threats: string[];
+  };
+  extraction?: {
+    tokenUsage: number;
   };
 }
 
@@ -592,6 +595,8 @@ const DomainDashboard = () => {
       await new Promise(resolve => setTimeout(resolve, 100));
       
       setDomainData(data);
+      // Debug: log token usage after setting domain data
+      console.log('Token usage from API:', data.extraction?.tokenUsage);
     } catch (err) {
       console.error('Error fetching domain data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load domain data');
@@ -863,6 +868,9 @@ const DomainDashboard = () => {
 
   const { metrics } = domainData;
 
+  // Debug: log token usage in render
+  console.log('Token usage in render:', domainData.extraction?.tokenUsage);
+
   // Safety check to ensure metrics exists
   if (!metrics) {
     return (
@@ -1099,7 +1107,7 @@ const DomainDashboard = () => {
         </header>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-auto">
           <div className="p-6">
             {/* Enhanced Quick Stats */}
             <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
@@ -1192,6 +1200,22 @@ const DomainDashboard = () => {
                   </div>
                 </CardContent>
               </Card>
+              {/* Add this at the end of the grid */}
+              {domainData.extraction?.tokenUsage !== undefined && (
+                <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 hover:shadow-lg transition-all duration-300">
+                  <CardContent className="p-6">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-slate-50 rounded-lg">
+                        <Calculator className="h-5 w-5 text-slate-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-600">Total GPT Token Usage</p>
+                        <p className="text-2xl font-bold text-slate-800">{domainData.extraction.tokenUsage.toLocaleString()}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             {/* Content Sections */}
@@ -1325,10 +1349,8 @@ const DomainDashboard = () => {
                   </div>
                 </CardContent>
               </Card>
-            </div>)}
-
-            {/* Industry Analysis */}
-            <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+               {/* Industry Analysis */}
+            <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm col-span-2">
               <CardHeader className="pb-4">
                 <div className="flex items-center space-x-2">
                   <div className="p-1.5 bg-purple-50 rounded-lg">
@@ -1413,6 +1435,12 @@ const DomainDashboard = () => {
                 </div>
               </CardContent>
             </Card>
+            </div>
+            
+            )
+            }
+
+           
           </div>
 
         {activeSection === 'seo' && (
@@ -2935,6 +2963,401 @@ const DomainDashboard = () => {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {activeSection === 'insights' && (
+          <div>
+            {/* Insights Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-emerald-50 rounded-lg">
+                      <Shield className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Strengths</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {domainData.insights?.strengths?.length || 0}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-rose-50 rounded-lg">
+                      <AlertTriangle className="h-5 w-5 text-rose-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Weaknesses</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {domainData.insights?.weaknesses?.length || 0}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-blue-50 rounded-lg">
+                      <Lightbulb className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Recommendations</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {domainData.insights?.recommendations?.length || 0}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Strengths */}
+            {domainData.insights?.strengths && domainData.insights.strengths.length > 0 && (
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm mb-8">
+                <CardHeader>
+                  <CardTitle className="text-slate-800 flex items-center space-x-2">
+                    <Shield className="h-5 w-5 text-emerald-600" />
+                    <span>Domain Strengths</span>
+                  </CardTitle>
+                  <CardDescription className="text-slate-600">Areas where your domain excels in AI visibility</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {domainData.insights.strengths.map((strength, index) => (
+                      <div key={index} className="flex items-start space-x-3 p-4 bg-emerald-50 rounded-lg">
+                        <div className="w-2 h-2 bg-emerald-500 rounded-full mt-2 flex-shrink-0"></div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-emerald-800">{strength.title}</h4>
+                          <p className="text-sm text-emerald-700 mt-1">{strength.description}</p>
+                          {strength.metric && (
+                            <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 mt-2">
+                              {strength.metric}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Weaknesses */}
+            {domainData.insights?.weaknesses && domainData.insights.weaknesses.length > 0 && (
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm mb-8">
+                <CardHeader>
+                  <CardTitle className="text-slate-800 flex items-center space-x-2">
+                    <AlertTriangle className="h-5 w-5 text-rose-600" />
+                    <span>Areas for Improvement</span>
+                  </CardTitle>
+                  <CardDescription className="text-slate-600">Opportunities to enhance AI visibility performance</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {domainData.insights.weaknesses.map((weakness, index) => (
+                      <div key={index} className="flex items-start space-x-3 p-4 bg-rose-50 rounded-lg">
+                        <div className="w-2 h-2 bg-rose-500 rounded-full mt-2 flex-shrink-0"></div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-rose-800">{weakness.title}</h4>
+                          <p className="text-sm text-rose-700 mt-1">{weakness.description}</p>
+                          {weakness.metric && (
+                            <Badge className="bg-rose-100 text-rose-700 border-rose-200 mt-2">
+                              {weakness.metric}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Recommendations */}
+            {domainData.insights?.recommendations && domainData.insights.recommendations.length > 0 && (
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-slate-800 flex items-center space-x-2">
+                    <Lightbulb className="h-5 w-5 text-blue-600" />
+                    <span>Strategic Recommendations</span>
+                  </CardTitle>
+                  <CardDescription className="text-slate-600">Actionable insights to improve AI visibility</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {domainData.insights.recommendations.map((rec, index) => (
+                      <div key={index} className="border border-slate-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="font-semibold text-slate-800">{rec.category}</span>
+                          <Badge className={getPriorityColor(rec.priority)}>{rec.priority}</Badge>
+                        </div>
+                        <p className="text-slate-700 mb-3">{rec.action}</p>
+                        <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                          <span>Impact: {rec.expectedImpact}</span>
+                          <span>Timeline: {rec.timeline}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Fallback when no insights */}
+            {(!domainData.insights?.strengths?.length && !domainData.insights?.weaknesses?.length && !domainData.insights?.recommendations?.length) && (
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="text-center py-12">
+                  <Lightbulb className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+                  <h3 className="text-lg font-semibold text-slate-800 mb-2">No Insights Available</h3>
+                  <p className="text-slate-600">AI-generated insights will appear here once analysis is complete.</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+
+        {activeSection === 'history' && (
+          <div>
+            {/* Version History Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-blue-50 rounded-lg">
+                      <Layers className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Total Versions</p>
+                      <p className="text-2xl font-bold text-slate-800">{versions.length}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-emerald-50 rounded-lg">
+                      <TrendingUp className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Best Score</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {(() => {
+                          const validScores = versions
+                            .map(v => v.metrics?.visibilityScore)
+                            .filter(score => typeof score === 'number' && !isNaN(score));
+                          return validScores.length > 0 ? Math.max(...validScores) : 0;
+                        })()}%
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-amber-50 rounded-lg">
+                      <Activity className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Avg Score</p>
+                      <p className="text-2xl font-bold text-slate-800">
+                        {(() => {
+                          const validScores = versions
+                            .map(v => v.metrics?.visibilityScore)
+                            .filter(score => typeof score === 'number' && !isNaN(score));
+                          return validScores.length > 0 ? Math.round(validScores.reduce((sum, score) => sum + score, 0) / validScores.length) : 0;
+                        })()}%
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-purple-50 rounded-lg">
+                      <Calendar className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Latest Version</p>
+                      <p className="text-lg font-bold text-slate-800">
+                        {versions.length > 0 ? `v${versions[0].version}` : '—'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Version History Graph */}
+            <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm mb-8">
+              <CardHeader>
+                <CardTitle className="text-slate-800 flex items-center space-x-2">
+                  <History className="h-5 w-5 text-blue-600" />
+                  <span>Version History Comparison</span>
+                </CardTitle>
+                <CardDescription className="text-slate-600">Visibility score progression across all versions</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {versions.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={400}>
+                    <LineChart data={versions
+                      .filter(v => v.metrics && typeof v.metrics.visibilityScore === 'number' && !isNaN(v.metrics.visibilityScore))
+                      .map(v => ({
+                        version: `v${v.version}`,
+                        visibilityScore: Number(v.metrics?.visibilityScore) || 0,
+                        mentionRate: Number(v.metrics?.mentionRate) || 0,
+                        avgRelevance: Number(v.metrics?.avgRelevance) || 0,
+                        avgOverall: Number(v.metrics?.avgOverall) || 0,
+                        date: v.createdAt ? new Date(v.createdAt).toLocaleDateString() : 'Unknown'
+                      }))
+                      .filter(item => 
+                        !isNaN(item.visibilityScore) && 
+                        !isNaN(item.mentionRate) && 
+                        !isNaN(item.avgRelevance) && 
+                        !isNaN(item.avgOverall)
+                      )
+                    }>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis 
+                        dataKey="version" 
+                        stroke="#64748b" 
+                        fontSize={12}
+                        label={{ value: 'Version', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                      />
+                      <YAxis 
+                        stroke="#64748b" 
+                        fontSize={12}
+                        domain={[0, 100]}
+                        label={{ value: 'Score (%)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                      />
+                      <Tooltip 
+                        formatter={(value, name) => [`${value}%`, name]}
+                        labelFormatter={(label) => `Version: ${label}`}
+                        contentStyle={{ 
+                          backgroundColor: 'white', 
+                          border: '1px solid #e2e8f0', 
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                        }} 
+                      />
+                      <Legend />
+                      <Line 
+                        type="monotone" 
+                        dataKey="visibilityScore" 
+                        stroke="#3b82f6" 
+                        strokeWidth={3} 
+                        dot={{ fill: '#3b82f6', strokeWidth: 2, r: 5 }}
+                        name="Visibility Score"
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="mentionRate" 
+                        stroke="#10b981" 
+                        strokeWidth={2} 
+                        dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }}
+                        name="Mention Rate"
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="avgOverall" 
+                        stroke="#8b5cf6" 
+                        strokeWidth={2} 
+                        dot={{ fill: '#8b5cf6', strokeWidth: 2, r: 4 }}
+                        name="Overall Score"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center text-slate-500 py-12">
+                    <History className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+                    <p className="font-medium">No version history available</p>
+                    <p className="text-sm text-slate-400">Version data will appear here once multiple versions are created</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Version Details Table */}
+            <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-slate-800">Version Details</CardTitle>
+                <CardDescription className="text-slate-600">Detailed metrics for each version</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {versions.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Version</TableHead>
+                          <TableHead>Created</TableHead>
+                          <TableHead>Visibility Score</TableHead>
+                          <TableHead>Mention Rate</TableHead>
+                          <TableHead>Avg Relevance</TableHead>
+                          <TableHead>Avg Overall</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {versions.map((version, index) => {
+                          const isLatest = index === 0;
+                          const isCurrent = version.id === selectedVersionId;
+                          const hasData = version.metrics?.visibilityScore && version.metrics.visibilityScore > 0;
+                          
+                          return (
+                            <TableRow key={version.id} className={isCurrent ? "bg-blue-50" : ""}>
+                              <TableCell className="font-medium">
+                                <div className="flex items-center space-x-2">
+                                  <span>v{version.version}</span>
+                                  {isLatest && <Badge className="bg-blue-50 text-blue-700 border-blue-200">Latest</Badge>}
+                                  {isCurrent && <Badge className="bg-green-50 text-green-700 border-green-200">Current</Badge>}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                {version.createdAt ? new Date(version.createdAt).toLocaleDateString() : 'Unknown'}
+                              </TableCell>
+                              <TableCell>
+                                <span className={`font-bold ${getVisibilityScoreColor(version.metrics?.visibilityScore || 0)}`}>
+                                  {version.metrics?.visibilityScore || 0}%
+                                </span>
+                              </TableCell>
+                              <TableCell>{version.metrics?.mentionRate || 0}%</TableCell>
+                              <TableCell>{version.metrics?.avgRelevance || 0}/5</TableCell>
+                              <TableCell>{version.metrics?.avgOverall || 0}/5</TableCell>
+                              <TableCell>
+                                {hasData ? (
+                                  <Badge className="bg-green-50 text-green-700 border-green-200">Complete</Badge>
+                                ) : (
+                                  <Badge className="bg-slate-50 text-slate-700 border-slate-200">No Data</Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="text-center text-slate-500 py-8">
+                    <Layers className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+                    <p>No versions found</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         )}
           </div>

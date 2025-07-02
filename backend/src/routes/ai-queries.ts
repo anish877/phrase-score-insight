@@ -5,7 +5,7 @@ import { aiQueryService } from '../services/aiQueryService';
 const router = Router();
 const prisma = new PrismaClient();
 
-const AI_MODELS: ('GPT-4o' | 'Claude 3' | 'Gemini 1.5')[] = ['GPT-4o', 'Claude 3', 'Gemini 1.5'];
+const AI_MODELS: ('GPT-4o Mini' | 'Claude 3' | 'Gemini 1.5')[] = ['GPT-4o Mini', 'Claude 3', 'Gemini 1.5'];
 
 // Rate limiting: track active requests per domain with cleanup
 const activeRequests = new Map<number, number>();

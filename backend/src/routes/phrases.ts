@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { PrismaClient } from '../../generated/prisma';
-import { geminiService } from '../services/geminiService';
+import { gptService } from '../services/geminiService';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -67,11 +67,11 @@ router.get('/:domainId', async (req, res) => {
         sendEvent('progress', { message: `Generating high-converting phrases for "${term}" (${i+1}/${keywords.length}) - Analyzing search intent patterns...` });
         
         // Generate phrases using AI, now with domain and context
-        const phrases = await geminiService.generatePhrases(term, domain, context);
+        const phrasesResult = await gptService.generatePhrases(term, domain, context);
         totalAIQueries += 1; // Count each AI call
         
         phrasesPerKeyword[term] = 0;
-        for (const phrase of phrases) {
+        for (const phrase of phrasesResult.phrases) {
           // Save phrase to DB
           const phraseRecord = await prisma.phrase.create({
             data: {
@@ -99,7 +99,7 @@ router.get('/:domainId', async (req, res) => {
           });
         }
         
-        sendEvent('progress', { message: `Generated ${phrases.length} high-impact phrases for "${term}" - Optimized for search intent and conversion...` });
+        sendEvent('progress', { message: `Generated ${phrasesResult.phrases.length} high-impact phrases for "${term}" - Optimized for search intent and conversion...` });
         
       } catch (err: any) {
         console.error(`Failed to generate phrases for "${term}":`, err);

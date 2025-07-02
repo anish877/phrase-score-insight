@@ -1,23 +1,14 @@
-import axios from 'axios';
+import OpenAI from 'openai';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not set in environment variables');
+const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
-async function queryGemini(phrase: string, modelType: 'GPT-4o' | 'Claude 3' | 'Gemini 1.5' = 'Gemini 1.5', domain?: string): Promise<{ response: string, cost: number }> {
-    try {
-        if (!GEMINI_API_KEY) {
-            console.error('GEMINI_API_KEY not set in environment variables');
-            return { 
-                response: `Error: GEMINI_API_KEY not configured. Please set the GEMINI_API_KEY environment variable to use AI features.`, 
-                cost: 0 
-            };
-        }
-        
-        // Highly detailed system prompts that simulate real AI model behavior with domain context
-        let systemPrompt = '';
-        
-        if (modelType === 'GPT-4o') {
-            systemPrompt = `You are GPT-4o, OpenAI's most advanced AI model. You are responding to a real search query as if you were providing search results.
+async function queryWithGpt4o(phrase: string, modelType: 'GPT-4o Mini' | 'Claude 3' | 'Gemini 1.5' = 'GPT-4o Mini', domain?: string): Promise<{ response: string, cost: number }> {
+    // Use different system prompts for each modelType, but always call GPT-4o
+    let systemPrompt = '';
+    if (modelType === 'GPT-4o Mini') {
+        systemPrompt = `You are GPT-4o Mini, OpenAI's most advanced AI model. You are responding to a real search query as if you were providing search results.
 
 RESPONSE STYLE:
 - Be thorough yet concise (3-5 sentences)
@@ -44,8 +35,8 @@ TONE AND APPROACH:
 - Helpful and solution-oriented
 - Educational and informative
 - Current and up-to-date with latest trends`;
-        } else if (modelType === 'Claude 3') {
-            systemPrompt = `You are Claude 3, Anthropic's AI assistant. You are responding to a real search query as if you were providing search results.
+    } else if (modelType === 'Claude 3') {
+        systemPrompt = `You are Claude 3, Anthropic's AI assistant. You are responding to a real search query as if you were providing search results.
 
 RESPONSE STYLE:
 - Focus on safety, helpfulness, and accuracy
@@ -70,9 +61,8 @@ TONE AND APPROACH:
 - Professional and trustworthy
 - Helpful and solution-focused
 - Current with industry knowledge`;
-        } else {
-            // Gemini 1.5 default
-            systemPrompt = `You are Gemini 1.5, Google's advanced AI model. You are responding to a real search query as if you were providing search results.
+    } else {
+        systemPrompt = `You are Gemini 1.5, Google's advanced AI model. You are responding to a real search query as if you were providing search results.
 
 RESPONSE STYLE:
 - Be comprehensive and well-structured
@@ -97,57 +87,28 @@ TONE AND APPROACH:
 - Balanced and objective
 - Current and up-to-date
 - Clear and well-structured`;
-        }
-
-        const response = await axios.post(
-            `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
-            {
-                contents: [
-                    { 
-                        role: "user",
-                        parts: [{ text: `${systemPrompt}\n\nPlease provide a detailed, comprehensive response to this search query: ${phrase}` }] 
-                    }
-                ],
-                generationConfig: {
-                    temperature: 0.7,
-                    maxOutputTokens: 2000, // Increased for dashboard analysis
-                    topK: 40,
-                    topP: 0.8,
-                }
-            },
-            {
-                headers: { 'Content-Type': 'application/json' },
-                timeout: 60000 // 60 seconds timeout for dashboard analysis
-            }
-        );
-        const responseText = response.data.candidates?.[0]?.content?.parts?.[0]?.text || `No response from ${modelType}.`;
-        
-        // Real cost calculation for Gemini based on actual token usage
-        const inputTokens = phrase.length / 4; // Rough estimate
-        const outputTokens = responseText.length / 4; // Rough estimate
-        const cost = (inputTokens / 1000000 * 0.125) + (outputTokens / 1000000 * 0.375);
-        
-        return { response: responseText, cost };
-    } catch (error) {
-        console.error(`${modelType} API Error:`, error);
-        let message = 'Unknown error';
-        if (error instanceof Error) message = error.message;
-        else if (typeof error === 'string') message = error;
-        return { response: `Error querying ${modelType}: ${message}`, cost: 0 };
     }
+    const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Please provide a detailed, comprehensive response to this search query: ${phrase}` }
+        ],
+        max_tokens: 2000,
+        temperature: 0.7
+    });
+    const responseText = completion.choices[0].message?.content || `No response from ${modelType}.`;
+    // Cost calculation (estimate)
+    const inputTokens = phrase.length / 4;
+    const outputTokens = responseText.length / 4;
+    const cost = (inputTokens + outputTokens) * 0.00001; // Example cost
+    return { response: responseText, cost };
 }
 
-async function scoreResponseWithAI(phrase: string, response: string, model: string, domain?: string): Promise<{
-    presence: number;
-    relevance: number;
-    accuracy: number;
-    sentiment: number;
-    overall: number;
-}> {
-    try {
-        const domainContext = domain ? `\n\nTARGET DOMAIN: ${domain}` : '';
-        
-        const scoringPrompt = `You are an advanced SEO analysis tool, simulating the behavior of a real-world search engine evaluator. Your job is to assess, with extreme realism and strictness, how likely it is that the TARGET DOMAIN would appear in the top search results for a given query, based on a simulated AI-generated SERP response.
+async function scoreResponseWithAI(phrase: string, response: string, model: string, domain?: string): Promise<{ presence: number; relevance: number; accuracy: number; sentiment: number; overall: number; }> {
+    // Use GPT-4o for scoring as well
+    const domainContext = domain ? `\n\nTARGET DOMAIN: ${domain}` : '';
+    const scoringPrompt = `You are an advanced SEO analysis tool, simulating the behavior of a real-world search engine evaluator. Your job is to assess, with extreme realism and strictness, how likely it is that the TARGET DOMAIN would appear in the top search results for a given query, based on a simulated AI-generated SERP response.
 
 SEARCH QUERY: "${phrase}"
 AI RESPONSE: "${response}"${domainContext}
@@ -215,77 +176,36 @@ EVALUATION FOCUS:
 - Which domain(s) are mentioned or implied? List them in 'domainFound'.
 
 Be extremely strict and realistic in your evaluation. Return ONLY the JSON object.`;
-
-        const scoringResponse = await axios.post(
-            `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
-            {
-                contents: [
-                    { 
-                        role: "user",
-                        parts: [{ text: scoringPrompt }] 
-                    }
-                ],
-                generationConfig: {
-                    temperature: 0.1,
-                    maxOutputTokens: 400,
-                    topK: 10,
-                    topP: 0.3,
-                }
-            },
-            {
-                headers: { 'Content-Type': 'application/json' },
-                timeout: 60000
-            }
-        );
-
-        const scoringText = scoringResponse.data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-        
-        try {
-            const jsonMatch = scoringText.match(/\{[\s\S]*\}/);
-            const jsonText = jsonMatch ? jsonMatch[0] : scoringText;
-            const scores = JSON.parse(jsonText);
-            
-            return {
-                presence: scores.presence === 1 ? 1 : 0,
-                relevance: Math.min(Math.max(Math.round(scores.relevance || 3), 1), 5),
-                accuracy: Math.min(Math.max(Math.round(scores.accuracy || 3), 1), 5),
-                sentiment: Math.min(Math.max(Math.round(scores.sentiment || 3), 1), 5),
-                overall: Math.min(Math.max(Math.round(scores.overall || 3), 1), 5)
-            };
-        } catch (parseError) {
-            // Enhanced fallback scoring with domain-specific analysis
-            const hasQueryTerms = phrase.toLowerCase().split(' ').some((term: string) => 
-                response.toLowerCase().includes(term) && term.length > 2
-            );
-            const responseLength = response.length;
-            const hasSubstantialContent = responseLength > 150;
-            const hasProfessionalTone = !response.toLowerCase().includes('error') && responseLength > 80;
-            const hasRelevantInfo = hasQueryTerms && hasSubstantialContent;
-            
-            // Domain-specific presence check
-            let domainPresence = 0;
-            if (domain) {
-                const domainTerms = domain.toLowerCase().replace(/\./g, ' ').split(' ');
-                domainPresence = domainTerms.some(term => 
-                    response.toLowerCase().includes(term) && term.length > 2
-                ) ? 1 : 0;
-            }
-            
-            return {
-                presence: domainPresence || (hasQueryTerms ? 1 : 0),
-                relevance: hasRelevantInfo ? (hasSubstantialContent ? 4 : 3) : 2,
-                accuracy: hasProfessionalTone ? 4 : 2,
-                sentiment: hasProfessionalTone ? 4 : 2,
-                overall: hasRelevantInfo && hasSubstantialContent ? 4 : 2
-            };
-        }
-    } catch (error) {
-        // Enhanced fallback scoring with domain analysis
+    const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+            { role: 'system', content: 'You are a helpful assistant.' },
+            { role: 'user', content: scoringPrompt }
+        ],
+        max_tokens: 400,
+        temperature: 0.1
+    });
+    const scoringText = completion.choices[0].message?.content || '{}';
+    try {
+        const jsonMatch = scoringText.match(/\{[\s\S]*\}/);
+        const jsonText = jsonMatch ? jsonMatch[0] : scoringText;
+        const scores = JSON.parse(jsonText);
+        return {
+            presence: scores.presence === 1 ? 1 : 0,
+            relevance: Math.min(Math.max(Math.round(scores.relevance || 3), 1), 5),
+            accuracy: Math.min(Math.max(Math.round(scores.accuracy || 3), 1), 5),
+            sentiment: Math.min(Math.max(Math.round(scores.sentiment || 3), 1), 5),
+            overall: Math.min(Math.max(Math.round(scores.overall || 3), 1), 5)
+        };
+    } catch {
+        // Enhanced fallback scoring with domain-specific analysis
         const hasQueryTerms = phrase.toLowerCase().split(' ').some((term: string) => 
             response.toLowerCase().includes(term) && term.length > 2
         );
         const responseLength = response.length;
         const hasSubstantialContent = responseLength > 150;
+        const hasProfessionalTone = !response.toLowerCase().includes('error') && responseLength > 80;
+        const hasRelevantInfo = hasQueryTerms && hasSubstantialContent;
         
         // Domain-specific presence check
         let domainPresence = 0;
@@ -298,27 +218,19 @@ Be extremely strict and realistic in your evaluation. Return ONLY the JSON objec
         
         return {
             presence: domainPresence || (hasQueryTerms ? 1 : 0),
-            relevance: hasQueryTerms ? (hasSubstantialContent ? 3 : 2) : 1,
-            accuracy: hasSubstantialContent ? 3 : 2,
-            sentiment: hasSubstantialContent ? 3 : 2,
-            overall: hasQueryTerms && hasSubstantialContent ? 3 : 2
+            relevance: hasRelevantInfo ? (hasSubstantialContent ? 4 : 3) : 2,
+            accuracy: hasProfessionalTone ? 4 : 2,
+            sentiment: hasProfessionalTone ? 4 : 2,
+            overall: hasRelevantInfo && hasSubstantialContent ? 4 : 2
         };
     }
 }
 
 export const aiQueryService = {
-    query: async (phrase: string, model: 'GPT-4o' | 'Claude 3' | 'Gemini 1.5', domain?: string): Promise<{ response: string, cost: number }> => {
-        // Use Gemini for all models with different system prompts
-        return await queryGemini(phrase, model, domain);
+    query: async (phrase: string, model: 'GPT-4o Mini' | 'Claude 3' | 'Gemini 1.5', domain?: string): Promise<{ response: string, cost: number }> => {
+        return await queryWithGpt4o(phrase, model, domain);
     },
-
-    scoreResponse: async (phrase: string, response: string, model: string, domain?: string): Promise<{
-        presence: number;
-        relevance: number;
-        accuracy: number;
-        sentiment: number;
-        overall: number;
-    }> => {
+    scoreResponse: async (phrase: string, response: string, model: string, domain?: string): Promise<{ presence: number; relevance: number; accuracy: number; sentiment: number; overall: number; }> => {
         return await scoreResponseWithAI(phrase, response, model, domain);
     }
 }; 

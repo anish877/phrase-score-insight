@@ -93,7 +93,12 @@ router.post('/progress/:domainId', asyncHandler(async (req: Request, res: Respon
 
     // Upsert onboarding progress
     const progress = await prisma.onboardingProgress.upsert({
-      where: { domainId },
+      where: { 
+        domainId_domainVersionId: {
+          domainId: validatedStepData.domainId || domainId,
+          domainVersionId: validatedStepData.versionId || null
+        }
+      },
       update: {
         currentStep,
         stepData: validatedStepData,
@@ -101,7 +106,8 @@ router.post('/progress/:domainId', asyncHandler(async (req: Request, res: Respon
         lastActivity: new Date()
       },
       create: {
-        domainId,
+        domainId: validatedStepData.domainId || domainId,
+        domainVersionId: validatedStepData.versionId || null,
         currentStep,
         stepData: validatedStepData,
         isCompleted,
@@ -129,14 +135,19 @@ router.post('/progress/:domainId', asyncHandler(async (req: Request, res: Respon
 // GET /api/onboarding/resume/:domainId - Check if onboarding can be resumed
 router.get('/resume/:domainId', asyncHandler(async (req: Request, res: Response) => {
   const domainId = Number(req.params.domainId);
+  const versionId = req.query.versionId ? Number(req.query.versionId) : null;
   
   if (!domainId || isNaN(domainId)) {
     return res.status(400).json({ error: 'Invalid domainId' });
   }
 
   try {
-    const progress = await prisma.onboardingProgress.findUnique({
-      where: { domainId },
+    // Use findFirst to get the latest progress for this domain/version
+    const progress = await prisma.onboardingProgress.findFirst({
+      where: {
+        domainId,
+        domainVersionId: versionId
+      },
       include: {
         domain: {
           select: {
@@ -247,10 +258,15 @@ router.get('/resume/:domainId', asyncHandler(async (req: Request, res: Response)
     }
 
     // Update step if validation found issues
-    if (validatedStep !== progress.currentStep) {
+    if (progress && validatedStep !== progress.currentStep) {
       await prisma.onboardingProgress.update({
-        where: { domainId },
-        data: { 
+        where: {
+          domainId_domainVersionId: {
+            domainId,
+            domainVersionId: progress.domainVersionId
+          }
+        },
+        data: {
           currentStep: validatedStep,
           stepData: stepData
         }
@@ -287,7 +303,8 @@ router.delete('/progress/:domainId', asyncHandler(async (req: Request, res: Resp
   }
 
   try {
-    await prisma.onboardingProgress.delete({
+    // Delete all progress for this domain (all versions)
+    await prisma.onboardingProgress.deleteMany({
       where: { domainId }
     });
 

@@ -18,20 +18,46 @@ model Domain {
   id        Int      @id @default(autoincrement())
   url       String   @unique
   context   String?  @db.Text
+  version   Int      @default(1) // Track current version number
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   crawlResults CrawlResult[]
   keywords     Keyword[]
-  dashboardAnalysis DashboardAnalysis?
+  dashboardAnalyses DashboardAnalysis[]
   competitorAnalyses CompetitorAnalysis[]
   suggestedCompetitors SuggestedCompetitor[]
-  onboardingProgress OnboardingProgress?
+  onboardingProgresses OnboardingProgress[]
+  versions    DomainVersion[] // Link to all versions
+}
+
+// New model to track different versions of domain analysis
+model DomainVersion {
+  id        Int      @id @default(autoincrement())
+  domain    Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  domainId  Int
+  version   Int      // Version number
+  name      String?  // Optional version name/description
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Analysis data for this version
+  crawlResults CrawlResult[]
+  keywords     Keyword[]
+  dashboardAnalyses DashboardAnalysis[]
+  competitorAnalyses CompetitorAnalysis[]
+  suggestedCompetitors SuggestedCompetitor[]
+  onboardingProgresses OnboardingProgress[]
+
+  @@unique([domainId, version])
+  @@index([domainId, version])
 }
 
 model CrawlResult {
   id        Int      @id @default(autoincrement())
-  domain    Domain   @relation(fields: [domainId], references: [id])
-  domainId  Int
+  domain    Domain?  @relation(fields: [domainId], references: [id])
+  domainId  Int?
+  domainVersion DomainVersion? @relation(fields: [domainVersionId], references: [id])
+  domainVersionId Int?
   pagesScanned Int
   contentBlocks Int
   keyEntities Int
@@ -40,22 +66,24 @@ model CrawlResult {
   createdAt DateTime @default(now())
 }
 
-// New models for keywords
+// New models for keywords with versioning support
 model Keyword {
   id           Int      @id @default(autoincrement())
   term         String
   volume       Int
   difficulty   String
   cpc          Float
-  domainId     Int
+  domainId     Int?
+  domain       Domain?  @relation(fields: [domainId], references: [id])
+  domainVersionId Int?
+  domainVersion DomainVersion? @relation(fields: [domainVersionId], references: [id])
   isSelected   Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  domain       Domain   @relation(fields: [domainId], references: [id])
   phrases      Phrase[]
 
-  @@unique([term, domainId])
-  @@index([domainId])
+  @@unique([term, domainId, domainVersionId])
+  @@index([domainId, domainVersionId])
 }
 
 model Phrase {
@@ -84,24 +112,28 @@ model AIQueryResult {
   createdAt DateTime @default(now())
 }
 
-// New models for storing AI analysis results
+// New models for storing AI analysis results with versioning support
 model DashboardAnalysis {
   id        Int      @id @default(autoincrement())
-  domain    Domain   @relation(fields: [domainId], references: [id])
-  domainId  Int      @unique
+  domain    Domain?  @relation(fields: [domainId], references: [id])
+  domainId  Int?
+  domainVersion DomainVersion? @relation(fields: [domainVersionId], references: [id])
+  domainVersionId Int?
   metrics   Json     // Store all metrics as JSON
   insights  Json     // Store insights as JSON
   industryAnalysis Json // Store industry analysis as JSON
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([domainId])
+  @@index([domainId, domainVersionId])
 }
 
 model CompetitorAnalysis {
   id        Int      @id @default(autoincrement())
-  domain    Domain   @relation(fields: [domainId], references: [id])
-  domainId  Int
+  domain    Domain?  @relation(fields: [domainId], references: [id])
+  domainId  Int?
+  domainVersion DomainVersion? @relation(fields: [domainVersionId], references: [id])
+  domainVersionId Int?
   competitors Json   // Store competitors array as JSON
   marketInsights Json // Store market insights as JSON
   strategicRecommendations Json // Store recommendations as JSON
@@ -110,27 +142,31 @@ model CompetitorAnalysis {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([domainId])
+  @@index([domainId, domainVersionId])
 }
 
 model SuggestedCompetitor {
   id        Int      @id @default(autoincrement())
-  domain    Domain   @relation(fields: [domainId], references: [id])
-  domainId  Int
+  domain    Domain?  @relation(fields: [domainId], references: [id])
+  domainId  Int?
+  domainVersion DomainVersion? @relation(fields: [domainVersionId], references: [id])
+  domainVersionId Int?
   name      String
   competitorDomain String
   reason    String   @db.Text
   type      String   // 'direct' or 'indirect'
   createdAt DateTime @default(now())
 
-  @@index([domainId])
+  @@index([domainId, domainVersionId])
 }
 
-// Onboarding Progress Tracking
+// Onboarding Progress Tracking with versioning support
 model OnboardingProgress {
   id            Int      @id @default(autoincrement())
-  domainId      Int      @unique
-  domain        Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  domainId      Int?
+  domain        Domain?  @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  domainVersionId Int?
+  domainVersion DomainVersion? @relation(fields: [domainVersionId], references: [id], onDelete: Cascade)
   currentStep   Int      @default(0) // 0-5 for the 6 steps
   isCompleted   Boolean  @default(false)
   stepData      Json?    // Store step-specific data
@@ -138,6 +174,7 @@ model OnboardingProgress {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  @@unique([domainId, domainVersionId]) // Ensure one progress record per domain OR version
   @@index([isCompleted])
   @@index([lastActivity])
 }

@@ -170,7 +170,11 @@ async function processQueryBatch(
 
           // Find the phrase record in the DB (by text and keyword)
           const keywordRecord = await prisma.keyword.findFirst({
-            where: { term: query.keyword, domainId: query.domainId },
+            where: { 
+              term: query.keyword, 
+              domainId: query.versionId ? null : query.domainId,
+              domainVersionId: query.versionId || null
+            },
           });
           let phraseRecord = null;
           if (keywordRecord) {
@@ -244,6 +248,7 @@ async function processQueryBatch(
 
 router.post('/:domainId', async (req, res) => {
     const domainId = Number(req.params.domainId);
+    const { versionId } = req.query; // Get versionId from query params
     if (!domainId) {
         res.status(400).json({ error: 'Invalid domainId' });
         return;
@@ -301,7 +306,8 @@ router.post('/:domainId', async (req, res) => {
             item.phrases.map((phrase: string) => ({
                 keyword: item.keyword,
                 phrase,
-                domainId
+                domainId,
+                versionId: versionId ? Number(versionId) : undefined
             }))
         );
 

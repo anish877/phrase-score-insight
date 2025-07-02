@@ -48,6 +48,7 @@ export interface AIQueryStats {
 
 interface AIQueryResultsProps {
   domainId: number;
+  versionId?: number;
   phrases: Array<{keyword: string, phrases: string[]}>;
   setQueryResults: (results: AIQueryResult[]) => void;
   setQueryStats?: (stats: AIQueryStats) => void;
@@ -57,6 +58,7 @@ interface AIQueryResultsProps {
 
 const AIQueryResults: React.FC<AIQueryResultsProps> = ({
   domainId,
+  versionId,
   phrases,
   setQueryResults,
   setQueryStats,
@@ -137,7 +139,10 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
       }
     }, Math.max(1200000, totalExpected * 3000)); // 20 minutes minimum, or 3 seconds per query
 
-    fetchEventSource(`https://phrase-score-insight.onrender.com/api/ai-queries/${domainId}`, {
+    const url = versionId 
+      ? `https://phrase-score-insight.onrender.com/api/ai-queries/${domainId}?versionId=${versionId}`
+      : `https://phrase-score-insight.onrender.com/api/ai-queries/${domainId}`;
+    fetchEventSource(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

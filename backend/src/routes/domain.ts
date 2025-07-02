@@ -5,9 +5,90 @@ import { crawlAndExtractWithGemini, ProgressCallback } from '../services/geminiS
 const router = Router();
 const prisma = new PrismaClient();
 
+// Add asyncHandler utility at the top if not present
+function asyncHandler(fn: any) {
+  return function (req: any, res: any, next: any) {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+}
+
+// GET /domain/check/:url - Check if domain exists and return version info
+router.get('/check/:url', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { url } = req.params;
+    
+    // Try multiple URL formats to find the domain
+    const possibleUrls = [
+      url, // Original URL as provided
+      url.startsWith('http') ? url : `https://${url}`, // With https://
+      url.startsWith('http') ? url : `http://${url}`, // With http://
+      url.replace(/^https?:\/\//, '') // Without protocol
+    ];
+    
+    let domain: any = null;
+    
+    // Try to find the domain with any of the possible URL formats
+    for (const possibleUrl of possibleUrls) {
+      domain = await prisma.domain.findUnique({
+        where: { url: possibleUrl },
+        include: {
+          versions: {
+            orderBy: { version: 'desc' },
+            include: {
+              dashboardAnalyses: true,
+              crawlResults: { orderBy: { createdAt: 'desc' }, take: 1 }
+            }
+          },
+          dashboardAnalyses: true,
+          crawlResults: { orderBy: { createdAt: 'desc' }, take: 1 }
+        }
+      });
+      
+      if (domain) {
+        break; // Found the domain, stop searching
+      }
+    }
+
+    if (!domain) {
+      return res.json({ exists: false });
+    }
+
+    // Return domain info with versions
+    const versions = domain.versions.map((v: any) => ({
+      id: v.id,
+      version: v.version,
+      name: v.name || `Version ${v.version}`,
+      createdAt: v.createdAt,
+      hasAnalysis: !!v.dashboardAnalyses[0],
+      lastCrawl: v.crawlResults[0]?.createdAt
+    }));
+
+    // Find the latest version
+    const latestVersion = domain.versions[0]; // Versions are ordered by desc
+
+    return res.json({
+      exists: true,
+      domainId: domain.id,
+      url: domain.url,
+      currentVersion: domain.version,
+      versions,
+      latestVersion: latestVersion ? {
+        id: latestVersion.id,
+        version: latestVersion.version,
+        name: latestVersion.name,
+        hasAnalysis: !!latestVersion.dashboardAnalyses[0]
+      } : null,
+      lastAnalyzed: latestVersion?.dashboardAnalyses[0]?.updatedAt || domain.updatedAt
+    });
+  } catch (error) {
+    console.error('Domain check error:', error);
+    res.status(500).json({ error: 'Failed to check domain' });
+  }
+}));
+
 // POST /domain - create/find domain, run extraction, and stream progress
 router.post('/', async (req: Request, res: Response) => {
-  const { url, subdomains, customPaths, priorityUrls } = req.body;
+  const { url, subdomains, customPaths, priorityUrls, createNewVersion = false, versionName } = req.body;
   if (!url) {
     res.status(400).json({ error: 'URL is required' });
     return;
@@ -34,13 +115,68 @@ router.post('/', async (req: Request, res: Response) => {
   };
 
   try {
-    // 1. Save or find domain
-    sendEvent({ type: 'progress', message: 'Initializing domain analysis and validation...', progress: 5 });
-    let domain = await prisma.domain.findUnique({ where: { url: domainsToExtract[0] } });
-    if (!domain) {
-      domain = await prisma.domain.create({ data: { url: domainsToExtract[0] } });
+    // 1. Check if domain exists
+    sendEvent({ type: 'progress', message: 'Checking domain status and versioning...', progress: 5 });
+    
+    let domain = await prisma.domain.findUnique({ 
+      where: { url: domainsToExtract[0] },
+      include: { versions: { orderBy: { version: 'desc' } } }
+    });
+    
+    let domainVersion = null;
+    let isNewVersion = false;
+
+    if (domain) {
+      if (createNewVersion) {
+        // Create new version
+        const nextVersion = domain.version + 1;
+        domainVersion = await prisma.domainVersion.create({
+          data: {
+            domainId: domain.id,
+            version: nextVersion,
+            name: versionName || `Version ${nextVersion}`
+          }
+        });
+        
+        // Update domain's current version
+        await prisma.domain.update({
+          where: { id: domain.id },
+          data: { version: nextVersion }
+        });
+        
+        isNewVersion = true;
+        sendEvent({ type: 'version_created', version: nextVersion, versionName: domainVersion.name });
+      } else {
+        // Use existing domain
+        domainVersion = domain?.versions.find(v => v.version === domain?.version) || null;
+      }
+    } else {
+      // Create new domain
+      domain = await prisma.domain.create({ 
+        data: { 
+          url: domainsToExtract[0],
+          version: 1
+        },
+        include: {
+          versions: true
+        }
+      });
+      
+      // Create initial version
+      domainVersion = await prisma.domainVersion.create({
+        data: {
+          domainId: domain.id,
+          version: 1,
+          name: 'Initial Analysis'
+        }
+      });
     }
-    sendEvent({ type: 'domain_created', domainId: domain.id });
+
+    if (!domain || !domainVersion) {
+      throw new Error('Failed to create domain or version');
+    }
+    
+    sendEvent({ type: 'domain_created', domainId: domain.id, versionId: domainVersion.id, isNewVersion });
 
     // 2. Define progress callback for the crawler
     const onProgress: ProgressCallback = (progressData) => {
@@ -91,11 +227,11 @@ router.post('/', async (req: Request, res: Response) => {
       keyEntitiesValue = Object.values(keyEntitiesValue).reduce((sum: number, v: unknown) => sum + (typeof v === 'number' ? v : 0), 0);
     }
     
-    // 5. Save final crawl result
+    // 5. Save final crawl result to version
     sendEvent({ type: 'progress', message: 'Saving analysis results...', progress: 98 });
     const crawlResult = await prisma.crawlResult.create({
       data: {
-        domainId: domain.id,
+        domainVersionId: domainVersion.id,
         pagesScanned: extraction.pagesScanned,
         contentBlocks: extraction.contentBlocks,
         keyEntities: keyEntitiesValue,
@@ -111,7 +247,15 @@ router.post('/', async (req: Request, res: Response) => {
     });
 
     // 7. Send final result and close connection
-    sendEvent({ type: 'complete', result: { domain, extraction: crawlResult } });
+    sendEvent({ 
+      type: 'complete', 
+      result: { 
+        domain, 
+        domainVersion,
+        extraction: crawlResult,
+        isNewVersion 
+      } 
+    });
     res.end();
 
   } catch (err: any) {
@@ -131,7 +275,16 @@ router.get('/search', async (req: Request, res: Response) => {
   
   try {
     const domain = await prisma.domain.findUnique({ 
-      where: { url: url as string }
+      where: { url: url as string },
+      include: {
+        versions: {
+          orderBy: { version: 'desc' },
+          include: {
+            dashboardAnalyses: true,
+            crawlResults: { orderBy: { createdAt: 'desc' }, take: 1 }
+          }
+        }
+      }
     });
     
     if (!domain) { 
@@ -154,14 +307,28 @@ router.get('/:id', async (req: Request, res: Response) => {
   try {
     const domain = await prisma.domain.findUnique({ 
       where: { id }, 
-      include: { crawlResults: { orderBy: { createdAt: 'desc' }, take: 1 } } 
+      include: { 
+        versions: {
+          orderBy: { version: 'desc' },
+          include: {
+            crawlResults: { orderBy: { createdAt: 'desc' }, take: 1 },
+            dashboardAnalyses: true
+          }
+        },
+        crawlResults: { orderBy: { createdAt: 'desc' }, take: 1 } 
+      } 
     });
     
     if (!domain) { res.status(404).json({ error: 'Domain not found' }); return; }
     
-    const crawlResult = domain.crawlResults[0];
+    // Find the latest version
+    const latestVersion = domain.versions[0]; // Versions are ordered by desc
+    const crawlResult = latestVersion?.crawlResults[0];
+    
     res.json({
       domain,
+      latestVersion,
+      versions: domain.versions,
       extraction: crawlResult ? {
         pagesScanned: crawlResult.pagesScanned,
         contentBlocks: crawlResult.contentBlocks,
@@ -175,5 +342,155 @@ router.get('/:id', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to fetch domain', details: err.message });
   }
 });
+
+// GET /domain/:id/versions - get all versions for a domain
+router.get('/:id/versions', asyncHandler(async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!id) { res.status(400).json({ error: 'Domain id is required' }); return; }
+  
+  try {
+    const versions = await prisma.domainVersion.findMany({
+      where: { domainId: id },
+      include: {
+        dashboardAnalyses: true,
+        crawlResults: { orderBy: { createdAt: 'desc' }, take: 1 },
+        keywords: {
+          include: {
+            phrases: {
+              include: { aiQueryResults: true }
+            }
+          }
+        }
+      },
+      orderBy: { version: 'desc' }
+    });
+    
+    // For each version, include metrics (from dashboardAnalyses[0] or calculated)
+    const result = await Promise.all(versions.map(async (v) => {
+      let metrics = null;
+      if (v.dashboardAnalyses && v.dashboardAnalyses.length > 0) {
+        metrics = v.dashboardAnalyses[0].metrics;
+      } else {
+        // Calculate metrics on the fly if not present
+        const aiQueryResults = v.keywords.flatMap((k: any) => k.phrases.flatMap((p: any) => p.aiQueryResults));
+        const totalQueries = aiQueryResults.length;
+        const mentions = aiQueryResults.filter((r: any) => r.presence === 1).length;
+        const mentionRate = totalQueries > 0 ? (mentions / totalQueries) * 100 : 0;
+        const avgRelevance = totalQueries > 0 ? aiQueryResults.reduce((sum: number, r: any) => sum + r.relevance, 0) / totalQueries : 0;
+        const avgAccuracy = totalQueries > 0 ? aiQueryResults.reduce((sum: number, r: any) => sum + r.accuracy, 0) / totalQueries : 0;
+        const avgSentiment = totalQueries > 0 ? aiQueryResults.reduce((sum: number, r: any) => sum + r.sentiment, 0) / totalQueries : 0;
+        const avgOverall = totalQueries > 0 ? aiQueryResults.reduce((sum: number, r: any) => sum + r.overall, 0) / totalQueries : 0;
+        const visibilityScore = Math.round(
+          Math.min(
+            100,
+            Math.max(
+              0,
+              (mentionRate * 0.25) + (avgRelevance * 10) + (avgSentiment * 5)
+            )
+          )
+        );
+        metrics = {
+          visibilityScore,
+          mentionRate,
+          avgRelevance,
+          avgAccuracy,
+          avgSentiment,
+          avgOverall,
+          totalQueries
+        };
+      }
+      return {
+        id: v.id,
+        version: v.version,
+        name: v.name,
+        createdAt: v.createdAt,
+        metrics
+      };
+    }));
+    
+    res.json({ versions: result });
+  } catch (err: any) {
+    console.error('Domain versions fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch domain versions', details: err.message });
+  }
+}));
+
+// GET /domain/:domainId/versions - Get all versions for a domain
+router.get('/:domainId/versions', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { domainId } = req.params;
+    const id = Number(domainId);
+    
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid domain ID' });
+    }
+
+    const versions = await prisma.domainVersion.findMany({
+      where: { domainId: id },
+      include: {
+        dashboardAnalyses: {
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        },
+        keywords: {
+          include: {
+            phrases: {
+              include: { aiQueryResults: true }
+            }
+          }
+        }
+      },
+      orderBy: { version: 'desc' }
+    });
+
+    // For each version, include metrics (from dashboardAnalyses[0] or calculated)
+    const result = await Promise.all(versions.map(async (v) => {
+      let metrics = null;
+      if (v.dashboardAnalyses && v.dashboardAnalyses.length > 0) {
+        metrics = v.dashboardAnalyses[0].metrics;
+      } else {
+        // Calculate metrics on the fly if not present
+        const aiQueryResults = v.keywords.flatMap((k: any) => k.phrases.flatMap((p: any) => p.aiQueryResults));
+        const totalQueries = aiQueryResults.length;
+        const mentions = aiQueryResults.filter((r: any) => r.presence === 1).length;
+        const mentionRate = totalQueries > 0 ? (mentions / totalQueries) * 100 : 0;
+        const avgRelevance = totalQueries > 0 ? aiQueryResults.reduce((sum: number, r: any) => sum + r.relevance, 0) / totalQueries : 0;
+        const avgAccuracy = totalQueries > 0 ? aiQueryResults.reduce((sum: number, r: any) => sum + r.accuracy, 0) / totalQueries : 0;
+        const avgSentiment = totalQueries > 0 ? aiQueryResults.reduce((sum: number, r: any) => sum + r.sentiment, 0) / totalQueries : 0;
+        const avgOverall = totalQueries > 0 ? aiQueryResults.reduce((sum: number, r: any) => sum + r.overall, 0) / totalQueries : 0;
+        const visibilityScore = Math.round(
+          Math.min(
+            100,
+            Math.max(
+              0,
+              (mentionRate * 0.25) + (avgRelevance * 10) + (avgSentiment * 5)
+            )
+          )
+        );
+        metrics = {
+          visibilityScore,
+          mentionRate,
+          avgRelevance,
+          avgAccuracy,
+          avgSentiment,
+          avgOverall,
+          totalQueries
+        };
+      }
+      return {
+        id: v.id,
+        version: v.version,
+        name: v.name,
+        createdAt: v.createdAt,
+        metrics
+      };
+    }));
+
+    res.json({ versions: result });
+  } catch (error) {
+    console.error('Error fetching domain versions:', error);
+    res.status(500).json({ error: 'Failed to fetch domain versions' });
+  }
+}));
 
 export default router; 

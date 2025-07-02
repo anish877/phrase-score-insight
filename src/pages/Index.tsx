@@ -20,6 +20,7 @@ const Index = () => {
   const [domain, setDomain] = useState('');
   const [subdomains, setSubdomains] = useState<string[]>([]);
   const [domainId, setDomainId] = useState<number>(0); 
+  const [versionId, setVersionId] = useState<number | null>(null);
   const [brandContext, setBrandContext] = useState('');
   const [selectedKeywords, setSelectedKeywords] = useState<string[]>([]);
   const [generatedPhrases, setGeneratedPhrases] = useState<Array<{keyword: string, phrases: string[]}>>([]);
@@ -135,6 +136,7 @@ const Index = () => {
         const stepData: OnboardingStepData = {
           domain,
           domainId,
+          versionId,
           brandContext,
           selectedKeywords,
           generatedPhrases,
@@ -162,6 +164,7 @@ const Index = () => {
         const stepData: OnboardingStepData = {
           domain,
           domainId,
+          versionId,
           brandContext,
           selectedKeywords,
           generatedPhrases,
@@ -185,6 +188,7 @@ const Index = () => {
       const stepData: OnboardingStepData = {
         domain,
         domainId,
+        versionId,
         brandContext,
         selectedKeywords,
         generatedPhrases,
@@ -195,8 +199,9 @@ const Index = () => {
       try {
         // Save progress and mark as completed
         await onboardingService.saveProgress(domainId, currentStep, stepData, true);
-        // Navigate to dashboard after successful save
-        navigate(`/dashboard/${domainId}`);
+        // Navigate to dashboard after successful save with versionId if available
+        const dashboardUrl = versionId ? `/dashboard/${domainId}?versionId=${versionId}` : `/dashboard/${domainId}`;
+        navigate(dashboardUrl);
       } catch (error) {
         console.error('Failed to mark onboarding as complete:', error);
         setIsSavingMain(false);
@@ -220,6 +225,11 @@ const Index = () => {
     if (stepData.domainId) {
       setDomainId(stepData.domainId);
       console.log('Restored domainId:', stepData.domainId);
+    }
+    
+    if (stepData.versionId !== undefined) {
+      setVersionId(stepData.versionId);
+      console.log('Restored versionId:', stepData.versionId);
     }
     
     if (stepData.brandContext) {
@@ -269,6 +279,7 @@ const Index = () => {
     setDomain('');
     setSubdomains([]);
     setDomainId(0);
+    setVersionId(null);
     setBrandContext('');
     setSelectedKeywords([]);
     setGeneratedPhrases([]);
@@ -449,6 +460,7 @@ const Index = () => {
           subdomains={subdomains}
           setDomainId={setDomainId}
           domainId={domainId}
+          setVersionId={setVersionId}
           setBrandContext={setBrandContext}
           customPaths={customPaths}
           priorityUrls={priorityUrls}
@@ -460,6 +472,7 @@ const Index = () => {
         {currentStep === 2 && domainId > 0 && (
           <KeywordDiscovery 
             domainId={domainId}
+            versionId={versionId}
             selectedKeywords={selectedKeywords}
             setSelectedKeywords={setSelectedKeywords}
             isSaving={isSavingMain}
@@ -468,6 +481,7 @@ const Index = () => {
               const stepData = {
                 domain,
                 domainId,
+                versionId,
                 brandContext,
                 selectedKeywords,
                 generatedPhrases,
@@ -490,6 +504,7 @@ const Index = () => {
         {currentStep === 3 && (
           <PhraseGeneration 
             domainId={domainId}
+            versionId={versionId}
             generatedPhrases={generatedPhrases}
             setGeneratedPhrases={setGeneratedPhrases}
             onNext={nextStep}
@@ -499,6 +514,7 @@ const Index = () => {
         {currentStep === 4 && (
           <AIQueryResults 
             domainId={domainId}
+            versionId={versionId}
             phrases={generatedPhrases}
             setQueryResults={setQueryResults}
             setQueryStats={setQueryStats}

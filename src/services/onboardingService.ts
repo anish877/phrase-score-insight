@@ -1,6 +1,7 @@
 export interface OnboardingStepData {
   domain?: string;
   domainId?: number;
+  versionId?: number | null;
   brandContext?: string;
   selectedKeywords?: string[];
   generatedPhrases?: Array<{keyword: string, phrases: string[]}>;

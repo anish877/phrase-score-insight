@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/use-toast';
 
 interface KeywordDiscoveryProps {
   domainId: number;
+  versionId?: number;
   selectedKeywords: string[];
   setSelectedKeywords: React.Dispatch<React.SetStateAction<string[]>>;
   onNext: () => void;
@@ -18,7 +19,7 @@ interface KeywordDiscoveryProps {
   isSaving?: boolean;
 }
 
-const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedKeywords, setSelectedKeywords, onNext, onPrev, isSaving: isSavingProp }) => {
+const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, versionId, selectedKeywords, setSelectedKeywords, onNext, onPrev, isSaving: isSavingProp }) => {
   console.log('KeywordDiscovery rendered with domainId:', domainId);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +54,10 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
     setProgressMsg('Connecting to keyword engine...');
     setKeywords([]);
     const ctrl = new AbortController();
-    fetchEventSource(`https://phrase-score-insight.onrender.com/api/keywords/stream/${domainId}`, {
+    const url = versionId 
+      ? `https://phrase-score-insight.onrender.com/api/keywords/stream/${domainId}?versionId=${versionId}`
+      : `https://phrase-score-insight.onrender.com/api/keywords/stream/${domainId}`;
+    fetchEventSource(url, {
       signal: ctrl.signal,
       onopen(_response) {
         setProgressMsg('Connected. Discovering keywords...');
@@ -109,7 +113,7 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
     return () => {
       ctrl.abort();
     };
-  }, [domainId, setSelectedKeywords]);
+  }, [domainId, versionId, setSelectedKeywords]);
 
   const sortedKeywords = useMemo(() =>
     [...keywords].sort((a, b) => b.volume - a.volume),
@@ -231,7 +235,7 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, selectedK
         </div>
       </div>
 
-      <Footer onPrev={onPrev} onNext={onNext} isSaving={effectiveIsSaving} selectedCount={selectedKeywords.length} selectedKeywords={selectedKeywords} domainId={domainId} />
+      <Footer onPrev={onPrev} onNext={onNext} isSaving={effectiveIsSaving} selectedCount={selectedKeywords.length} selectedKeywords={selectedKeywords} domainId={domainId} versionId={versionId} />
     </div>
   );
 };
@@ -400,14 +404,26 @@ interface FooterProps {
     selectedCount: number;
     selectedKeywords: string[];
     domainId: number;
+    versionId?: number;
 }
-const Footer: React.FC<FooterProps> = ({ onPrev, onNext, isSaving, selectedCount, selectedKeywords, domainId }) => {
+const Footer: React.FC<FooterProps> = ({ onPrev, onNext, isSaving, selectedCount, selectedKeywords, domainId, versionId }) => {
     const [saving, setSaving] = React.useState(false);
     const { toast } = useToast();
     const handleContinue = async () => {
         setSaving(true);
         try {
-            await apiService.updateKeywordSelection(domainId, selectedKeywords as string[]);
+            const url = versionId 
+              ? `https://phrase-score-insight.onrender.com/api/keywords/${domainId}/selection?versionId=${versionId}`
+              : `https://phrase-score-insight.onrender.com/api/keywords/${domainId}/selection`;
+            
+            const response = await fetch(url, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ selectedKeywords })
+            });
+            
+            if (!response.ok) throw new Error('Failed to save keywords');
+            
             setSaving(false);
             toast({
                 title: "Keywords Saved",

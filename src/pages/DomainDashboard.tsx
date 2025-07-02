@@ -4,13 +4,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, TrendingUp, TrendingDown, Calendar, Globe, BarChart3, Eye, MessageSquare, Star, Users, Target, AlertTriangle, Lightbulb, RefreshCw, Activity, Shield, Award, Zap, Link as LinkIcon, FileText } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Calendar, Globe, BarChart3, Eye, MessageSquare, Star, Users, Target, AlertTriangle, Lightbulb, RefreshCw, Activity, Shield, Award, Zap, Link as LinkIcon, FileText, LayoutDashboard, Search, Target as TargetIcon, BarChart3 as BarChart3Icon, Cpu, FileText as FileTextIcon, Users as UsersIcon, MessageSquare as MessageSquareIcon, History, Settings, ChevronRight, Home, Layers, TrendingUp as TrendingUpIcon, Activity as ActivityIcon, Globe as GlobeIcon, Zap as ZapIcon, Shield as ShieldIcon, Award as AwardIcon } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, Legend } from 'recharts';
 import type { Keyword } from '@/services/api';
 import type { AIQueryResult } from '@/components/AIQueryResults';
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { LineChart as ReLineChart, Line as ReLine, XAxis as ReXAxis, YAxis as ReYAxis, Tooltip as ReTooltip, Legend as ReLegend, ResponsiveContainer as ReResponsiveContainer, CartesianGrid as ReCartesianGrid } from 'recharts';
+import { cn } from '@/lib/utils';
 
 interface DomainData {
   id: number;
@@ -371,6 +373,28 @@ const AIResultsTable: React.FC<{ results: FlatAIQueryResult[], phrases: Phrase[]
   );
 };
 
+// Add DomainVersion type
+interface DomainVersion {
+  id: number;
+  version: number;
+  name?: string;
+  createdAt: string;
+  metrics?: {
+    visibilityScore?: number;
+    mentionRate?: number;
+    avgRelevance?: number;
+    avgAccuracy?: number;
+    avgSentiment?: number;
+    avgOverall?: number;
+    totalQueries?: number;
+    seoMetrics?: { 
+      organicTraffic?: number; 
+      domainAuthority?: number;
+      backlinks?: number;
+    };
+  };
+}
+
 const DomainDashboard = () => {
   const { domain } = useParams<{ domain: string }>();
   const [domainData, setDomainData] = useState<DomainData | null>(null);
@@ -382,6 +406,12 @@ const DomainDashboard = () => {
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [competitors, setCompetitors] = useState<string[]>([]);
   const [newCompetitor, setNewCompetitor] = useState('');
+  const [versions, setVersions] = useState<DomainVersion[]>([]);
+  const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
+  const [versionLoading, setVersionLoading] = useState(false);
+  const [showingFallbackData, setShowingFallbackData] = useState(false);
+  const [activeSection, setActiveSection] = useState('overview');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Extract domain ID from URL - handle different URL patterns
   const getDomainId = () => {
@@ -415,12 +445,63 @@ const DomainDashboard = () => {
     return 1;
   };
 
+  // Get versionId from URL query parameters
+  const getVersionIdFromUrl = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const versionId = urlParams.get('versionId');
+    return versionId ? parseInt(versionId) : null;
+  };
+
   const domainId = getDomainId();
 
+  // Fetch all versions for the domain
+  const fetchVersions = async () => {
+    try {
+      setVersionLoading(true);
+      // Use the endpoint that includes calculated metrics
+      const response = await fetch(`https://phrase-score-insight.onrender.com/api/domain/${domainId}/versions`);
+      if (!response.ok) throw new Error('Failed to fetch versions');
+      const data = await response.json();
+      setVersions(data.versions || []);
+      
+      // Check for versionId in URL first, then auto-select latest version
+      const urlVersionId = getVersionIdFromUrl();
+      if (urlVersionId && data.versions.some(v => v.id === urlVersionId)) {
+        setSelectedVersionId(urlVersionId);
+        console.log('Using versionId from URL:', urlVersionId);
+      } else if (data.versions && data.versions.length > 0) {
+        // Always select the latest version by default
+        const latestVersion = data.versions[0]; // Versions are ordered by desc
+        setSelectedVersionId(latestVersion.id);
+        console.log('Auto-selecting latest version:', latestVersion.id, 'for domain');
+      }
+    } catch (err) {
+      console.error('Error fetching versions:', err);
+    } finally {
+      setVersionLoading(false);
+    }
+  };
+
   useEffect(() => {
-    console.log('DomainDashboard: domainId =', domainId, 'domain =', domain);
-    fetchDomainData();
+    fetchVersions();
   }, [domainId]);
+
+  useEffect(() => {
+    if (!versionLoading) {
+      // Always work with versions - no main domain concept
+      const urlVersionId = getVersionIdFromUrl();
+      const targetVersionId = urlVersionId || selectedVersionId;
+      
+      if (targetVersionId) {
+        fetchDomainData(targetVersionId);
+      } else if (versions.length > 0) {
+        // If no version specified, use the latest version (first in the array since it's ordered desc)
+        const latestVersion = versions[0];
+        setSelectedVersionId(latestVersion.id);
+        fetchDomainData(latestVersion.id);
+      }
+    }
+  }, [selectedVersionId, versionLoading, versions]);
 
   // Fetch competitor analysis from DB on initial load
   useEffect(() => {
@@ -431,24 +512,25 @@ const DomainDashboard = () => {
     // eslint-disable-next-line
   }, [domainData]);
 
-  const fetchDomainData = async () => {
+  const fetchDomainData = async (versionId: number) => {
     try {
       setLoading(true);
       setError(null);
+      setDomainData(null); // Clear previous data to prevent showing stale data
       
-      console.log('Fetching domain data for ID:', domainId);
-      const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}`);
+      console.log('Fetching domain data for ID:', domainId, 'Version ID:', versionId);
       
-      console.log('Response status:', response.status);
+      // Always fetch version-specific data
+      const versionUrl = `https://phrase-score-insight.onrender.com/api/dashboard/${domainId}?versionId=${versionId}`;
+      const versionResponse = await fetch(versionUrl);
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('API Error:', errorText);
-        throw new Error(`Failed to fetch domain data: ${response.status} ${response.statusText}`);
+      if (!versionResponse.ok) {
+        throw new Error('Version fetch failed');
       }
       
-      const data = await response.json();
-      console.log('Domain data received:', data);
+      const data = await versionResponse.json();
+      console.log('Version-specific data received:', data);
+      setShowingFallbackData(false);
       
       // Debug keyword analytics specifically
       if (data.metrics?.keywordAnalytics) {
@@ -505,6 +587,9 @@ const DomainDashboard = () => {
           threats: []
         };
       }
+      
+      // Add a small delay to prevent rapid loading states
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       setDomainData(data);
     } catch (err) {
@@ -654,7 +739,83 @@ const DomainDashboard = () => {
     return 'text-rose-600';
   };
 
-  if (loading) {
+  // Navigation items for sidebar
+  const navigationItems = [
+    {
+      id: 'overview',
+      label: 'Overview',
+      icon: LayoutDashboard,
+      description: 'Key metrics and insights'
+    },
+    {
+      id: 'seo',
+      label: 'SEO Metrics',
+      icon: Search,
+      description: 'Search engine optimization'
+    },
+    {
+      id: 'performance',
+      label: 'Performance',
+      icon: TrendingUpIcon,
+      description: 'Performance analytics'
+    },
+    {
+      id: 'keywords',
+      label: 'Keywords',
+      icon: TargetIcon,
+      description: 'Keyword analysis'
+    },
+    {
+      id: 'technical',
+      label: 'Technical',
+      icon: Cpu,
+      description: 'Technical SEO'
+    },
+    {
+      id: 'content',
+      label: 'Content',
+      icon: FileTextIcon,
+      description: 'Content performance'
+    },
+    {
+      id: 'models',
+      label: 'AI Models',
+      icon: ActivityIcon,
+      description: 'AI model performance'
+    },
+    {
+      id: 'phrases',
+      label: 'Top Phrases',
+      icon: MessageSquareIcon,
+      description: 'Best performing phrases'
+    },
+    {
+      id: 'airesults',
+      label: 'AI Results',
+      icon: GlobeIcon,
+      description: 'Raw AI query results'
+    },
+    {
+      id: 'competitors',
+      label: 'Competitors',
+      icon: UsersIcon,
+      description: 'Competitive analysis'
+    },
+    {
+      id: 'insights',
+      label: 'Insights',
+      icon: Lightbulb,
+      description: 'AI-generated insights'
+    },
+    {
+      id: 'history',
+      label: 'Version History',
+      icon: History,
+      description: 'Version comparison'
+    }
+  ];
+
+  if (loading || versionLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center">
         <div className="text-center space-y-6">
@@ -664,9 +825,12 @@ const DomainDashboard = () => {
           </div>
           <div className="space-y-2">
             <h3 className="text-xl font-semibold text-slate-800">Loading Dashboard</h3>
-            <p className="text-slate-600">Analyzing domain performance data...</p>
+            <p className="text-slate-600">
+              {versionLoading ? 'Loading version data...' : 'Analyzing domain performance data...'}
+            </p>
             <p className="text-sm text-slate-500 font-mono bg-slate-100 px-3 py-1 rounded-full inline-block">
               Domain ID: {domainId}
+              {selectedVersionId && ` | Version: ${selectedVersionId}`}
             </p>
           </div>
         </div>
@@ -688,7 +852,7 @@ const DomainDashboard = () => {
               Domain ID: {domainId}
             </p>
           </div>
-          <Button onClick={fetchDomainData} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">
+          <Button onClick={() => fetchDomainData(selectedVersionId)} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">
             <RefreshCw className="h-4 w-4 mr-2" />
             Retry
           </Button>
@@ -699,6 +863,23 @@ const DomainDashboard = () => {
 
   const { metrics } = domainData;
 
+  // Safety check to ensure metrics exists
+  if (!metrics) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center">
+        <div className="text-center space-y-6 max-w-md">
+          <div className="w-20 h-20 mx-auto bg-amber-100 rounded-full flex items-center justify-center">
+            <AlertTriangle className="h-10 w-10 text-amber-600" />
+          </div>
+          <div className="space-y-3">
+            <h2 className="text-2xl font-bold text-slate-800">Metrics Not Available</h2>
+            <p className="text-slate-600">Domain data loaded but metrics are missing</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Prepare pie chart data with real values
   const mentionRateValue = parseFloat(metrics.mentionRate) || 0;
   const pieData = [
@@ -707,165 +888,315 @@ const DomainDashboard = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
-      {/* Premium Header */}
-      <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200/60 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-6">
+    <div className="h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex overflow-hidden">
+      {/* Sidebar Navigation */}
+      <div className={cn(
+        "bg-white/95 backdrop-blur-xl border-r border-white/20 shadow-xl shadow-slate-900/10 transition-all duration-300 ease-in-out flex flex-col h-full",
+        sidebarCollapsed ? "w-16" : "w-64"
+      )}>
+        <div className="p-4 border-b border-slate-200/60">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-6">
-              <Link to="/">
-                <Button variant="outline" size="sm" className="border-slate-300 hover:bg-slate-50 transition-colors">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Dashboard
-                </Button>
-              </Link>
-              <div className="space-y-1">
-                <div className="flex items-center space-x-3">
-                  <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
-                    {domainData.url}
-                  </h1>
-                  <Badge className="bg-blue-50 text-blue-700 border-blue-200 font-medium">
-                    {domainData.industry}
-                  </Badge>
-                </div>
-                <div className="flex items-center space-x-2 text-slate-600">
-                  <Globe className="h-4 w-4" />
-                  <span className="font-medium">{domainData.url}</span>
-                  <span className="text-slate-400">•</span>
-                  <span className="text-sm">Last analyzed {new Date(domainData.lastAnalyzed).toLocaleDateString()}</span>
-                </div>
+            <Link to="/" className="flex items-center space-x-2">
+              <div className="p-2 bg-blue-50 rounded-lg">
+                <Home className="h-5 w-5 text-blue-600" />
               </div>
-            </div>
-            <div className="text-right space-y-1">
-              <div className={`text-4xl font-bold ${getVisibilityScoreColor(metrics.visibilityScore)}`}>{metrics.visibilityScore}%</div>
-              <div className="text-sm font-medium text-slate-600">AI Visibility Score</div>
-              <div className="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
+              {!sidebarCollapsed && (
+                <span className="font-semibold text-slate-800">Dashboard</span>
+              )}
+            </Link>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="h-8 w-8 p-0 hover:bg-slate-100 hover:scale-110 transition-all duration-300"
+            >
+              <ChevronRight className={cn(
+                "h-4 w-4 transition-all duration-300 ease-out",
+                sidebarCollapsed ? "rotate-180 text-blue-600" : "text-slate-600"
+              )} />
+            </Button>
+          </div>
+        </div>
+
+        {/* Domain Info */}
+        <div className="p-4 border-b border-slate-200/60 bg-gradient-to-r from-slate-50/50 to-transparent">
+          <div className="space-y-3">
+            {!sidebarCollapsed && (
+              <>
+                <div className="flex items-center space-x-3 p-2 rounded-lg bg-white/50 backdrop-blur-sm">
+                  <Globe className="h-4 w-4 text-slate-600 flex-shrink-0" />
+                  <span className="text-sm font-medium text-slate-800 truncate">{domainData.url}</span>
+                </div>
+                <div className="flex items-center space-x-3 px-2">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-lg shadow-emerald-500/50"></div>
+                  <span className="text-xs text-slate-600 font-medium">Active Analysis</span>
+                </div>
+              </>
+            )}
+            {sidebarCollapsed && (
+              <div className="flex justify-center">
+                <Globe className="h-5 w-5 text-slate-600" />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Version Selector */}
+        {versions.length > 0 && (
+          <div className="p-4 border-b border-slate-200/60">
+            {!sidebarCollapsed ? (
+              <Select value={selectedVersionId?.toString()} onValueChange={v => {
+                const newVersionId = Number(v);
+                setSelectedVersionId(newVersionId);
+                
+                // Update URL with versionId
+                const url = new URL(window.location.href);
+                if (newVersionId) {
+                  url.searchParams.set('versionId', newVersionId.toString());
+                } else {
+                  url.searchParams.delete('versionId');
+                }
+                window.history.replaceState({}, '', url.toString());
+              }}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select Version" />
+                </SelectTrigger>
+                <SelectContent>
+                  {versions.map((v, index) => {
+                    const hasData = v.metrics?.visibilityScore && v.metrics.visibilityScore > 0;
+                    const isLatest = index === 0;
+                    
+                    return (
+                      <SelectItem key={v.id} value={v.id.toString()}>
+                        {`v${v.version} - ${v.name || v.createdAt?.slice(0,10)}`}
+                        {isLatest && <span className="text-blue-600 ml-2">(Latest)</span>}
+                        {!hasData && <span className="text-slate-400 ml-2">(no data)</span>}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="flex justify-center">
+                <Layers className="h-5 w-5 text-slate-600" />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Navigation Menu */}
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          {navigationItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeSection === item.id;
+            
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveSection(item.id)}
+                className={cn(
+                  "w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-left transition-all duration-300 group",
+                  isActive 
+                    ? "bg-gradient-to-r from-blue-50 to-blue-50/80 text-blue-700 border border-blue-200/50 shadow-lg shadow-blue-500/20 ring-1 ring-blue-200/30" 
+                    : "text-slate-600 hover:bg-gradient-to-r hover:from-slate-50 hover:to-slate-50/80 hover:text-slate-800 hover:shadow-md transition-all duration-300"
+                )}
+              >
+                <div className={cn(
+                  "p-1.5 rounded-lg transition-all duration-300 transform",
+                  isActive 
+                    ? "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-600 scale-110 shadow-md" 
+                    : "bg-slate-100 text-slate-500 group-hover:bg-gradient-to-br group-hover:from-slate-200 group-hover:to-slate-300 group-hover:text-slate-600 group-hover:scale-105"
+                )}>
+                  <Icon className="h-4 w-4" />
+                </div>
+                {!sidebarCollapsed && (
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm">{item.label}</div>
+                    <div className="text-xs text-slate-500 truncate">{item.description}</div>
+                  </div>
+                )}
+                {isActive && !sidebarCollapsed && (
+                  <div className="w-1 h-6 bg-blue-500 rounded-full"></div>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Visibility Score */}
+        <div className="p-4 border-t border-slate-200/60">
+          {!sidebarCollapsed ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-slate-600">Visibility Score</span>
+                <span className={`text-lg font-bold transition-all duration-500 ${
+                  metrics.visibilityScore >= 80 ? 'text-emerald-600 animate-pulse' :
+                  metrics.visibilityScore >= 60 ? 'text-blue-600' :
+                  metrics.visibilityScore >= 40 ? 'text-amber-600' : 'text-rose-600'
+                }`}>
+                  {metrics.visibilityScore}%
+                </span>
+              </div>
+              <div className="w-full h-3 bg-slate-200/80 rounded-full overflow-hidden shadow-inner">
                 <div 
-                  className={`h-full transition-all duration-1000 ${
-                    metrics.visibilityScore >= 80 ? 'bg-emerald-500' :
-                    metrics.visibilityScore >= 60 ? 'bg-blue-500' :
-                    metrics.visibilityScore >= 40 ? 'bg-amber-500' : 'bg-rose-500'
+                  className={`h-full transition-all duration-1000 ease-out rounded-full ${
+                    metrics.visibilityScore >= 80 ? 'bg-gradient-to-r from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-500/50' :
+                    metrics.visibilityScore >= 60 ? 'bg-gradient-to-r from-blue-400 to-blue-600 shadow-lg shadow-blue-500/50' :
+                    metrics.visibilityScore >= 40 ? 'bg-gradient-to-r from-amber-400 to-amber-600 shadow-lg shadow-amber-500/50' : 
+                    'bg-gradient-to-r from-rose-400 to-rose-600 shadow-lg shadow-rose-500/50'
                   }`}
                   style={{ width: `${metrics.visibilityScore}%` }}
                 ></div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex justify-center">
+              <div className="text-center">
+                <div className={`text-lg font-bold transition-all duration-500 ${
+                  metrics.visibilityScore >= 80 ? 'text-emerald-600 animate-pulse' :
+                  metrics.visibilityScore >= 60 ? 'text-blue-600' :
+                  metrics.visibilityScore >= 40 ? 'text-amber-600' : 'text-rose-600'
+                }`}>
+                  {metrics.visibilityScore}%
+                </div>
+                <div className="text-xs text-slate-500">Score</div>
+              </div>
+            </div>
+          )}
         </div>
-      </header>
+      </div>
 
-      <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
-        {/* Enhanced Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
-          <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 hover:shadow-lg transition-all duration-300">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-blue-50 rounded-lg">
-                    <Eye className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-600">Mention Rate</p>
-                    <p className="text-2xl font-bold text-slate-800">{metrics.mentionRate}%</p>
-                  </div>
-                </div>
-                <div className="w-12 h-12 relative">
-                  <svg className="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
-                    <path
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="#e5e7eb"
-                      strokeWidth="2"
-                    />
-                    <path
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      stroke="#3b82f6"
-                      strokeWidth="2"
-                      strokeDasharray={`${parseFloat(metrics.mentionRate)}, 100`}
-                      className="transition-all duration-1000"
-                    />
-                  </svg>
-                </div>
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header */}
+        <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200/60 z-40 flex-shrink-0">
+          <div className="px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <h1 className="text-2xl font-bold text-slate-800">
+                  {navigationItems.find(item => item.id === activeSection)?.label}
+                </h1>
+                <p className="text-sm text-slate-600">
+                  {navigationItems.find(item => item.id === activeSection)?.description}
+                </p>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 hover:shadow-lg transition-all duration-300">
-            <CardContent className="p-6">
               <div className="flex items-center space-x-3">
-                <div className="p-2 bg-amber-50 rounded-lg">
-                  <Star className="h-5 w-5 text-amber-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Avg Relevance</p>
-                  <p className="text-2xl font-bold text-slate-800">{metrics.avgRelevance}<span className="text-lg text-slate-500">/5</span></p>
-                </div>
+                {showingFallbackData && (
+                  <Badge className="bg-amber-50 text-amber-700 border-amber-200">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    Showing main data
+                  </Badge>
+                )}
+                {selectedVersionId && !showingFallbackData && domainData?.metrics?.visibilityScore === 0 && (
+                  <Badge className="bg-red-50 text-red-700 border-red-200">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    No analysis data
+                  </Badge>
+                )}
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 hover:shadow-lg transition-all duration-300">
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-emerald-50 rounded-lg">
-                  <MessageSquare className="h-5 w-5 text-emerald-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Avg Sentiment</p>
-                  <p className="text-2xl font-bold text-slate-800">{metrics.avgSentiment}<span className="text-lg text-slate-500">/5</span></p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 hover:shadow-lg transition-all duration-300">
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-purple-50 rounded-lg">
-                  <BarChart3 className="h-5 w-5 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Total Queries</p>
-                  <p className="text-2xl font-bold text-slate-800">{metrics.totalQueries.toLocaleString()}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 hover:shadow-lg transition-all duration-300">
-            <CardContent className="p-6">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-rose-50 rounded-lg">
-                  <Activity className="h-5 w-5 text-rose-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Overall Score</p>
-                  <p className="text-2xl font-bold text-slate-800">{metrics.avgOverall}<span className="text-lg text-slate-500">/5</span></p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Tabs defaultValue="overview" className="space-y-8">
-          <div className="w-full overflow-x-auto whitespace-nowrap scrollbar-hide">
-            <TabsList className="flex w-full justify-between bg-white/70 backdrop-blur-sm border border-slate-200/60 p-1 rounded-xl gap-1">
-              <TabsTrigger value="overview" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">Overview</TabsTrigger>
-              <TabsTrigger value="seo" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">SEO Metrics</TabsTrigger>
-              <TabsTrigger value="performance" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">Performance</TabsTrigger>
-              <TabsTrigger value="keywords" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">Keywords</TabsTrigger>
-              <TabsTrigger value="technical" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">Technical</TabsTrigger>
-              <TabsTrigger value="content" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">Content</TabsTrigger>
-              <TabsTrigger value="models" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">AI Models</TabsTrigger>
-              <TabsTrigger value="phrases" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">Top Phrases</TabsTrigger>
-              <TabsTrigger value="airesults" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">AI Results</TabsTrigger>
-              <TabsTrigger value="competitors" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">Competitors</TabsTrigger>
-              <TabsTrigger value="insights" className="data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg font-medium">Insights</TabsTrigger>
-            </TabsList>
+            </div>
           </div>
+        </header>
 
-          <TabsContent value="overview" className="space-y-8">
+        {/* Content Area */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-6">
+            {/* Enhanced Quick Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 hover:shadow-lg transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-blue-50 rounded-lg">
+                        <Eye className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-600">Mention Rate</p>
+                        <p className="text-2xl font-bold text-slate-800">{metrics.mentionRate}%</p>
+                      </div>
+                    </div>
+                    <div className="w-12 h-12 relative">
+                      <svg className="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
+                        <path
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                          fill="none"
+                          stroke="#e5e7eb"
+                          strokeWidth="2"
+                        />
+                        <path
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                          fill="none"
+                          stroke="#3b82f6"
+                          strokeWidth="2"
+                          strokeDasharray={`${parseFloat(metrics.mentionRate)}, 100`}
+                          className="transition-all duration-1000"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 hover:shadow-lg transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-amber-50 rounded-lg">
+                      <Star className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Avg Relevance</p>
+                      <p className="text-2xl font-bold text-slate-800">{metrics.avgRelevance}<span className="text-lg text-slate-500">/5</span></p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 hover:shadow-lg transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-emerald-50 rounded-lg">
+                      <MessageSquare className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Avg Sentiment</p>
+                      <p className="text-2xl font-bold text-slate-800">{metrics.avgSentiment}<span className="text-lg text-slate-500">/5</span></p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 hover:shadow-lg transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-purple-50 rounded-lg">
+                      <BarChart3 className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Total Queries</p>
+                      <p className="text-2xl font-bold text-slate-800">{metrics.totalQueries?.toLocaleString() || '0'}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 hover:shadow-lg transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-rose-50 rounded-lg">
+                      <Activity className="h-5 w-5 text-rose-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Overall Score</p>
+                      <p className="text-2xl font-bold text-slate-800">{metrics.avgOverall}<span className="text-lg text-slate-500">/5</span></p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Content Sections */}
+            <div className="space-y-8">
+              {activeSection === 'overview' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Performance Trend */}
               <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
@@ -994,7 +1325,7 @@ const DomainDashboard = () => {
                   </div>
                 </CardContent>
               </Card>
-            </div>
+            </div>)}
 
             {/* Industry Analysis */}
             <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
@@ -1082,9 +1413,10 @@ const DomainDashboard = () => {
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
+          </div>
 
-          <TabsContent value="seo" className="space-y-8">
+        {activeSection === 'seo' && (
+          <div>
             {/* SEO Overview Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
@@ -1213,7 +1545,7 @@ const DomainDashboard = () => {
                       <p className="font-medium">Organic traffic data not available</p>
                       <p className="text-sm text-slate-400">
                         {metrics.seoMetrics?.organicTraffic ? 
-                          `Current estimated traffic: ${metrics.seoMetrics.organicTraffic.toLocaleString()} monthly visitors` : 
+                          `Current estimated traffic: ${metrics.seoMetrics?.organicTraffic?.toLocaleString() || '0'} monthly visitors` : 
                           'No traffic data available'
                         }
                       </p>
@@ -1281,7 +1613,7 @@ const DomainDashboard = () => {
                       <p className="font-medium">Backlink data not available</p>
                       <p className="text-sm text-slate-400">
                         {metrics.seoMetrics?.backlinks && metrics.seoMetrics?.domainAuthority ? 
-                          `Current backlinks: ${metrics.seoMetrics.backlinks.toLocaleString()} | Domain Authority: ${metrics.seoMetrics.domainAuthority}/100` : 
+                          `Current backlinks: ${metrics.seoMetrics?.backlinks?.toLocaleString() || '0'} | Domain Authority: ${metrics.seoMetrics?.domainAuthority || 0}/100` : 
                           'No backlink data available'
                         }
                       </p>
@@ -1414,9 +1746,11 @@ const DomainDashboard = () => {
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="performance" className="space-y-8">
+        {activeSection === 'performance' && (
+          <div>
             {/* Performance Overview Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
@@ -1643,9 +1977,11 @@ const DomainDashboard = () => {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="models" className="space-y-8">
+        {activeSection === 'models' && (
+          <div>
             <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-slate-800">AI Model Performance Analysis</CardTitle>
@@ -1699,9 +2035,11 @@ const DomainDashboard = () => {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="technical" className="space-y-8">
+        {activeSection === 'technical' && (
+          <div>
             {/* Technical SEO Overview */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
@@ -1900,9 +2238,11 @@ const DomainDashboard = () => {
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="content" className="space-y-8">
+        {activeSection === 'content' && (
+          <div>
             {/* Content Overview */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
@@ -1983,7 +2323,7 @@ const DomainDashboard = () => {
                       <div key={index} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
                         <div className="flex-1">
                           <p className="font-medium text-slate-800">{page.url}</p>
-                          <p className="text-sm text-slate-600">{page.traffic.toLocaleString()} monthly visitors</p>
+                          <p className="text-sm text-slate-600">{page.traffic?.toLocaleString() || '0'} monthly visitors</p>
                         </div>
                         <div className="text-right">
                           <p className="text-lg font-bold text-slate-800">{page.score}/100</p>
@@ -2028,9 +2368,11 @@ const DomainDashboard = () => {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="keywords" className="space-y-8">
+        {activeSection === 'keywords' && (
+          <div>
             {/* Keyword Analytics Overview */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
@@ -2256,9 +2598,11 @@ const DomainDashboard = () => {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="phrases" className="space-y-8">
+        {activeSection === 'phrases' && (
+          <div>
             <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-slate-800">Top Performing AI Query Phrases</CardTitle>
@@ -2319,9 +2663,11 @@ const DomainDashboard = () => {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="airesults" className="space-y-8">
+        {activeSection === 'airesults' && (
+          <div>
             <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-slate-800">All AI Query Results</CardTitle>
@@ -2337,9 +2683,11 @@ const DomainDashboard = () => {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="competitors" className="space-y-8">
+        {activeSection === 'competitors' && (
+          <div>
             {/* Competitor Management */}
             <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
               <CardHeader>
@@ -2587,81 +2935,10 @@ const DomainDashboard = () => {
                 )}
               </div>
             )}
-          </TabsContent>
-
-          {/* Insights Tab */}
-          <TabsContent value="insights" className="space-y-8">
-            <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-slate-800">Insights</CardTitle>
-                <CardDescription className="text-slate-600">AI-generated strengths, weaknesses, and recommendations</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {domainData.insights && (
-                  <div className="space-y-6">
-                    {/* Strengths */}
-                    <div>
-                      <h4 className="font-semibold text-green-700 mb-2">Strengths</h4>
-                      {domainData.insights.strengths && domainData.insights.strengths.length > 0 ? (
-                        <ul className="space-y-2">
-                          {domainData.insights.strengths.map((item, idx) => (
-                            <li key={idx} className="flex items-start">
-                              <div className="w-2 h-2 bg-green-500 rounded-full mt-2 mr-3"></div>
-                              <div>
-                                <p className="font-medium">{item.title}</p>
-                                <p className="text-sm text-gray-600">{item.description}</p>
-                                <p className="text-xs text-gray-500 mt-1">Metric: {item.metric}</p>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : <div className="text-slate-400">No strengths identified</div>}
-                    </div>
-                    {/* Weaknesses */}
-                    <div>
-                      <h4 className="font-semibold text-red-700 mb-2">Weaknesses</h4>
-                      {domainData.insights.weaknesses && domainData.insights.weaknesses.length > 0 ? (
-                        <ul className="space-y-2">
-                          {domainData.insights.weaknesses.map((item, idx) => (
-                            <li key={idx} className="flex items-start">
-                              <div className="w-2 h-2 bg-red-500 rounded-full mt-2 mr-3"></div>
-                              <div>
-                                <p className="font-medium">{item.title}</p>
-                                <p className="text-sm text-gray-600">{item.description}</p>
-                                <p className="text-xs text-gray-500 mt-1">Metric: {item.metric}</p>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : <div className="text-slate-400">No weaknesses identified</div>}
-                    </div>
-                    {/* Recommendations */}
-                    <div>
-                      <h4 className="font-semibold text-blue-700 mb-2">Recommendations</h4>
-                      {domainData.insights.recommendations && domainData.insights.recommendations.length > 0 ? (
-                        <ul className="space-y-2">
-                          {domainData.insights.recommendations.map((item, idx) => (
-                            <li key={idx} className="flex items-start">
-                              <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3"></div>
-                              <div>
-                                <p className="font-medium">{item.action}</p>
-                                <p className="text-sm text-gray-600">{item.expectedImpact}</p>
-                                <p className="text-xs text-gray-500 mt-1">Category: {item.category} | Priority: {item.priority} | Timeline: {item.timeline}</p>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : <div className="text-slate-400">No recommendations available</div>}
-                    </div>
-                  </div>
-                )}
-                {(!domainData.insights || (!domainData.insights.strengths?.length && !domainData.insights.weaknesses?.length && !domainData.insights.recommendations?.length)) && (
-                  <div className="text-slate-400">No insights available</div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+          </div>
+        )}
+          </div>
+        </div>
       </div>
     </div>
   );

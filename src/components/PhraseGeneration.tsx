@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/use-toast';
 
 interface PhraseGenerationProps {
   domainId: number;
+  versionId?: number;
   generatedPhrases: Array<{keyword: string, phrases: string[]}>;
   setGeneratedPhrases: (phrases: Array<{keyword: string, phrases: string[]}>) => void;
   onNext: () => void;
@@ -17,6 +18,7 @@ interface PhraseGenerationProps {
 
 const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
   domainId,
+  versionId,
   generatedPhrases,
   setGeneratedPhrases,
   onNext,
@@ -37,7 +39,10 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
       setGeneratedPhrases([]);
       setStats({ totalKeywords: 0, totalPhrases: 0, avgPerKeyword: 0, aiQueries: 0 });
       const phrasesMap: Record<string, string[]> = {};
-      const eventSource = new EventSource(`https://phrase-score-insight.onrender.com/api/phrases/${domainId}`);
+      const url = versionId 
+        ? `https://phrase-score-insight.onrender.com/api/phrases/${domainId}?versionId=${versionId}`
+        : `https://phrase-score-insight.onrender.com/api/phrases/${domainId}`;
+      const eventSource = new EventSource(url);
 
       eventSource.addEventListener('progress', (e: MessageEvent) => {
         const data = JSON.parse(e.data);

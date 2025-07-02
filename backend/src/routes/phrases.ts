@@ -8,6 +8,7 @@ const prisma = new PrismaClient();
 // GET /api/phrases/:domainId - stream phrases for selected keywords
 router.get('/:domainId', async (req, res) => {
   const domainId = Number(req.params.domainId);
+  const { versionId } = req.query; // Get versionId from query params
   if (!domainId) { res.status(400).json({ error: 'Invalid domainId' }); return; }
 
   // Set up SSE headers
@@ -21,14 +22,19 @@ router.get('/:domainId', async (req, res) => {
   };
 
   try {
+    // Determine where to look for keywords based on versionId
+    const whereClause = versionId 
+      ? { domainVersionId: Number(versionId), isSelected: true }
+      : { domainId, domainVersionId: null, isSelected: true };
+
     // Fetch selected keywords from DB, sorted by volume
     const keywords = await prisma.keyword.findMany({
-      where: { domainId, isSelected: true },
+      where: whereClause,
       orderBy: { volume: 'desc' },
       select: { id: true, term: true }
     });
 
-    console.log(`Found ${keywords.length} selected keywords for domain ${domainId}:`, keywords.map(k => k.term));
+    console.log(`Found ${keywords.length} selected keywords for domain ${domainId}, versionId: ${versionId}:`, keywords.map(k => k.term));
 
     // Fetch domain and context
     const domainObj = await prisma.domain.findUnique({ where: { id: domainId } });
@@ -36,7 +42,7 @@ router.get('/:domainId', async (req, res) => {
     const context = domainObj?.context || '';
 
     if (!keywords.length) {
-      console.log(`No selected keywords found for domain ${domainId}`);
+      console.log(`No selected keywords found for domain ${domainId}, versionId: ${versionId}`);
       sendEvent('error', { error: 'No selected keywords found' });
       res.end();
       return;

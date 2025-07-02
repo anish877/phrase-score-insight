@@ -10,6 +10,7 @@ interface DomainExtractionProps {
   subdomains?: string[];
   setDomainId: (id: number) => void;
   domainId: number;
+  setVersionId?: (id: number | null) => void;
   setBrandContext: (context: string) => void;
   onNext: () => void;
   onPrev: () => void;
@@ -23,6 +24,7 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
   subdomains = [],
   setDomainId,
   domainId,
+  setVersionId,
   setBrandContext, 
   onNext, 
   onPrev,
@@ -120,7 +122,10 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
               switch (data.type) {
                 case 'domain_created': {
                   setDomainId(data.domainId);
-                  console.log('Set domainId:', data.domainId);
+                  if (setVersionId && data.versionId) {
+                    setVersionId(data.versionId);
+                  }
+                  console.log('Set domainId:', data.domainId, 'versionId:', data.versionId);
                   break;
                 }
                 case 'progress': {

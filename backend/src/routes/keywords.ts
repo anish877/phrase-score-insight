@@ -9,45 +9,59 @@ const prisma = new PrismaClient();
 // GET /keywords/:domainId - get keywords for a domain
 router.get('/:domainId', async (req: Request, res: Response) => {
   const domainId = Number(req.params.domainId);
+  const { versionId } = req.query; // Get versionId from query params
   if (!domainId) { res.status(400).json({ error: 'Domain ID is required' }); return; }
 
   try {
-    console.log('Fetching keywords for domainId:', domainId);
+    console.log('Fetching keywords for domainId:', domainId, 'versionId:', versionId);
     
-    // Get domain first
-    const domain = await prisma.domain.findUnique({
-      where: { id: domainId },
-      include: { keywords: true }
+    // Determine where to look for keywords based on versionId
+    const whereClause = versionId 
+      ? { domainVersionId: Number(versionId) }
+      : { domainId, domainVersionId: null };
+    
+    // Get keywords for the specified version or main domain
+    const keywords = await prisma.keyword.findMany({
+      where: whereClause,
+      orderBy: { volume: 'desc' }
     });
 
-    if (!domain) { 
-      console.log('Domain not found:', domainId);
-      res.status(404).json({ error: 'Domain not found' }); 
-      return; 
-    }
-
-    console.log('Domain found, keywords count:', domain.keywords.length);
+    console.log('Found keywords count:', keywords.length);
 
     // If we already have keywords, return them
-    if (domain.keywords.length > 0) {
-      console.log('Returning existing keywords:', domain.keywords.length);
-      console.log('Selected keywords:', domain.keywords.filter(k => k.isSelected).map(k => k.term));
-       res.json({ keywords: domain.keywords });
+    if (keywords.length > 0) {
+      console.log('Returning existing keywords:', keywords.length);
+      console.log('Selected keywords:', keywords.filter(k => k.isSelected).map(k => k.term));
+       res.json({ keywords });
        return
     }
 
     // Otherwise, generate keywords using Gemini and save
-    console.log('No existing keywords, generating with Gemini for domain:', domain.url);
+    console.log('No existing keywords, generating with Gemini for domain:', domainId, 'versionId:', versionId);
+    
+    // Get domain for context
+    const domain = await prisma.domain.findUnique({
+      where: { id: domainId },
+      select: { url: true, context: true }
+    });
+
+    if (!domain) {
+      res.status(404).json({ error: 'Domain not found' });
+      return;
+    }
+
     // Get context from domain or extract if missing
     let context = domain.context;
     if (!context) {
       // Use Gemini to extract context if not present
       const extraction = await crawlAndExtractWithGemini(domain.url);
       context = extraction.extractedContext;
-      await prisma.domain.update({ where: { id: domain.id }, data: { context } });
+      await prisma.domain.update({ where: { id: domainId }, data: { context } });
     }
+    
     const geminiKeywords = await generateKeywordsForDomain(domain.url, context);
-    // Save keywords to database
+    
+    // Save keywords to database with version support
     const savedKeywords = await Promise.all(
       geminiKeywords.map(kw =>
         prisma.keyword.create({
@@ -56,7 +70,8 @@ router.get('/:domainId', async (req: Request, res: Response) => {
             volume: kw.volume,
             difficulty: kw.difficulty,
             cpc: kw.cpc,
-            domainId,
+            domainId: versionId ? null : domainId, // Only set domainId if not a version
+            domainVersionId: versionId ? Number(versionId) : null, // Set versionId if provided
             isSelected: false // Explicitly set default value
           }
         })
@@ -72,9 +87,10 @@ router.get('/:domainId', async (req: Request, res: Response) => {
 // PATCH /keywords/:domainId/selection - update selected keywords
 router.patch('/:domainId/selection', async (req: Request, res: Response) => {
   const domainId = Number(req.params.domainId);
+  const { versionId } = req.query; // Get versionId from query params
   let { selectedKeywords } = req.body;
 
-  console.log(`Updating keyword selection for domain ${domainId}:`, selectedKeywords);
+  console.log(`Updating keyword selection for domain ${domainId}, versionId: ${versionId}:`, selectedKeywords);
 
   if (!domainId || !Array.isArray(selectedKeywords)) {
     res.status(400).json({ error: 'Domain ID and selectedKeywords array are required' });
@@ -85,8 +101,13 @@ router.patch('/:domainId/selection', async (req: Request, res: Response) => {
     // Normalize keywords to lowercase for comparison
     const selectedKeywordsLower = selectedKeywords.map((k: string) => k.trim().toLowerCase());
 
-    // Fetch all keywords for the domain
-    const existingKeywords = await prisma.keyword.findMany({ where: { domainId } });
+    // Determine where to look for keywords based on versionId
+    const whereClause = versionId 
+      ? { domainVersionId: Number(versionId) }
+      : { domainId, domainVersionId: null };
+
+    // Fetch all keywords for the domain/version
+    const existingKeywords = await prisma.keyword.findMany({ where: whereClause });
 
     // Add missing keywords (preserve original casing)
     for (const kw of selectedKeywords) {
@@ -97,7 +118,8 @@ router.patch('/:domainId/selection', async (req: Request, res: Response) => {
             volume: 0,
             difficulty: 'N/A',
             cpc: 0,
-            domainId,
+            domainId: versionId ? null : domainId, // Only set domainId if not a version
+            domainVersionId: versionId ? Number(versionId) : null, // Set versionId if provided
             isSelected: true,
           }
         });
@@ -106,17 +128,17 @@ router.patch('/:domainId/selection', async (req: Request, res: Response) => {
 
     // Unselect all
     await prisma.keyword.updateMany({
-      where: { domainId },
+      where: whereClause,
       data: { isSelected: false }
     });
-    console.log(`Unselected all keywords for domain ${domainId}`);
+    console.log(`Unselected all keywords for domain ${domainId}, versionId: ${versionId}`);
 
     // Select all in the list (case-insensitive)
     // Prisma does not support 'in' with mode: 'insensitive', so update individually
     for (const kw of selectedKeywords) {
       await prisma.keyword.updateMany({
         where: {
-          domainId,
+          ...whereClause,
           term: { equals: kw.trim(), mode: 'insensitive' }
         },
         data: { isSelected: true }
@@ -124,7 +146,7 @@ router.patch('/:domainId/selection', async (req: Request, res: Response) => {
     }
 
     // Return updated keywords
-    const updatedKeywords = await prisma.keyword.findMany({ where: { domainId } });
+    const updatedKeywords = await prisma.keyword.findMany({ where: whereClause });
     console.log(`Returning ${updatedKeywords.length} keywords, ${updatedKeywords.filter(k => k.isSelected).length} selected`);
     res.json({ keywords: updatedKeywords });
   } catch (err: any) {
@@ -136,6 +158,7 @@ router.patch('/:domainId/selection', async (req: Request, res: Response) => {
 // GET /keywords/stream/:domainId - stream keywords for a domain in real-time
 router.get('/stream/:domainId', async (req: Request, res: Response) => {
   const domainId = Number(req.params.domainId);
+  const { versionId } = req.query; // Get versionId from query params
   if (!domainId) { res.status(400).json({ error: 'Domain ID is required' }); return; }
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -148,24 +171,25 @@ router.get('/stream/:domainId', async (req: Request, res: Response) => {
   };
 
   try {
-    // Get domain first
-    const domain = await prisma.domain.findUnique({
-      where: { id: domainId },
-      include: { keywords: true }
+    console.log('Streaming keywords for domainId:', domainId, 'versionId:', versionId);
+    
+    // Determine where to look for keywords based on versionId
+    const whereClause = versionId 
+      ? { domainVersionId: Number(versionId) }
+      : { domainId, domainVersionId: null };
+    
+    // Get keywords for the specified version or main domain
+    const keywords = await prisma.keyword.findMany({
+      where: whereClause,
+      orderBy: { volume: 'desc' }
     });
 
-    if (!domain) {
-      sendEvent('error', { error: 'Domain not found' });
-      res.end();
-      return;
-    }
-
     // If we already have keywords, stream them
-    if (domain.keywords.length > 0) {
-      console.log(`Streaming ${domain.keywords.length} existing keywords for domain ${domainId}`);
-      console.log('Selected keywords:', domain.keywords.filter(k => k.isSelected).map(k => k.term));
+    if (keywords.length > 0) {
+      console.log(`Streaming ${keywords.length} existing keywords for domain ${domainId}, versionId: ${versionId}`);
+      console.log('Selected keywords:', keywords.filter(k => k.isSelected).map(k => k.term));
       sendEvent('progress', { message: 'Loading existing keywords...' });
-      for (const kw of domain.keywords) {
+      for (const kw of keywords) {
         sendEvent('keyword', kw);
       }
       sendEvent('complete', {});
@@ -176,12 +200,24 @@ router.get('/stream/:domainId', async (req: Request, res: Response) => {
     // Otherwise, generate keywords using AI and stream as we process
     sendEvent('progress', { message: 'Analyzing brand context and market positioning for keyword discovery...' });
     
+    // Get domain for context
+    const domain = await prisma.domain.findUnique({
+      where: { id: domainId },
+      select: { url: true, context: true }
+    });
+
+    if (!domain) {
+      sendEvent('error', { error: 'Domain not found' });
+      res.end();
+      return;
+    }
+    
     let context = domain.context;
     if (!context) {
       sendEvent('progress', { message: 'Extracting comprehensive brand context with advanced AI analysis...' });
       const extraction = await crawlAndExtractWithGemini(domain.url);
       context = extraction.extractedContext;
-      await prisma.domain.update({ where: { id: domain.id }, data: { context } });
+      await prisma.domain.update({ where: { id: domainId }, data: { context } });
     }
 
     sendEvent('progress', { message: 'Generating high-impact keywords using advanced SEO intelligence...' });
@@ -196,27 +232,28 @@ router.get('/stream/:domainId', async (req: Request, res: Response) => {
 
     for (let i = 0; i < allKeywords.length; i++) {
       const kw = allKeywords[i];
-      // Save to DB
+      // Save to DB with version support
       const saved = await prisma.keyword.create({
         data: {
           term: kw.term,
           volume: kw.volume,
           difficulty: kw.difficulty,
           cpc: kw.cpc,
-          domainId,
-          isSelected: false // Explicitly set default value
+          domainId: versionId ? null : domainId, // Only set domainId if not a version
+          domainVersionId: versionId ? Number(versionId) : null, // Set versionId if provided
+          isSelected: false
         }
       });
-      // Stream to client
+      
       sendEvent('keyword', saved);
       
-      // Update progress with realistic messaging
-      if (i % 5 === 0) {
-        sendEvent('progress', { message: `Analyzed ${i + 1}/${allKeywords.length} keywords - Processing search volume and competition data...` });
+      // Send progress update every 10 keywords
+      if ((i + 1) % 10 === 0) {
+        sendEvent('progress', { message: `Processed ${i + 1}/${allKeywords.length} keywords - Optimizing for search intent and conversion potential...` });
       }
     }
 
-    sendEvent('progress', { message: 'Keyword discovery analysis complete - All metrics validated and categorized!' });
+    sendEvent('progress', { message: `Advanced AI keyword discovery complete! Generated ${allKeywords.length} high-impact keywords optimized for search visibility and conversion.` });
     sendEvent('complete', {});
     res.end();
   } catch (err: any) {

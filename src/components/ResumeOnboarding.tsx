@@ -77,9 +77,9 @@ const ResumeOnboarding: React.FC<ResumeOnboardingProps> = ({
 
   const handleReset = async () => {
     try {
-      console.log('Resetting onboarding progress for domain:', domainId);
+      console.log('Resetting onboarding progress for domain:', domainId, 'version:', versionId);
       setIsLoading(true);
-      await onboardingService.resetProgress(domainId);
+      await onboardingService.resetProgress(domainId, versionId);
       onReset();
     } catch (err) {
       console.error('Failed to reset progress:', err);

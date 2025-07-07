@@ -70,23 +70,14 @@ class OnboardingService {
     }
   }
 
-  // Get onboarding progress
-  async getProgress(domainId: number): Promise<{ progress: OnboardingProgress; domain: any }> {
-    try {
-      const response = await fetch(`${this.baseUrl}/progress/${domainId}`, {
-        headers: getAuthHeaders(),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Failed to get onboarding progress: ${response.statusText} - ${errorData.error || ''}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Error getting onboarding progress:', error);
-      throw error;
-    }
+  // Get onboarding progress (version-aware)
+  async getProgress(domainId: number, versionId?: number): Promise<OnboardingProgress> {
+    let url = `${this.baseUrl}/progress/${domainId}`;
+    if (versionId) url += `?versionId=${versionId}`;
+    const response = await fetch(url, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch onboarding progress');
+    const result = await response.json();
+    return result.progress;
   }
 
   // Check if onboarding can be resumed
@@ -112,21 +103,17 @@ class OnboardingService {
     }
   }
 
-  // Reset onboarding progress
-  async resetProgress(domainId: number): Promise<void> {
-    try {
-      const response = await fetch(`${this.baseUrl}/progress/${domainId}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Failed to reset onboarding progress: ${response.statusText} - ${errorData.error || ''}`);
-      }
-    } catch (error) {
-      console.error('Error resetting onboarding progress:', error);
-      throw error;
+  // Reset onboarding progress (version-aware)
+  async resetProgress(domainId: number, versionId?: number): Promise<void> {
+    let url = `${this.baseUrl}/progress/${domainId}`;
+    if (versionId) url += `?versionId=${versionId}`;
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`Failed to reset onboarding progress: ${response.statusText} - ${errorData.error || ''}`);
     }
   }
 

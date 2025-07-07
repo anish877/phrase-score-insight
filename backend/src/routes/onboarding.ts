@@ -15,6 +15,7 @@ function asyncHandler(fn: any) {
 // GET /api/onboarding/progress/:domainId - Get onboarding progress
 router.get('/progress/:domainId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const domainId = Number(req.params.domainId);
+  const versionId = req.query.versionId ? Number(req.query.versionId) : null;
   
   if (!domainId || isNaN(domainId)) {
     return res.status(400).json({ error: 'Invalid domainId' });
@@ -35,7 +36,10 @@ router.get('/progress/:domainId', authenticateToken, asyncHandler(async (req: Au
     }
 
     const progress = await prisma.onboardingProgress.findFirst({
-      where: { domainId },
+      where: {
+        domainId,
+        domainVersionId: versionId ?? null
+      },
       include: {
         domain: {
           select: {
@@ -47,7 +51,7 @@ router.get('/progress/:domainId', authenticateToken, asyncHandler(async (req: Au
               take: 1
             },
             keywords: {
-              where: { isSelected: true },
+              where: { isSelected: true, ...(versionId ? { domainVersionId: versionId } : {}) },
               select: { term: true }
             }
           }
@@ -56,7 +60,7 @@ router.get('/progress/:domainId', authenticateToken, asyncHandler(async (req: Au
     });
 
     if (!progress) {
-      return res.status(404).json({ error: 'No onboarding progress found for this domain' });
+      return res.status(404).json({ error: 'No onboarding progress found for this domain/version' });
     }
 
     res.json({
@@ -64,7 +68,8 @@ router.get('/progress/:domainId', authenticateToken, asyncHandler(async (req: Au
         currentStep: progress.currentStep,
         isCompleted: progress.isCompleted,
         stepData: progress.stepData,
-        lastActivity: progress.lastActivity
+        lastActivity: progress.lastActivity,
+        versionId: versionId ?? null
       },
       domain: progress.domain
     });
@@ -144,6 +149,7 @@ router.post('/progress/:domainId', authenticateToken, asyncHandler(async (req: A
 // GET /api/onboarding/resume/:domainId - Resume onboarding with current data
 router.get('/resume/:domainId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const domainId = Number(req.params.domainId);
+  const versionId = req.query.versionId ? Number(req.query.versionId) : null;
   
   if (!domainId || isNaN(domainId)) {
     return res.status(400).json({ error: 'Invalid domainId' });
@@ -163,8 +169,12 @@ router.get('/resume/:domainId', authenticateToken, asyncHandler(async (req: Auth
       return res.status(403).json({ error: 'Access denied' });
     }
 
+    // Find onboarding progress for this domain/version
     const progress = await prisma.onboardingProgress.findFirst({
-      where: { domainId },
+      where: {
+        domainId,
+        domainVersionId: versionId ?? null
+      },
       include: {
         domain: {
           select: {
@@ -172,7 +182,7 @@ router.get('/resume/:domainId', authenticateToken, asyncHandler(async (req: Auth
             url: true,
             context: true,
             keywords: {
-              where: { isSelected: true },
+              where: { isSelected: true, ...(versionId ? { domainVersionId: versionId } : {}) },
               select: { term: true }
             }
           }
@@ -181,16 +191,19 @@ router.get('/resume/:domainId', authenticateToken, asyncHandler(async (req: Auth
     });
 
     if (!progress) {
-      return res.status(404).json({ error: 'No onboarding progress found for this domain' });
+      return res.json({
+        canResume: false,
+        reason: 'No onboarding progress found for this domain/version',
+        versionId: versionId ?? null
+      });
     }
 
-    // Check for phrases and AI results separately
+    // Check for phrases and AI results separately, filter by version if present
+    const phraseWhere: any = versionId
+      ? { keyword: { domainId, domainVersionId: versionId } }
+      : { keyword: { domainId, domainVersionId: null } };
     const phrases = await prisma.phrase.findMany({
-      where: {
-        keyword: {
-          domainId: domainId
-        }
-      },
+      where: phraseWhere,
       include: {
         keyword: {
           select: { term: true }
@@ -198,14 +211,11 @@ router.get('/resume/:domainId', authenticateToken, asyncHandler(async (req: Auth
       }
     });
 
+    const aiResultWhere: any = versionId
+      ? { phrase: { keyword: { domainId, domainVersionId: versionId } } }
+      : { phrase: { keyword: { domainId, domainVersionId: null } } };
     const aiResults = await prisma.aIQueryResult.findMany({
-      where: {
-        phrase: {
-          keyword: {
-            domainId: domainId
-          }
-        }
-      },
+      where: aiResultWhere,
       take: 1
     });
 
@@ -226,23 +236,26 @@ router.get('/resume/:domainId', authenticateToken, asyncHandler(async (req: Auth
     if (!stepData.domainId) {
       stepData.domainId = domainId;
     }
+    if (versionId !== null && versionId !== undefined) {
+      stepData.versionId = versionId;
+    }
 
     // Adjust step based on available data
     if (progress.currentStep >= 1 && !hasDomainContext) {
       validatedStep = 0; // Reset to domain submission if context is missing
-      console.log(`Domain ${domainId}: Missing context, resetting to step 0`);
+      console.log(`Domain ${domainId} (version ${versionId}): Missing context, resetting to step 0`);
     }
     if (progress.currentStep >= 2 && !hasKeywords) {
       validatedStep = 1; // Reset to keyword discovery if keywords are missing
-      console.log(`Domain ${domainId}: Missing keywords, resetting to step 1`);
+      console.log(`Domain ${domainId} (version ${versionId}): Missing keywords, resetting to step 1`);
     }
     if (progress.currentStep >= 3 && !hasPhrases) {
       validatedStep = 2; // Reset to phrase generation if phrases are missing
-      console.log(`Domain ${domainId}: Missing phrases, resetting to step 2`);
+      console.log(`Domain ${domainId} (version ${versionId}): Missing phrases, resetting to step 2`);
     }
     if (progress.currentStep >= 4 && !hasAIResults) {
       validatedStep = 3; // Reset to AI queries if results are missing
-      console.log(`Domain ${domainId}: Missing AI results, resetting to step 3`);
+      console.log(`Domain ${domainId} (version ${versionId}): Missing AI results, resetting to step 3`);
     }
 
     // Update progress if step was adjusted
@@ -251,7 +264,7 @@ router.get('/resume/:domainId', authenticateToken, asyncHandler(async (req: Auth
         where: { 
           domainId_domainVersionId: {
             domainId,
-            domainVersionId: progress.domainVersionId
+            domainVersionId: versionId ?? null
           }
         },
         data: {
@@ -261,20 +274,19 @@ router.get('/resume/:domainId', authenticateToken, asyncHandler(async (req: Auth
       });
     }
 
+    // Respond in the format expected by the frontend
     res.json({
-      progress: {
-        currentStep: validatedStep,
-        isCompleted: progress.isCompleted,
-        stepData,
-        lastActivity: progress.lastActivity
-      },
-      domain: progress.domain,
-      dataStatus: {
+      canResume: true,
+      currentStep: validatedStep,
+      stepData,
+      lastActivity: progress.lastActivity,
+      dataIntegrity: {
         hasDomainContext,
         hasKeywords,
         hasPhrases,
         hasAIResults
-      }
+      },
+      versionId: versionId ?? null
     });
   } catch (error) {
     console.error('Error resuming onboarding:', error);
@@ -285,6 +297,7 @@ router.get('/resume/:domainId', authenticateToken, asyncHandler(async (req: Auth
 // DELETE /api/onboarding/progress/:domainId - Reset onboarding progress
 router.delete('/progress/:domainId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const domainId = Number(req.params.domainId);
+  const versionId = req.query.versionId ? Number(req.query.versionId) : null;
   
   if (!domainId || isNaN(domainId)) {
     return res.status(400).json({ error: 'Invalid domainId' });
@@ -304,14 +317,17 @@ router.delete('/progress/:domainId', authenticateToken, asyncHandler(async (req:
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Delete all progress for this domain (all versions)
+    // Delete progress for this domain/version only
     await prisma.onboardingProgress.deleteMany({
-      where: { domainId }
+      where: {
+        domainId,
+        domainVersionId: versionId ?? null
+      }
     });
 
-    console.log(`Reset onboarding progress for domain ${domainId}`);
+    console.log(`Reset onboarding progress for domain ${domainId} version ${versionId}`);
 
-    res.json({ success: true, message: 'Onboarding progress reset successfully' });
+    res.json({ success: true, message: 'Onboarding progress reset successfully', versionId: versionId ?? null });
   } catch (error) {
     console.error('Error resetting onboarding progress:', error);
     res.status(500).json({ error: 'Internal server error' });

@@ -255,7 +255,7 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
         </Button>
         <Button 
           onClick={onNext}
-          disabled={isGenerating || totalPhrases === 0 || generatedPhrases.some(item => item.phrases.length !== 5)}
+          disabled={isGenerating || totalPhrases === 0 || generatedPhrases.some(item => item.phrases.length === 0)}
           className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
         >
           Run AI Analysis ({totalPhrases} phrases)

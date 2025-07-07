@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ResponseScoring from '@/components/ResponseScoring';
 import { Button } from '@/components/ui/button';
 import type { AIQueryResult, AIQueryStats } from '@/components/AIQueryResults';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Phrase {
   id: number;
@@ -59,12 +60,32 @@ const DomainResponseScoring: React.FC = () => {
   const [queryStats, setQueryStats] = useState<AIQueryStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { user, loading: authLoading } = useAuth();
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth');
+    }
+  }, [user, authLoading, navigate]);
+
+  // Show loading while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto"></div>
+          <p className="text-slate-600">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (!domainId) return;
     setLoading(true);
     setError(null);
-    fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}`)
+    fetch(`http://localhost:3002/api/dashboard/${domainId}`)
       .then(res => {
         if (!res.ok) throw new Error('Failed to fetch domain data');
         return res.json();
@@ -118,6 +139,23 @@ const DomainResponseScoring: React.FC = () => {
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
   }, [domainId]);
+
+  // Show loading while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto"></div>
+          <p className="text-slate-600">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render anything if not authenticated (will redirect)
+  if (!user) {
+    return null;
+  }
 
   if (loading) {
     return (

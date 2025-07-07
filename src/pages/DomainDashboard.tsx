@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +13,7 @@ import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { LineChart as ReLineChart, Line as ReLine, XAxis as ReXAxis, YAxis as ReYAxis, Tooltip as ReTooltip, Legend as ReLegend, ResponsiveContainer as ReResponsiveContainer, CartesianGrid as ReCartesianGrid } from 'recharts';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface DomainData {
   id: number;
@@ -415,6 +416,27 @@ const DomainDashboard = () => {
   const [showingFallbackData, setShowingFallbackData] = useState(false);
   const [activeSection, setActiveSection] = useState('overview');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth');
+    }
+  }, [user, authLoading, navigate]);
+
+  // Show loading while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto"></div>
+          <p className="text-slate-600">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Extract domain ID from URL - handle different URL patterns
   const getDomainId = () => {
@@ -462,7 +484,7 @@ const DomainDashboard = () => {
     try {
       setVersionLoading(true);
       // Use the endpoint that includes calculated metrics
-      const response = await fetch(`https://phrase-score-insight.onrender.com/api/domain/${domainId}/versions`);
+      const response = await fetch(`http://localhost:3002/api/domain/${domainId}/versions`);
       if (!response.ok) throw new Error('Failed to fetch versions');
       const data = await response.json();
       setVersions(data.versions || []);
@@ -515,6 +537,8 @@ const DomainDashboard = () => {
     // eslint-disable-next-line
   }, [domainData]);
 
+
+
   const fetchDomainData = async (versionId: number) => {
     try {
       setLoading(true);
@@ -524,7 +548,7 @@ const DomainDashboard = () => {
       console.log('Fetching domain data for ID:', domainId, 'Version ID:', versionId);
       
       // Always fetch version-specific data
-      const versionUrl = `https://phrase-score-insight.onrender.com/api/dashboard/${domainId}?versionId=${versionId}`;
+      const versionUrl = `http://localhost:3002/api/dashboard/${domainId}?versionId=${versionId}`;
       const versionResponse = await fetch(versionUrl);
       
       if (!versionResponse.ok) {
@@ -610,7 +634,7 @@ const DomainDashboard = () => {
     try {
       setCompetitorLoading(true);
       setError(null);
-      const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}/competitors`);
+      const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/competitors`);
       if (!response.ok) {
         throw new Error('No competitor analysis found');
       }
@@ -631,7 +655,7 @@ const DomainDashboard = () => {
   const fetchSuggestedCompetitors = async () => {
     try {
       setSuggestionsLoading(true);
-      const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}/suggested-competitors`);
+      const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/suggested-competitors`);
       if (!response.ok) {
         throw new Error('Failed to fetch suggested competitors');
       }
@@ -651,7 +675,7 @@ const DomainDashboard = () => {
       setCompetitorLoading(true);
       setError(null);
       const compList = typeof customCompetitors !== 'undefined' ? customCompetitors : competitors;
-      const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}/competitors`, {
+      const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/competitors`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ competitors: compList })

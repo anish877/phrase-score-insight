@@ -14,11 +14,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  domains   Domain[]
+}
+
 model Domain {
   id        Int      @id @default(autoincrement())
   url       String   @unique
   context   String?  @db.Text
   version   Int      @default(1) // Track current version number
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   crawlResults CrawlResult[]

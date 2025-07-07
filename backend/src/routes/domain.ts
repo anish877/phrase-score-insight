@@ -243,7 +243,9 @@ router.post('/', async (req: Request, res: Response) => {
     sendEvent({ type: 'progress', message: 'Saving analysis results...', progress: 98 });
     const crawlResult = await prisma.crawlResult.create({
       data: {
-        domainVersionId: domainVersion.id,
+        domainVersion: {
+          connect: { id: domainVersion.id }
+        },
         pagesScanned: extraction.pagesScanned,
         contentBlocks: extraction.contentBlocks,
         keyEntities: keyEntitiesValue,

@@ -8,6 +8,7 @@ import aiQueriesRouter from './routes/ai-queries';
 import competitorRouter from './routes/competitor';
 import dashboardRouter from './routes/dashboard';
 import onboardingRouter from './routes/onboarding';
+import authRouter from './routes/auth';
 import { PrismaClient } from '../generated/prisma';
 
 const app = express();
@@ -50,6 +51,14 @@ app.get('/api/debug/domains', async (req: Request, res: Response) => {
         context: true,
         createdAt: true,
         updatedAt: true,
+        userId: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true
+          }
+        },
         _count: {
           select: {
             keywords: true,
@@ -73,6 +82,7 @@ app.get('/api/debug/domains', async (req: Request, res: Response) => {
 });
 
 // Routes
+app.use('/api/auth', authRouter);
 app.use('/api/domain', domainRouter);
 app.use('/api/keywords', keywordsRouter);
 app.use('/api/phrases', phrasesRouter);

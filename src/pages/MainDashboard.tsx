@@ -4,8 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Search, Plus, TrendingUp, Calendar, Globe, BarChart3, Sparkles, Target, Zap, ArrowUpRight, Filter, SortDesc, Clock, Play } from 'lucide-react';
+import { Search, Plus, TrendingUp, Calendar, Globe, BarChart3, Sparkles, Target, Zap, ArrowUpRight, Filter, SortDesc, Clock, Play, User, LogOut } from 'lucide-react';
 import { onboardingService } from '@/services/onboardingService';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface DashboardDomain {
   id: number;
@@ -41,7 +42,15 @@ const ProfessionalDashboard = () => {
   const [activeSessions, setActiveSessions] = useState<ActiveOnboardingSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { user, logout, loading: authLoading, token } = useAuth();
   const navigate = useNavigate();
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth');
+    }
+  }, [user, authLoading, navigate]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -49,7 +58,12 @@ const ProfessionalDashboard = () => {
       setError(null);
       try {
         // Fetch completed domains
-        const domainsResponse = await fetch('https://phrase-score-insight.onrender.com/api/dashboard/all');
+        const domainsResponse = await fetch('http://localhost:3002/api/dashboard/all', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
         if (!domainsResponse.ok) throw new Error('Failed to fetch dashboard analyses');
         const domainsData = await domainsResponse.json();
         setDomains(domainsData.domains || []);
@@ -65,6 +79,23 @@ const ProfessionalDashboard = () => {
     };
     fetchData();
   }, []);
+
+  // Show loading while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto"></div>
+          <p className="text-slate-600">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render anything if not authenticated (will redirect)
+  if (!user) {
+    return null;
+  }
 
   const activeSessionIds = new Set(activeSessions.map(s => s.domain.id));
   const filteredDomains = domains
@@ -197,6 +228,36 @@ const ProfessionalDashboard = () => {
                 <Plus className="h-4 w-4 mr-2" />
                 New Analysis
               </Button>
+              
+              {/* User Menu */}
+              <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-2 bg-white/10 backdrop-blur-sm px-3 py-2 rounded-lg">
+                  <User className="h-4 w-4 text-white" />
+                  <span className="text-white font-medium">
+                    {user.name || user.email}
+                  </span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      logout();
+                      // Small delay to ensure state updates are processed
+                      await new Promise(resolve => setTimeout(resolve, 100));
+                      navigate('/auth');
+                    } catch (error) {
+                      console.error('Logout error:', error);
+                      // Fallback: force navigation even if logout fails
+                      navigate('/auth');
+                    }
+                  }}
+                  className="text-white border-white/30 hover:bg-white/20 hover:border-white/50 hover:text-white transition-all duration-200 bg-transparent"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Logout
+                </Button>
+              </div>
             </div>
           </div>
         </div>

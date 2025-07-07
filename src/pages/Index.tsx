@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { CheckCircle, Circle, Clock } from 'lucide-react';
 import { onboardingService, OnboardingStepData } from '@/services/onboardingService';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Index = () => {
   const navigate = useNavigate();
@@ -37,47 +38,14 @@ const Index = () => {
   const [priorityPaths, setPriorityPaths] = useState<string[]>([]);
   const [isSavingMain, setIsSavingMain] = useState(false);
   const [resumeStep, setResumeStep] = useState<number | undefined>(undefined);
+  const { user, loading: authLoading } = useAuth();
 
-  console.log('Current step:', currentStep, 'Domain ID:', domainId, 'Domain:', domain);
-
-  const steps = [
-    {
-      id: 'domain',
-      title: 'Domain Submission',
-      description: 'Enter your domain for analysis',
-      estimatedTime: '1 min'
-    },
-    {
-      id: 'extraction',
-      title: 'Context Extraction',
-      description: 'AI extracts brand context',
-      estimatedTime: '2-3 min'
-    },
-    {
-      id: 'keywords',
-      title: 'Keyword Discovery',
-      description: 'Identify relevant keywords',
-      estimatedTime: '2 min'
-    },
-    {
-      id: 'phrases',
-      title: 'Phrase Generation',
-      description: 'Generate targeted phrases',
-      estimatedTime: '1-2 min'
-    },
-    {
-      id: 'queries',
-      title: 'AI Query Results',
-      description: 'Execute AI model queries',
-      estimatedTime: '3-4 min'
-    },
-    {
-      id: 'scoring',
-      title: 'Response Scoring',
-      description: 'Analyze and score responses',
-      estimatedTime: '2 min'
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth');
     }
-  ];
+  }, [user, authLoading, navigate]);
 
   // Initialize onboarding - check for resume opportunities
   useEffect(() => {
@@ -129,6 +97,64 @@ const Index = () => {
 
     initializeOnboarding();
   }, [searchParams]);
+
+  // Show loading while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto"></div>
+          <p className="text-slate-600">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render anything if not authenticated (will redirect)
+  if (!user) {
+    return null;
+  }
+
+  console.log('Current step:', currentStep, 'Domain ID:', domainId, 'Domain:', domain);
+
+  const steps = [
+    {
+      id: 'domain',
+      title: 'Domain Submission',
+      description: 'Enter your domain for analysis',
+      estimatedTime: '1 min'
+    },
+    {
+      id: 'extraction',
+      title: 'Context Extraction',
+      description: 'AI extracts brand context',
+      estimatedTime: '2-3 min'
+    },
+    {
+      id: 'keywords',
+      title: 'Keyword Discovery',
+      description: 'Identify relevant keywords',
+      estimatedTime: '2 min'
+    },
+    {
+      id: 'phrases',
+      title: 'Phrase Generation',
+      description: 'Generate targeted phrases',
+      estimatedTime: '1-2 min'
+    },
+    {
+      id: 'queries',
+      title: 'AI Query Results',
+      description: 'Execute AI model queries',
+      estimatedTime: '3-4 min'
+    },
+    {
+      id: 'scoring',
+      title: 'Response Scoring',
+      description: 'Analyze and score responses',
+      estimatedTime: '2 min'
+    }
+  ];
 
   // Add saveToMainTables helper
   const nextStep = async () => {

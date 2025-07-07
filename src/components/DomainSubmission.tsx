@@ -207,7 +207,7 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
 
     setIsLoading(true);
     try {
-      const response = await fetch(`https://phrase-score-insight.onrender.com/api/domain/check/${encodeURIComponent(domain.trim())}`);
+      const response = await fetch(`http://localhost:3002/api/domain/check/${encodeURIComponent(domain.trim())}`);
       const result: DomainCheckResult = await response.json();
       
       setDomainCheckResult(result);
@@ -241,7 +241,7 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
     
     setIsCreatingVersion(true);
     try {
-      const response = await fetch('https://phrase-score-insight.onrender.com/api/domain', {
+      const response = await fetch('http://localhost:3002/api/domain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

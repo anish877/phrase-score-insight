@@ -40,8 +40,8 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
       setStats({ totalKeywords: 0, totalPhrases: 0, avgPerKeyword: 0, aiQueries: 0 });
       const phrasesMap: Record<string, string[]> = {};
       const url = versionId 
-        ? `https://phrase-score-insight.onrender.com/api/phrases/${domainId}?versionId=${versionId}`
-        : `https://phrase-score-insight.onrender.com/api/phrases/${domainId}`;
+        ? `http://localhost:3002/api/phrases/${domainId}?versionId=${versionId}`
+        : `http://localhost:3002/api/phrases/${domainId}`;
       const eventSource = new EventSource(url);
 
       eventSource.addEventListener('progress', (e: MessageEvent) => {

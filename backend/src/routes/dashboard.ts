@@ -7,7 +7,7 @@ const router = Router();
 const prisma = new PrismaClient();
 
 // Add asyncHandler utility at the top
-function asyncHandler(fn: any) {
+function asyncHandler(fn: (req: any, res: any, next: any) => Promise<void>) {
   return function (req: any, res: any, next: any) {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
@@ -1208,7 +1208,7 @@ function generatePerformanceTrend(visibilityScore: number, mentions: number, tot
 }
 
 // Get all domains with dashboard analysis for dashboard card
-router.get('/all', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.get('/all', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     // Only fetch domains belonging to the authenticated user
     const domains = await prisma.domain.findMany({
@@ -1312,9 +1312,11 @@ router.get('/all', authenticateToken, asyncHandler(async (req: AuthenticatedRequ
     }));
 
     res.json({ total: result.length, domains: result });
+    return;
   } catch (error) {
     console.error('Error fetching all dashboard analyses:', error);
     res.status(500).json({ error: 'Failed to fetch dashboard analyses' });
+    return;
   }
 }));
 
@@ -1367,13 +1369,15 @@ router.get('/:domainId', authenticateToken, asyncHandler(async (req: Authenticat
 
     if (!domain) {
       console.log(`Domain ${domainId} not found`);
-      return res.status(404).json({ error: 'Domain not found' });
+      res.status(404).json({ error: 'Domain not found' });
+      return;
     }
 
     // Check ownership
     if (domain.userId !== req.user.userId) {
       console.log(`User ${req.user.userId} attempted to access domain ${domainId} owned by user ${domain.userId}`);
-      return res.status(403).json({ error: 'Access denied' });
+      res.status(403).json({ error: 'Access denied' });
+      return;
     }
 
     // Always require versionId - no main domain concept
@@ -2063,12 +2067,14 @@ router.get('/:domainId/suggested-competitors', authenticateToken, asyncHandler(a
     });
 
     if (!domain) {
-      return res.status(404).json({ error: 'Domain not found' });
+      res.status(404).json({ error: 'Domain not found' });
+      return;
     }
 
     // Check ownership
     if (domain.userId !== req.user.userId) {
-      return res.status(403).json({ error: 'Access denied' });
+      res.status(403).json({ error: 'Access denied' });
+      return;
     }
 
     // Check if we have cached suggestions
@@ -2080,7 +2086,8 @@ router.get('/:domainId/suggested-competitors', authenticateToken, asyncHandler(a
         reason: comp.reason,
         type: comp.type
       }));
-      return res.json({ suggestedCompetitors });
+      res.json({ suggestedCompetitors });
+      return;
     }
 
     console.log('No cached suggestions found, generating new AI suggestions...');
@@ -2181,7 +2188,8 @@ router.get('/:domainId/competitors', authenticateToken, asyncHandler(async (req:
     const { domainId } = req.params;
     const id = Number(domainId);
     if (isNaN(id)) {
-      return res.status(400).json({ error: 'Invalid domainId' });
+      res.status(400).json({ error: 'Invalid domainId' });
+      return;
     }
     
     const domain = await prisma.domain.findUnique({
@@ -2192,16 +2200,19 @@ router.get('/:domainId/competitors', authenticateToken, asyncHandler(async (req:
     });
     
     if (!domain) {
-      return res.status(404).json({ error: 'Domain not found' });
+      res.status(404).json({ error: 'Domain not found' });
+      return;
     }
 
     // Check ownership
     if (domain.userId !== req.user.userId) {
-      return res.status(403).json({ error: 'Access denied' });
+      res.status(403).json({ error: 'Access denied' });
+      return;
     }
     
     if (!domain.competitorAnalyses.length) {
-      return res.status(404).json({ error: 'No competitor analysis found' });
+      res.status(404).json({ error: 'No competitor analysis found' });
+      return;
     }
     
     const analysis = domain.competitorAnalyses[0];
@@ -2213,13 +2224,12 @@ router.get('/:domainId/competitors', authenticateToken, asyncHandler(async (req:
         .map((s: string) => s.replace(/^[-\s]+/, '').trim())
         .filter(Boolean);
     }
-    return res.json({ ...analysis, competitorListArr });
+    res.json({ ...analysis, competitorListArr });
   } catch (error) {
     console.error('Error fetching competitor analysis:', error);
     res.status(500).json({ error: 'Failed to fetch competitor analysis' });
   }
 }));
-
 // Get competitor analysis using AI
 router.post('/:domainId/competitors', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -2253,12 +2263,14 @@ router.post('/:domainId/competitors', authenticateToken, asyncHandler(async (req
     });
 
     if (!domain) {
-      return res.status(404).json({ error: 'Domain not found' });
+      res.status(404).json({ error: 'Domain not found' });
+      return;
     }
 
     // Check ownership
     if (domain.userId !== req.user.userId) {
-      return res.status(403).json({ error: 'Access denied' });
+      res.status(403).json({ error: 'Access denied' });
+      return;
     }
 
     console.log(`Domain found: ${domain.url} with ${domain.keywords.length} keywords`);

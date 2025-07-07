@@ -372,7 +372,7 @@ REAL PERFORMANCE DATA:
 
 KEYWORD DATA:
 - Total Keywords: ${domain.keywords.length}
-- Branded Keywords: ${domain.keywords.filter((k: any) => domain.url.toLowerCase().includes(k.term.toLowerCase())).length}
+- Branded Keywords: ${domain.keywords.filter((k: any) => k.term && domain.url && domain.url.toLowerCase().includes(k.term.toLowerCase())).length}
 - High Volume Keywords: ${domain.keywords.filter((k: any) => (k.volume || 0) > 10000).length}
 
 Generate comprehensive SEO analysis based on this real performance data. Consider:
@@ -1377,20 +1377,27 @@ router.get('/:domainId', authenticateToken, asyncHandler(async (req: Authenticat
     }
 
     // Always require versionId - no main domain concept
+    let targetData;
     if (!versionId) {
-      console.log(`No versionId provided for domain ${domainId}`);
-      return res.status(400).json({ error: 'Version ID is required' });
+      console.log(`No versionId provided for domain ${domainId}, using latest version`);
+      // Use the latest version instead of returning an error
+      const latestVersion = domain.versions[0]; // Versions are ordered by desc
+      if (!latestVersion) {
+        console.log(`No versions found for domain ${domainId}`);
+        return res.status(404).json({ error: 'No versions found for this domain' });
+      }
+      targetData = latestVersion;
+      console.log(`Using latest version ${latestVersion.id} for domain ${domainId}`);
+    } else {
+      // Use version-specific data ONLY
+      const version = domain.versions.find(v => v.id === parseInt(versionId as string));
+      if (!version) {
+        console.log(`Version ${versionId} not found for domain ${domainId}`);
+        return res.status(404).json({ error: 'Version not found' });
+      }
+      targetData = version;
+      console.log(`Using version-specific data for version ${versionId}`);
     }
-    
-    // Use version-specific data ONLY
-    const version = domain.versions.find(v => v.id === parseInt(versionId as string));
-    if (!version) {
-      console.log(`Version ${versionId} not found for domain ${domainId}`);
-      return res.status(404).json({ error: 'Version not found' });
-    }
-    
-    const targetData = version;
-    console.log(`Using version-specific data for version ${versionId}`);
 
     console.log(`Domain found: ${domain.url} with ${targetData.keywords?.length || 0} keywords`);
 

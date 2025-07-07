@@ -228,10 +228,12 @@ const Index = () => {
       };
       
       try {
+        console.log('Completing analysis with versionId:', versionId);
         // Save progress and mark as completed
         await onboardingService.saveProgress(domainId, currentStep, stepData, true);
         // Navigate to dashboard after successful save with versionId if available
         const dashboardUrl = versionId ? `/dashboard/${domainId}?versionId=${versionId}` : `/dashboard/${domainId}`;
+        console.log('Redirecting to dashboard URL:', dashboardUrl);
         navigate(dashboardUrl);
       } catch (error) {
         console.error('Failed to mark onboarding as complete:', error);
@@ -240,6 +242,7 @@ const Index = () => {
       }
     } else {
       // If no domainId, just navigate
+      console.log('No domainId, redirecting to main dashboard');
       navigate('/dashboard');
     }
   };

@@ -419,25 +419,6 @@ const DomainDashboard = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!authLoading && !user) {
-      navigate('/auth');
-    }
-  }, [user, authLoading, navigate]);
-
-  // Show loading while checking authentication
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100">
-        <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto"></div>
-          <p className="text-slate-600">Checking authentication...</p>
-        </div>
-      </div>
-    );
-  }
-
   // Extract domain ID from URL - handle different URL patterns
   const getDomainId = () => {
     if (!domain) return 1;
@@ -474,6 +455,8 @@ const DomainDashboard = () => {
   const getVersionIdFromUrl = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const versionId = urlParams.get('versionId');
+    console.log('URL search params:', window.location.search);
+    console.log('Extracted versionId from URL:', versionId);
     return versionId ? parseInt(versionId) : null;
   };
 
@@ -484,7 +467,7 @@ const DomainDashboard = () => {
     try {
       setVersionLoading(true);
       // Use the endpoint that includes calculated metrics
-      const response = await fetch(`http://localhost:3002/api/domain/${domainId}/versions`, {
+      const response = await fetch(`https://phrase-score-insight.onrender.com/api/domain/${domainId}/versions`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json',
@@ -512,26 +495,43 @@ const DomainDashboard = () => {
     }
   };
 
+  // All useEffect hooks must be called before any conditional returns
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth');
+    }
+  }, [user, authLoading, navigate]);
+
   useEffect(() => {
     fetchVersions();
   }, [domainId]);
 
   useEffect(() => {
-    if (!versionLoading) {
+    if (!versionLoading && versions.length > 0) {
       // Always work with versions - no main domain concept
       const urlVersionId = getVersionIdFromUrl();
       const targetVersionId = urlVersionId || selectedVersionId;
       
       if (targetVersionId) {
+        console.log('Fetching data for target versionId:', targetVersionId);
         fetchDomainData(targetVersionId);
-      } else if (versions.length > 0) {
+      } else {
         // If no version specified, use the latest version (first in the array since it's ordered desc)
         const latestVersion = versions[0];
+        console.log('No versionId specified, using latest version:', latestVersion.id);
         setSelectedVersionId(latestVersion.id);
         fetchDomainData(latestVersion.id);
       }
     }
-  }, [selectedVersionId, versionLoading, versions]);
+  }, [versionLoading, versions, domainId]); // Removed selectedVersionId from dependencies to prevent loops
+
+  // Separate effect to handle selectedVersionId changes
+  useEffect(() => {
+    if (selectedVersionId && !versionLoading && versions.length > 0) {
+      console.log('Selected version changed, fetching data for versionId:', selectedVersionId);
+      fetchDomainData(selectedVersionId);
+    }
+  }, [selectedVersionId]);
 
   // Fetch competitor analysis from DB on initial load
   useEffect(() => {
@@ -539,10 +539,19 @@ const DomainDashboard = () => {
       fetchCompetitorDataFromDB();
       fetchSuggestedCompetitors();
     }
-    // eslint-disable-next-line
-  }, [domainData]);
+  }, [domainData, domainId]);
 
-
+  // Show loading while checking authentication - moved after all hooks
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto"></div>
+          <p className="text-slate-600">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
   const fetchDomainData = async (versionId: number) => {
     try {
@@ -553,20 +562,26 @@ const DomainDashboard = () => {
       console.log('Fetching domain data for ID:', domainId, 'Version ID:', versionId);
       
       // Always fetch version-specific data
-      const versionUrl = `http://localhost:3002/api/dashboard/${domainId}?versionId=${versionId}`;
-              const versionResponse = await fetch(versionUrl, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-            'Content-Type': 'application/json',
-          },
-        });
+      const versionUrl = `https://phrase-score-insight.onrender.com/api/dashboard/${domainId}?versionId=${versionId}`;
+      console.log('Making request to:', versionUrl);
+      
+      const versionResponse = await fetch(versionUrl, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json',
+        },
+      });
       
       if (!versionResponse.ok) {
-        throw new Error('Version fetch failed');
+        const errorText = await versionResponse.text();
+        console.error('Version fetch failed:', errorText);
+        throw new Error(`Version fetch failed: ${errorText}`);
       }
       
       const data = await versionResponse.json();
       console.log('Version-specific data received:', data);
+      console.log('Data keys:', Object.keys(data));
+      console.log('Metrics keys:', Object.keys(data.metrics || {}));
       setShowingFallbackData(false);
       
       // Debug keyword analytics specifically
@@ -629,13 +644,16 @@ const DomainDashboard = () => {
       await new Promise(resolve => setTimeout(resolve, 100));
       
       setDomainData(data);
+      console.log('Domain data set successfully');
       // Debug: log token usage after setting domain data
       console.log('Token usage from API:', data.extraction?.tokenUsage);
     } catch (err) {
       console.error('Error fetching domain data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load domain data');
+      setDomainData(null);
     } finally {
       setLoading(false);
+      console.log('Loading state set to false');
     }
   };
 
@@ -644,7 +662,7 @@ const DomainDashboard = () => {
     try {
       setCompetitorLoading(true);
       setError(null);
-      const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/competitors`, {
+      const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}/competitors`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json',
@@ -670,7 +688,7 @@ const DomainDashboard = () => {
   const fetchSuggestedCompetitors = async () => {
     try {
       setSuggestionsLoading(true);
-      const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/suggested-competitors`, {
+      const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}/suggested-competitors`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json',
@@ -695,7 +713,7 @@ const DomainDashboard = () => {
       setCompetitorLoading(true);
       setError(null);
       const compList = typeof customCompetitors !== 'undefined' ? customCompetitors : competitors;
-      const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/competitors`, {
+      const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}/competitors`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

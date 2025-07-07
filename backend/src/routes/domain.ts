@@ -90,6 +90,8 @@ router.get('/check/:url', authenticateToken, asyncHandler(async (req: Authentica
 // POST /domain - create/find domain, run extraction, and stream progress
 router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const { url, subdomains, customPaths, priorityUrls, createNewVersion = false, versionName } = req.body;
+  
+  // Validate input before setting SSE headers
   if (!url) {
     res.status(400).json({ error: 'URL is required' });
     return;
@@ -118,6 +120,12 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
+  // Helper function for consistent error handling in SSE
+  const sendErrorAndEnd = (error: string, details?: string) => {
+    sendEvent({ type: 'error', error, details: details || error });
+    res.end();
+  };
+
   try {
     // 1. Check if domain exists
     sendEvent({ type: 'progress', message: 'Checking domain status and versioning...', progress: 5 });
@@ -132,7 +140,7 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
 
     if (domain) {
       if (domain.userId !== req.user.userId) {
-        res.status(403).json({ error: 'Access denied' });
+        sendErrorAndEnd('Access denied', 'You do not have permission to access this domain');
         return;
       }
       if (createNewVersion) {
@@ -232,12 +240,19 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
     const hasCustomPaths = Array.isArray(customPaths) && customPaths.length > 0;
     let extraction;
     let totalTokenUsage = 0;
-    if (!hasPriorityUrls && !hasCustomPaths) {
-      extraction = await crawlAndExtractWithGpt4o(domainsToExtract, onProgress);
-    } else {
-      extraction = await crawlAndExtractWithGpt4o(domainsToExtract, onProgress, customPaths, priorityUrls);
+    
+    try {
+      if (!hasPriorityUrls && !hasCustomPaths) {
+        extraction = await crawlAndExtractWithGpt4o(domainsToExtract, onProgress);
+      } else {
+        extraction = await crawlAndExtractWithGpt4o(domainsToExtract, onProgress, customPaths, priorityUrls);
+      }
+      totalTokenUsage += extraction.tokenUsage || 0;
+    } catch (extractionError) {
+      console.error('Extraction error:', extractionError);
+      sendErrorAndEnd('Extraction failed', extractionError instanceof Error ? extractionError.message : 'Unknown extraction error');
+      return;
     }
-    totalTokenUsage += extraction.tokenUsage || 0;
     
     // 4. Fix keyEntities: sum if object, else use as is
     let keyEntitiesValue = extraction.keyEntities;
@@ -247,43 +262,49 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
     
     // 5. Save final crawl result to version
     sendEvent({ type: 'progress', message: 'Saving analysis results...', progress: 98 });
-    const crawlResult = await prisma.crawlResult.create({
-      data: {
-        domainVersion: {
-          connect: { id: domainVersion.id }
+    
+    try {
+      const crawlResult = await prisma.crawlResult.create({
+        data: {
+          domainVersion: {
+            connect: { id: domainVersion.id }
+          },
+          pagesScanned: extraction.pagesScanned,
+          contentBlocks: extraction.contentBlocks,
+          keyEntities: keyEntitiesValue,
+          confidenceScore: extraction.confidenceScore,
+          extractedContext: extraction.extractedContext,
+          tokenUsage: extraction.tokenUsage || 0,
         },
-        pagesScanned: extraction.pagesScanned,
-        contentBlocks: extraction.contentBlocks,
-        keyEntities: keyEntitiesValue,
-        confidenceScore: extraction.confidenceScore,
-        extractedContext: extraction.extractedContext,
-        tokenUsage: extraction.tokenUsage || 0,
-      },
-    });
+      });
 
-    // 6. Update domain context
-    await prisma.domain.update({
-      where: { id: domain.id },
-      data: { context: extraction.extractedContext },
-    });
+      // 6. Update domain context
+      await prisma.domain.update({
+        where: { id: domain.id },
+        data: { context: extraction.extractedContext },
+      });
 
-    // 7. Send final result and close connection
-    sendEvent({ 
-      type: 'complete', 
-      result: { 
-        domain, 
-        domainVersion,
-        extraction: crawlResult,
-        isNewVersion,
-        tokenUsage: totalTokenUsage
-      } 
-    });
-    res.end();
+      // 7. Send final result and close connection
+      sendEvent({ 
+        type: 'complete', 
+        result: { 
+          domain, 
+          domainVersion,
+          extraction: crawlResult,
+          isNewVersion,
+          tokenUsage: totalTokenUsage
+        } 
+      });
+      res.end();
+    } catch (dbError) {
+      console.error('Database error:', dbError);
+      sendErrorAndEnd('Failed to save results', 'Database operation failed');
+      return;
+    }
 
   } catch (err: any) {
     console.error('Domain extraction streaming error:', err);
-    sendEvent({ type: 'error', error: 'Failed to process domain', details: err.message });
-    res.end();
+    sendErrorAndEnd('Failed to process domain', err.message);
   }
 });
 

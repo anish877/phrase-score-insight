@@ -90,7 +90,7 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
     const processStream = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch('http://localhost:3002/api/domain', {
+        const response = await fetch('https://phrase-score-insight.onrender.com/api/domain', {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',

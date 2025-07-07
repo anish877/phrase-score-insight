@@ -85,7 +85,7 @@ const DomainResponseScoring: React.FC = () => {
     if (!domainId) return;
     setLoading(true);
     setError(null);
-            fetch(`http://localhost:3002/api/dashboard/${domainId}`, {
+            fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json',

@@ -50,7 +50,6 @@ const Index = () => {
   // Initialize onboarding - check for resume opportunities
   useEffect(() => {
     const initializeOnboarding = async () => {
-      // Check if we have a domainId from URL params (for resuming)
       const urlDomainId = searchParams.get('domainId');
       const urlVersionId = searchParams.get('versionId');
       if (urlDomainId) {
@@ -62,7 +61,6 @@ const Index = () => {
             console.log('Checking resume for domainId:', domainIdNum, 'versionId:', versionIdNum);
             const resumeCheck = await onboardingService.checkResume(domainIdNum, versionIdNum);
             console.log('Resume check result:', resumeCheck);
-            
             if (resumeCheck.canResume) {
               setShowResumeDialog(true);
               setDomainId(domainIdNum);
@@ -82,19 +80,26 @@ const Index = () => {
               if (resumeCheck.stepData?.domainId) {
                 setDomainId(resumeCheck.stepData.domainId);
               }
+              setShowResumeDialog(false);
+              setResumeData(null);
               setResumeStep(undefined);
             }
           } catch (error) {
             console.error('Failed to check resume status:', error);
+            setShowResumeDialog(false);
+            setResumeData(null);
+            setResumeStep(undefined);
             // On error, continue with fresh start
           } finally {
             setIsCheckingResume(false);
           }
         }
+      } else {
+        setShowResumeDialog(false);
+        setResumeData(null);
+        setResumeStep(undefined);
       }
-      setIsInitialized(true);
     };
-
     initializeOnboarding();
   }, [searchParams]);
 

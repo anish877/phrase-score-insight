@@ -122,7 +122,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         setIsLoading(true);
         
         // Get domain ID from the current domain
-        const domainResponse = await fetch(`https://phrase-score-insight.onrender.com/api/domain/search?url=${encodeURIComponent(domain)}`, {
+        const domainResponse = await fetch(`http://localhost:3002/api/domain/search?url=${encodeURIComponent(domain)}`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json',
@@ -136,7 +136,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         if (!domainId) throw new Error('Domain not found in database');
 
         // Fetch comprehensive domain data
-        const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}`, {
+        const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
             'Content-Type': 'application/json',
@@ -285,7 +285,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     try {
       const ctrl = new AbortController();
       
-      fetchEventSource(`https://phrase-score-insight.onrender.com/api/competitor/analyze`, {
+      fetchEventSource(`http://localhost:3002/api/competitor/analyze`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

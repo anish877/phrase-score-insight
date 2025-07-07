@@ -144,7 +144,6 @@ router.post('/progress/:domainId', authenticateToken, asyncHandler(async (req: A
 // GET /api/onboarding/resume/:domainId - Resume onboarding with current data
 router.get('/resume/:domainId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const domainId = Number(req.params.domainId);
-  const versionId = req.query.versionId ? Number(req.query.versionId) : null;
   
   if (!domainId || isNaN(domainId)) {
     return res.status(400).json({ error: 'Invalid domainId' });
@@ -164,12 +163,8 @@ router.get('/resume/:domainId', authenticateToken, asyncHandler(async (req: Auth
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Find onboarding progress for the specific version (or main domain if versionId is null)
     const progress = await prisma.onboardingProgress.findFirst({
-      where: {
-        domainId,
-        domainVersionId: versionId ?? null
-      },
+      where: { domainId },
       include: {
         domain: {
           select: {
@@ -186,25 +181,29 @@ router.get('/resume/:domainId', authenticateToken, asyncHandler(async (req: Auth
     });
 
     if (!progress) {
-      return res.status(404).json({ error: 'No onboarding progress found for this domain/version' });
+      return res.status(404).json({ error: 'No onboarding progress found for this domain' });
     }
 
-    // Check for phrases and AI results for this version
+    // Check for phrases and AI results separately
     const phrases = await prisma.phrase.findMany({
-      where: versionId
-        ? { keyword: { domainVersionId: versionId } }
-        : { keyword: { domainId: domainId, domainVersionId: null } },
+      where: {
+        keyword: {
+          domainId: domainId
+        }
+      },
       include: {
-        keyword: { select: { term: true } }
+        keyword: {
+          select: { term: true }
+        }
       }
     });
 
     const aiResults = await prisma.aIQueryResult.findMany({
       where: {
         phrase: {
-          keyword: versionId
-            ? { domainVersionId: versionId }
-            : { domainId: domainId, domainVersionId: null }
+          keyword: {
+            domainId: domainId
+          }
         }
       },
       take: 1
@@ -227,26 +226,23 @@ router.get('/resume/:domainId', authenticateToken, asyncHandler(async (req: Auth
     if (!stepData.domainId) {
       stepData.domainId = domainId;
     }
-    if (versionId !== null && versionId !== undefined) {
-      stepData.versionId = versionId;
-    }
 
     // Adjust step based on available data
     if (progress.currentStep >= 1 && !hasDomainContext) {
       validatedStep = 0; // Reset to domain submission if context is missing
-      console.log(`Domain ${domainId} (version ${versionId}): Missing context, resetting to step 0`);
+      console.log(`Domain ${domainId}: Missing context, resetting to step 0`);
     }
     if (progress.currentStep >= 2 && !hasKeywords) {
       validatedStep = 1; // Reset to keyword discovery if keywords are missing
-      console.log(`Domain ${domainId} (version ${versionId}): Missing keywords, resetting to step 1`);
+      console.log(`Domain ${domainId}: Missing keywords, resetting to step 1`);
     }
     if (progress.currentStep >= 3 && !hasPhrases) {
       validatedStep = 2; // Reset to phrase generation if phrases are missing
-      console.log(`Domain ${domainId} (version ${versionId}): Missing phrases, resetting to step 2`);
+      console.log(`Domain ${domainId}: Missing phrases, resetting to step 2`);
     }
     if (progress.currentStep >= 4 && !hasAIResults) {
       validatedStep = 3; // Reset to AI queries if results are missing
-      console.log(`Domain ${domainId} (version ${versionId}): Missing AI results, resetting to step 3`);
+      console.log(`Domain ${domainId}: Missing AI results, resetting to step 3`);
     }
 
     // Update progress if step was adjusted
@@ -255,7 +251,7 @@ router.get('/resume/:domainId', authenticateToken, asyncHandler(async (req: Auth
         where: { 
           domainId_domainVersionId: {
             domainId,
-            domainVersionId: versionId ?? null
+            domainVersionId: progress.domainVersionId
           }
         },
         data: {

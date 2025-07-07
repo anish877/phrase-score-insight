@@ -2,12 +2,13 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma';
 import { gptService } from '../services/geminiService';
 import { crawlAndExtractWithGpt4o } from '../services/geminiService';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 // GET /keywords/:domainId - get keywords for a domain
-router.get('/:domainId', async (req: Request, res: Response) => {
+router.get('/:domainId', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const domainId = Number(req.params.domainId);
   const { versionId } = req.query; // Get versionId from query params
   if (!domainId) { res.status(400).json({ error: 'Domain ID is required' }); return; }
@@ -45,9 +46,8 @@ router.get('/:domainId', async (req: Request, res: Response) => {
       select: { url: true, context: true }
     });
 
-    if (!domain) {
-      res.status(404).json({ error: 'Domain not found' });
-      return;
+    if (!domain || domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     // Get context from domain or extract if missing
@@ -156,7 +156,25 @@ router.patch('/:domainId/selection', async (req: Request, res: Response) => {
 });
 
 // GET /keywords/stream/:domainId - stream keywords for a domain in real-time
-router.get('/stream/:domainId', async (req: Request, res: Response) => {
+router.get('/stream/:domainId', async (req: any, res: Response) => {
+  // Handle authentication for SSE endpoint
+  const token = req.query.token as string;
+  
+  if (!token) {
+    res.status(401).json({ error: 'No token provided' });
+    return;
+  }
+
+  try {
+    // Verify token manually since we can't use middleware for SSE
+    const jwt = require('jsonwebtoken');
+    const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = { userId: decoded.userId, email: decoded.email };
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid token' });
+    return;
+  }
   const domainId = Number(req.params.domainId);
   const { versionId } = req.query; // Get versionId from query params
   if (!domainId) { res.status(400).json({ error: 'Domain ID is required' }); return; }

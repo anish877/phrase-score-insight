@@ -1,5 +1,38 @@
 const API_BASE_URL = 'http://localhost:3002/api';
 
+// Helper function to get auth token
+const getAuthToken = (): string | null => {
+  return localStorage.getItem('authToken');
+};
+
+// Helper function to get auth headers
+const getAuthHeaders = (): HeadersInit => {
+  const token = getAuthToken();
+  return {
+    'Content-Type': 'application/json',
+    ...(token && { 'Authorization': `Bearer ${token}` })
+  };
+};
+
+// Global error handler for API responses
+const handleApiResponse = async <T>(response: Response): Promise<T> => {
+  if (response.status === 403) {
+    // Access denied - user may be trying to access unauthorized resources
+    console.warn('Access denied - user may be trying to access unauthorized resources');
+    // Clear auth token and redirect to login
+    localStorage.removeItem('authToken');
+    window.location.href = '/auth';
+    throw new Error('Access denied - please log in again');
+  }
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.details || error.error || `HTTP ${response.status}: ${response.statusText}`);
+  }
+  
+  return response.json();
+};
+
 export interface DomainResponse {
   domain: {
     id: number;
@@ -33,79 +66,54 @@ export const apiService = {
   async submitDomain(url: string): Promise<DomainResponse> {
     const response = await fetch(`${API_BASE_URL}/domain`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ url }),
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.details || error.error || 'Failed to submit domain');
-    }
-
-    return response.json();
+    return handleApiResponse(response);
   },
 
   async getDomain(id: number): Promise<DomainResponse> {
-    const response = await fetch(`${API_BASE_URL}/domain/${id}`);
+    const response = await fetch(`${API_BASE_URL}/domain/${id}`, {
+      headers: getAuthHeaders(),
+    });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.details || error.error || 'Failed to fetch domain');
-    }
-
-    return response.json();
+    return handleApiResponse(response);
   },
 
   async submitDomainForStreaming(url: string): Promise<Response> {
     const response = await fetch(`${API_BASE_URL}/domain`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ url }),
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.details || error.error || 'Failed to submit domain');
-    }
-
-    return response;
+    return handleApiResponse(response);
   },
 
   async getKeywords(domainId: number): Promise<{ keywords: Keyword[], selected: string[] }> {
-    const response = await fetch(`${API_BASE_URL}/keywords/${domainId}`);
+    const response = await fetch(`${API_BASE_URL}/keywords/${domainId}`, {
+      headers: getAuthHeaders(),
+    });
     console.log('getKeywords response:', response);
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.details || error.error || 'Failed to fetch keywords');
-    }
-
-    const data = await response.json();
-    console.log('getKeywords data:', data);
-    return data;
+    return handleApiResponse(response);
   },
 
   async updateKeywordSelection(domainId: number, selectedKeywords: string[]): Promise<void> {
     const response = await fetch(`${API_BASE_URL}/keywords/${domainId}/selection`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ selectedKeywords }),
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.details || error.error || 'Failed to update keyword selection');
-    }
+    return handleApiResponse(response);
   },
 
   async getGeneratedPhrases(domainId: number): Promise<{ generatedPhrases: Array<{keyword: string, phrases: string[]}> }> {
-    const response = await fetch(`${API_BASE_URL}/phrases/${domainId}`);
+    const response = await fetch(`${API_BASE_URL}/phrases/${domainId}`, {
+      headers: getAuthHeaders(),
+    });
     if (!response.ok) throw new Error('Failed to fetch generated phrases');
-    return response.json();
+    return handleApiResponse(response);
   },
 };

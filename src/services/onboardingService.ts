@@ -1,3 +1,12 @@
+// Helper function to get auth headers
+const getAuthHeaders = (): HeadersInit => {
+  const token = localStorage.getItem('authToken');
+  return {
+    'Content-Type': 'application/json',
+    ...(token && { 'Authorization': `Bearer ${token}` })
+  };
+};
+
 export interface OnboardingStepData {
   domain?: string;
   domainId?: number;
@@ -33,15 +42,14 @@ export interface ResumeCheckResult {
 
 class OnboardingService {
   private baseUrl = 'http://localhost:3002/api/onboarding';
+  private autoSaveTimeout: NodeJS.Timeout | null = null;
 
   // Save onboarding progress
   async saveProgress(domainId: number, currentStep: number, stepData: OnboardingStepData, isCompleted = false): Promise<OnboardingProgress> {
     try {
       const response = await fetch(`${this.baseUrl}/progress/${domainId}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           currentStep,
           stepData,
@@ -65,7 +73,9 @@ class OnboardingService {
   // Get onboarding progress
   async getProgress(domainId: number): Promise<{ progress: OnboardingProgress; domain: any }> {
     try {
-      const response = await fetch(`${this.baseUrl}/progress/${domainId}`);
+      const response = await fetch(`${this.baseUrl}/progress/${domainId}`, {
+        headers: getAuthHeaders(),
+      });
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -84,7 +94,9 @@ class OnboardingService {
     try {
       let url = `${this.baseUrl}/resume/${domainId}`;
       if (versionId) url += `?versionId=${versionId}`;
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: getAuthHeaders(),
+      });
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -104,7 +116,8 @@ class OnboardingService {
   async resetProgress(domainId: number): Promise<void> {
     try {
       const response = await fetch(`${this.baseUrl}/progress/${domainId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
@@ -120,7 +133,9 @@ class OnboardingService {
   // Get active onboarding sessions
   async getActiveSessions(): Promise<{ activeSessions: Array<{ domain: any; currentStep: number; lastActivity: string; domainVersionId?: number | null }> }> {
     try {
-      const response = await fetch(`${this.baseUrl}/active`);
+      const response = await fetch(`${this.baseUrl}/active`, {
+        headers: getAuthHeaders(),
+      });
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

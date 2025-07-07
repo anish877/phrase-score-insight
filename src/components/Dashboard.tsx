@@ -122,7 +122,12 @@ const Dashboard: React.FC<DashboardProps> = ({
         setIsLoading(true);
         
         // Get domain ID from the current domain
-        const domainResponse = await fetch(`http://localhost:3002/api/domain/search?url=${encodeURIComponent(domain)}`);
+        const domainResponse = await fetch(`http://localhost:3002/api/domain/search?url=${encodeURIComponent(domain)}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+            'Content-Type': 'application/json',
+          },
+        });
         if (!domainResponse.ok) throw new Error('Failed to fetch domain data');
         
         const domainInfo = await domainResponse.json();
@@ -131,7 +136,12 @@ const Dashboard: React.FC<DashboardProps> = ({
         if (!domainId) throw new Error('Domain not found in database');
 
         // Fetch comprehensive domain data
-        const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}`);
+        const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+            'Content-Type': 'application/json',
+          },
+        });
         if (!response.ok) throw new Error('Failed to fetch dashboard data');
         
         const data = await response.json();
@@ -279,6 +289,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         },
         body: JSON.stringify({ 
           targetDomain: domain,

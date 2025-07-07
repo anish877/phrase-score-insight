@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma';
 import { aiQueryService } from '../services/aiQueryService';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -1207,9 +1208,13 @@ function generatePerformanceTrend(visibilityScore: number, mentions: number, tot
 }
 
 // Get all domains with dashboard analysis for dashboard card
-router.get('/all', asyncHandler(async (req: Request, res: Response) => {
+router.get('/all', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   try {
+    // Only fetch domains belonging to the authenticated user
     const domains = await prisma.domain.findMany({
+      where: {
+        userId: req.user.userId
+      },
       include: {
         versions: {
           orderBy: { version: 'desc' },
@@ -1314,7 +1319,7 @@ router.get('/all', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 // Get comprehensive dashboard data for a domain
-router.get('/:domainId', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:domainId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { domainId } = req.params;
     const { versionId } = req.query;
@@ -1363,6 +1368,12 @@ router.get('/:domainId', asyncHandler(async (req: Request, res: Response) => {
     if (!domain) {
       console.log(`Domain ${domainId} not found`);
       return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    // Check ownership
+    if (domain.userId !== req.user.userId) {
+      console.log(`User ${req.user.userId} attempted to access domain ${domainId} owned by user ${domain.userId}`);
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     // Always require versionId - no main domain concept
@@ -2025,7 +2036,7 @@ Return ONLY a valid JSON object in this exact format:
 }));
 
 // Get AI-suggested competitors for a domain
-router.get('/:domainId/suggested-competitors', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:domainId/suggested-competitors', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { domainId } = req.params;
     
@@ -2046,6 +2057,11 @@ router.get('/:domainId/suggested-competitors', asyncHandler(async (req: Request,
 
     if (!domain) {
       return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    // Check ownership
+    if (domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     // Check if we have cached suggestions
@@ -2153,22 +2169,34 @@ Be realistic and specific. Focus on actual companies that would compete in the s
 }));
 
 // Get latest competitor analysis for a domain (no regeneration)
-router.get('/:domainId/competitors', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:domainId/competitors', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { domainId } = req.params;
     const id = Number(domainId);
     if (isNaN(id)) {
       return res.status(400).json({ error: 'Invalid domainId' });
     }
+    
     const domain = await prisma.domain.findUnique({
       where: { id },
       include: {
         competitorAnalyses: { orderBy: { updatedAt: 'desc' }, take: 1 }
       }
     });
-    if (!domain || !domain.competitorAnalyses.length) {
+    
+    if (!domain) {
+      return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    // Check ownership
+    if (domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    if (!domain.competitorAnalyses.length) {
       return res.status(404).json({ error: 'No competitor analysis found' });
     }
+    
     const analysis = domain.competitorAnalyses[0];
     // Parse competitorList string to array
     let competitorListArr: string[] = [];
@@ -2186,7 +2214,7 @@ router.get('/:domainId/competitors', asyncHandler(async (req: Request, res: Resp
 }));
 
 // Get competitor analysis using AI
-router.post('/:domainId/competitors', asyncHandler(async (req: Request, res: Response) => {
+router.post('/:domainId/competitors', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { domainId } = req.params;
     const { competitors } = req.body; // Array of competitor domains/names
@@ -2219,6 +2247,11 @@ router.post('/:domainId/competitors', asyncHandler(async (req: Request, res: Res
 
     if (!domain) {
       return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    // Check ownership
+    if (domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     console.log(`Domain found: ${domain.url} with ${domain.keywords.length} keywords`);
@@ -2604,24 +2637,37 @@ Return ONLY a valid JSON object in this exact format:
 }));
 
 // Force refresh AI analysis by clearing cached data
-router.post('/:domainId/refresh-analysis', async (req: Request, res: Response) => {
+router.post('/:domainId/refresh-analysis', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { domainId } = req.params;
     
     console.log(`Force refreshing AI analysis for domain ${domainId}`);
     
-          // Clear all cached analysis for this domain
-      await prisma.dashboardAnalysis.deleteMany({
-        where: { domainId: parseInt(domainId) }
-      });
-      
-      await prisma.competitorAnalysis.deleteMany({
-        where: { domainId: parseInt(domainId) }
-      });
-      
-      await prisma.suggestedCompetitor.deleteMany({
-        where: { domainId: parseInt(domainId) }
-      });
+    // Check domain ownership first
+    const domain = await prisma.domain.findUnique({
+      where: { id: parseInt(domainId) }
+    });
+
+    if (!domain) {
+      return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    if (domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    // Clear all cached analysis for this domain
+    await prisma.dashboardAnalysis.deleteMany({
+      where: { domainId: parseInt(domainId) }
+    });
+    
+    await prisma.competitorAnalysis.deleteMany({
+      where: { domainId: parseInt(domainId) }
+    });
+    
+    await prisma.suggestedCompetitor.deleteMany({
+      where: { domainId: parseInt(domainId) }
+    });
     
     console.log('Successfully cleared cached analysis data');
     res.json({ message: 'Cached analysis cleared successfully. Next dashboard request will generate fresh AI analysis.' });

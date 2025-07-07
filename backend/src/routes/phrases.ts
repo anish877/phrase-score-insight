@@ -1,12 +1,32 @@
 import { Router } from 'express';
 import { PrismaClient } from '../../generated/prisma';
 import { gptService } from '../services/geminiService';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
+import { Response } from 'express';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 // GET /api/phrases/:domainId - stream phrases for selected keywords
-router.get('/:domainId', async (req, res) => {
+router.get('/:domainId', async (req: any, res: Response) => {
+  // Handle authentication for SSE endpoint
+  const token = req.query.token as string;
+  
+  if (!token) {
+    res.status(401).json({ error: 'No token provided' });
+    return;
+  }
+
+  try {
+    // Verify token manually since we can't use middleware for SSE
+    const jwt = require('jsonwebtoken');
+    const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = { userId: decoded.userId, email: decoded.email };
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid token' });
+    return;
+  }
   const domainId = Number(req.params.domainId);
   const { versionId } = req.query; // Get versionId from query params
   if (!domainId) { res.status(400).json({ error: 'Invalid domainId' }); return; }
@@ -38,6 +58,11 @@ router.get('/:domainId', async (req, res) => {
 
     // Fetch domain and context
     const domainObj = await prisma.domain.findUnique({ where: { id: domainId } });
+    if (!domainObj || domainObj.userId !== req.user.userId) {
+      sendEvent('error', { error: 'Access denied' });
+      res.end();
+      return;
+    }
     const domain = domainObj?.url || '';
     const context = domainObj?.context || '';
 

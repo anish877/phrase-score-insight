@@ -7,6 +7,7 @@ import { Edit2, Save, X } from 'lucide-react';
 import { apiService } from '@/services/api';
 import { useToast } from '@/components/ui/use-toast';
 
+
 interface PhraseGenerationProps {
   domainId: number;
   versionId?: number;
@@ -39,27 +40,42 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
       setGeneratedPhrases([]);
       setStats({ totalKeywords: 0, totalPhrases: 0, avgPerKeyword: 0, aiQueries: 0 });
       const phrasesMap: Record<string, string[]> = {};
+      const token = localStorage.getItem('authToken');
       const url = versionId 
-        ? `http://localhost:3002/api/phrases/${domainId}?versionId=${versionId}`
-        : `http://localhost:3002/api/phrases/${domainId}`;
-      const eventSource = new EventSource(url);
+        ? `http://localhost:3002/api/phrases/${domainId}?versionId=${versionId}&token=${encodeURIComponent(token || '')}`
+        : `http://localhost:3002/api/phrases/${domainId}?token=${encodeURIComponent(token || '')}`;
+      const ctrl = new AbortController();
 
+      // Create a custom EventSource with authorization header
+      const eventSource = new EventSource(url);
+      
       eventSource.addEventListener('progress', (e: MessageEvent) => {
-        const data = JSON.parse(e.data);
-        setProgressMsg(data.message);
+        try {
+          const data = JSON.parse(e.data);
+          setProgressMsg(data.message);
+        } catch (error) {
+          console.error('Error parsing progress message:', error);
+        }
       });
 
       eventSource.addEventListener('phrase', (e: MessageEvent) => {
-        const data = JSON.parse(e.data);
-        if (!phrasesMap[data.keyword]) phrasesMap[data.keyword] = [];
-        phrasesMap[data.keyword].push(data.phrase);
-        // Convert map to array for setGeneratedPhrases
-        setGeneratedPhrases(Object.entries(phrasesMap).map(([keyword, phrases]) => ({ keyword, phrases })));
+        try {
+          const data = JSON.parse(e.data);
+          if (!phrasesMap[data.keyword]) phrasesMap[data.keyword] = [];
+          phrasesMap[data.keyword].push(data.phrase);
+          setGeneratedPhrases(Object.entries(phrasesMap).map(([keyword, phrases]) => ({ keyword, phrases })));
+        } catch (error) {
+          console.error('Error parsing phrase message:', error);
+        }
       });
 
       eventSource.addEventListener('stats', (e: MessageEvent) => {
-        const data = JSON.parse(e.data);
-        setStats(data);
+        try {
+          const data = JSON.parse(e.data);
+          setStats(data);
+        } catch (error) {
+          console.error('Error parsing stats message:', error);
+        }
       });
 
       eventSource.addEventListener('error', (e: MessageEvent) => {
@@ -76,6 +92,14 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
         setProgressMsg('All phrases generated!');
         eventSource.close();
       });
+
+      // Handle connection errors
+      eventSource.onerror = (error) => {
+        console.error('EventSource error:', error);
+        setProgressMsg('An error occurred during phrase generation.');
+        setIsGenerating(false);
+        eventSource.close();
+      };
 
       return () => {
         eventSource.close();

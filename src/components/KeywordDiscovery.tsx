@@ -54,9 +54,10 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, versionId
     setProgressMsg('Connecting to keyword engine...');
     setKeywords([]);
     const ctrl = new AbortController();
+    const token = localStorage.getItem('authToken');
     const url = versionId 
-      ? `http://localhost:3002/api/keywords/stream/${domainId}?versionId=${versionId}`
-      : `http://localhost:3002/api/keywords/stream/${domainId}`;
+      ? `http://localhost:3002/api/keywords/stream/${domainId}?versionId=${versionId}&token=${encodeURIComponent(token || '')}`
+      : `http://localhost:3002/api/keywords/stream/${domainId}?token=${encodeURIComponent(token || '')}`;
     fetchEventSource(url, {
       signal: ctrl.signal,
       onopen(_response) {
@@ -418,7 +419,10 @@ const Footer: React.FC<FooterProps> = ({ onPrev, onNext, isSaving, selectedCount
             
             const response = await fetch(url, {
               method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+              },
               body: JSON.stringify({ selectedKeywords })
             });
             

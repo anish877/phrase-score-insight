@@ -85,7 +85,12 @@ const DomainResponseScoring: React.FC = () => {
     if (!domainId) return;
     setLoading(true);
     setError(null);
-    fetch(`http://localhost:3002/api/dashboard/${domainId}`)
+            fetch(`http://localhost:3002/api/dashboard/${domainId}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+            'Content-Type': 'application/json',
+          },
+        })
       .then(res => {
         if (!res.ok) throw new Error('Failed to fetch domain data');
         return res.json();

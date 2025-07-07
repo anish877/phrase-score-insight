@@ -1,8 +1,108 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// Utility function to wrap async route handlers
+function asyncHandler(fn: any) {
+  return (req: Request, res: Response, next: any) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+}
+
+// GET /api/competitor/:domainId - Get competitor analysis for a domain
+router.get('/:domainId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { domainId } = req.params;
+
+    // Check domain ownership
+    const domain = await prisma.domain.findUnique({
+      where: { id: parseInt(domainId) },
+      include: {
+        competitorAnalyses: {
+          orderBy: { updatedAt: 'desc' },
+          take: 1
+        }
+      }
+    });
+
+    if (!domain) {
+      return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    if (domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!domain.competitorAnalyses.length) {
+      return res.status(404).json({ error: 'No competitor analysis found' });
+    }
+
+    const analysis = domain.competitorAnalyses[0];
+    
+    // Parse competitorList string to array
+    let competitorListArr: string[] = [];
+    if (analysis.competitorList) {
+      competitorListArr = analysis.competitorList
+        .split('\n')
+        .map((s: string) => s.replace(/^[-\s]+/, '').trim())
+        .filter(Boolean);
+    }
+
+    res.json({ ...analysis, competitorListArr });
+  } catch (error) {
+    console.error('Error fetching competitor analysis:', error);
+    res.status(500).json({ error: 'Failed to fetch competitor analysis' });
+  }
+}));
+
+// POST /api/competitor/:domainId - Generate competitor analysis
+router.post('/:domainId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { domainId } = req.params;
+    const { competitors } = req.body;
+
+    // Check domain ownership
+    const domain = await prisma.domain.findUnique({
+      where: { id: parseInt(domainId) },
+      include: {
+        keywords: {
+          where: { isSelected: true }
+        }
+      }
+    });
+
+    if (!domain) {
+      return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    if (domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Generate competitor analysis logic here
+    // This would typically involve AI analysis of the competitors
+    const analysis = {
+      domainId: parseInt(domainId),
+      competitorList: competitors.join('\n'),
+      analysis: 'Competitor analysis would be generated here',
+      insights: [],
+      recommendations: []
+    };
+
+    // Save the analysis
+    const savedAnalysis = await prisma.competitorAnalysis.create({
+      data: analysis
+    });
+
+    res.json(savedAnalysis);
+  } catch (error) {
+    console.error('Error generating competitor analysis:', error);
+    res.status(500).json({ error: 'Failed to generate competitor analysis' });
+  }
+}));
 
 // POST /competitor/analyze - Analyze competitor using AI
 router.post('/analyze', async (req, res) => {

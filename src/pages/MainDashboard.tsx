@@ -64,7 +64,18 @@ const ProfessionalDashboard = () => {
             'Content-Type': 'application/json',
           },
         });
-        if (!domainsResponse.ok) throw new Error('Failed to fetch dashboard analyses');
+        
+        if (domainsResponse.status === 403) {
+          // Access denied - user may be trying to access unauthorized resources
+          console.warn('Access denied - redirecting to login');
+          navigate('/auth');
+          return;
+        }
+        
+        if (!domainsResponse.ok) {
+          throw new Error('Failed to fetch dashboard analyses');
+        }
+        
         const domainsData = await domainsResponse.json();
         setDomains(domainsData.domains || []);
 
@@ -77,8 +88,11 @@ const ProfessionalDashboard = () => {
         setLoading(false);
       }
     };
-    fetchData();
-  }, []);
+    
+    if (token) {
+      fetchData();
+    }
+  }, [token, navigate]);
 
   // Show loading while checking authentication
   if (authLoading) {

@@ -48,6 +48,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, []);
 
+  // Handle 403 Forbidden responses (access denied)
+  const handleAccessDenied = () => {
+    console.warn('Access denied - user may be trying to access unauthorized resources');
+    logout();
+  };
+
   const verifyToken = async (tokenToVerify: string) => {
     try {
       const response = await fetch('http://localhost:3002/api/auth/verify', {

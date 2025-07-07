@@ -207,7 +207,12 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
 
     setIsLoading(true);
     try {
-      const response = await fetch(`http://localhost:3002/api/domain/check/${encodeURIComponent(domain.trim())}`);
+      const response = await fetch(`http://localhost:3002/api/domain/check/${encodeURIComponent(domain.trim())}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json',
+        },
+      });
       const result: DomainCheckResult = await response.json();
       
       setDomainCheckResult(result);
@@ -243,7 +248,10 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
     try {
       const response = await fetch('http://localhost:3002/api/domain', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+        },
         body: JSON.stringify({
           url: domain,
           createNewVersion: true,

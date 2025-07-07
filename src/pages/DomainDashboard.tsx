@@ -484,7 +484,12 @@ const DomainDashboard = () => {
     try {
       setVersionLoading(true);
       // Use the endpoint that includes calculated metrics
-      const response = await fetch(`http://localhost:3002/api/domain/${domainId}/versions`);
+      const response = await fetch(`http://localhost:3002/api/domain/${domainId}/versions`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json',
+        },
+      });
       if (!response.ok) throw new Error('Failed to fetch versions');
       const data = await response.json();
       setVersions(data.versions || []);
@@ -549,7 +554,12 @@ const DomainDashboard = () => {
       
       // Always fetch version-specific data
       const versionUrl = `http://localhost:3002/api/dashboard/${domainId}?versionId=${versionId}`;
-      const versionResponse = await fetch(versionUrl);
+              const versionResponse = await fetch(versionUrl, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+            'Content-Type': 'application/json',
+          },
+        });
       
       if (!versionResponse.ok) {
         throw new Error('Version fetch failed');
@@ -634,7 +644,12 @@ const DomainDashboard = () => {
     try {
       setCompetitorLoading(true);
       setError(null);
-      const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/competitors`);
+      const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/competitors`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json',
+        },
+      });
       if (!response.ok) {
         throw new Error('No competitor analysis found');
       }
@@ -655,7 +670,12 @@ const DomainDashboard = () => {
   const fetchSuggestedCompetitors = async () => {
     try {
       setSuggestionsLoading(true);
-      const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/suggested-competitors`);
+      const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/suggested-competitors`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json',
+        },
+      });
       if (!response.ok) {
         throw new Error('Failed to fetch suggested competitors');
       }
@@ -677,7 +697,10 @@ const DomainDashboard = () => {
       const compList = typeof customCompetitors !== 'undefined' ? customCompetitors : competitors;
       const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/competitors`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+        },
         body: JSON.stringify({ competitors: compList })
       });
       if (!response.ok) {

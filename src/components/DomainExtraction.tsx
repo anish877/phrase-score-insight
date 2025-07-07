@@ -92,7 +92,10 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
         setIsLoading(true);
         const response = await fetch('http://localhost:3002/api/domain', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          },
           body: JSON.stringify({ url: domain, subdomains, customPaths, priorityUrls }),
           signal: controller.signal,
         });

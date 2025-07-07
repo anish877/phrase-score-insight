@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -12,7 +13,7 @@ function asyncHandler(fn: any) {
 }
 
 // GET /api/onboarding/progress/:domainId - Get onboarding progress
-router.get('/progress/:domainId', asyncHandler(async (req: Request, res: Response) => {
+router.get('/progress/:domainId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const domainId = Number(req.params.domainId);
   
   if (!domainId || isNaN(domainId)) {
@@ -20,7 +21,20 @@ router.get('/progress/:domainId', asyncHandler(async (req: Request, res: Respons
   }
 
   try {
-    const progress = await prisma.onboardingProgress.findUnique({
+    // First check if domain exists and user owns it
+    const domain = await prisma.domain.findUnique({
+      where: { id: domainId }
+    });
+
+    if (!domain) {
+      return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    if (domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const progress = await prisma.onboardingProgress.findFirst({
       where: { domainId },
       include: {
         domain: {
@@ -61,7 +75,7 @@ router.get('/progress/:domainId', asyncHandler(async (req: Request, res: Respons
 }));
 
 // POST /api/onboarding/progress/:domainId - Update onboarding progress
-router.post('/progress/:domainId', asyncHandler(async (req: Request, res: Response) => {
+router.post('/progress/:domainId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const domainId = Number(req.params.domainId);
   const { currentStep, stepData, isCompleted = false } = req.body;
 
@@ -70,13 +84,17 @@ router.post('/progress/:domainId', asyncHandler(async (req: Request, res: Respon
   }
 
   try {
-    // Verify domain exists
+    // First check if domain exists and user owns it
     const domain = await prisma.domain.findUnique({
       where: { id: domainId }
     });
 
     if (!domain) {
       return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    if (domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     // Validate step data
@@ -116,48 +134,43 @@ router.post('/progress/:domainId', asyncHandler(async (req: Request, res: Respon
     });
 
     console.log(`Saved onboarding progress for domain ${domainId}, step ${currentStep}`);
-
-    res.json({ 
-      success: true, 
-      progress: {
-        currentStep: progress.currentStep,
-        isCompleted: progress.isCompleted,
-        stepData: progress.stepData,
-        lastActivity: progress.lastActivity
-      }
-    });
+    res.json({ success: true, progress });
   } catch (error) {
     console.error('Error saving onboarding progress:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }));
 
-// GET /api/onboarding/resume/:domainId - Check if onboarding can be resumed
-router.get('/resume/:domainId', asyncHandler(async (req: Request, res: Response) => {
+// GET /api/onboarding/resume/:domainId - Resume onboarding with current data
+router.get('/resume/:domainId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const domainId = Number(req.params.domainId);
-  const versionId = req.query.versionId ? Number(req.query.versionId) : null;
   
   if (!domainId || isNaN(domainId)) {
     return res.status(400).json({ error: 'Invalid domainId' });
   }
 
   try {
-    // Use findFirst to get the latest progress for this domain/version
+    // First check if domain exists and user owns it
+    const domain = await prisma.domain.findUnique({
+      where: { id: domainId }
+    });
+
+    if (!domain) {
+      return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    if (domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
     const progress = await prisma.onboardingProgress.findFirst({
-      where: {
-        domainId,
-        domainVersionId: versionId
-      },
+      where: { domainId },
       include: {
         domain: {
           select: {
             id: true,
             url: true,
             context: true,
-            crawlResults: {
-              orderBy: { createdAt: 'desc' },
-              take: 1
-            },
             keywords: {
               where: { isSelected: true },
               select: { term: true }
@@ -168,32 +181,7 @@ router.get('/resume/:domainId', asyncHandler(async (req: Request, res: Response)
     });
 
     if (!progress) {
-      return res.json({ 
-        canResume: false, 
-        reason: 'No onboarding progress found',
-        stepData: { domainId, domain: null }
-      });
-    }
-
-    // Check if onboarding was completed
-    if (progress.isCompleted) {
-      return res.json({ 
-        canResume: false, 
-        reason: 'Onboarding already completed',
-        redirectTo: `/dashboard/${domainId}`,
-        stepData: progress.stepData
-      });
-    }
-
-    // Check if enough time has passed to consider it stale (24 hours)
-    const hoursSinceLastActivity = (Date.now() - progress.lastActivity.getTime()) / (1000 * 60 * 60);
-    if (hoursSinceLastActivity > 24) {
-      return res.json({ 
-        canResume: false, 
-        reason: 'Onboarding session expired (24+ hours old)',
-        lastActivity: progress.lastActivity,
-        stepData: progress.stepData
-      });
+      return res.status(404).json({ error: 'No onboarding progress found for this domain' });
     }
 
     // Check for phrases and AI results separately
@@ -222,8 +210,8 @@ router.get('/resume/:domainId', asyncHandler(async (req: Request, res: Response)
     });
 
     // Determine what data is available for resumption
-    const hasDomainContext = !!progress.domain.context;
-    const hasKeywords = progress.domain.keywords.length > 0;
+    const hasDomainContext = !!progress.domain?.context;
+    const hasKeywords = progress.domain?.keywords?.length > 0;
     const hasPhrases = phrases.length > 0;
     const hasAIResults = aiResults.length > 0;
 
@@ -233,7 +221,7 @@ router.get('/resume/:domainId', asyncHandler(async (req: Request, res: Response)
     
     // Ensure domain info is always present
     if (!stepData.domain) {
-      stepData.domain = progress.domain.url;
+      stepData.domain = progress.domain?.url;
     }
     if (!stepData.domainId) {
       stepData.domainId = domainId;
@@ -257,10 +245,10 @@ router.get('/resume/:domainId', asyncHandler(async (req: Request, res: Response)
       console.log(`Domain ${domainId}: Missing AI results, resetting to step 3`);
     }
 
-    // Update step if validation found issues
-    if (progress && validatedStep !== progress.currentStep) {
+    // Update progress if step was adjusted
+    if (validatedStep !== progress.currentStep) {
       await prisma.onboardingProgress.update({
-        where: {
+        where: { 
           domainId_domainVersionId: {
             domainId,
             domainVersionId: progress.domainVersionId
@@ -268,20 +256,20 @@ router.get('/resume/:domainId', asyncHandler(async (req: Request, res: Response)
         },
         data: {
           currentStep: validatedStep,
-          stepData: stepData
+          stepData: { ...stepData, currentStep: validatedStep }
         }
       });
-      console.log(`Domain ${domainId}: Updated step from ${progress.currentStep} to ${validatedStep}`);
     }
 
-    console.log(`Domain ${domainId}: Resume check - canResume: true, step: ${validatedStep}`);
-
     res.json({
-      canResume: true,
-      currentStep: validatedStep,
-      stepData: stepData,
-      lastActivity: progress.lastActivity,
-      dataIntegrity: {
+      progress: {
+        currentStep: validatedStep,
+        isCompleted: progress.isCompleted,
+        stepData,
+        lastActivity: progress.lastActivity
+      },
+      domain: progress.domain,
+      dataStatus: {
         hasDomainContext,
         hasKeywords,
         hasPhrases,
@@ -289,13 +277,13 @@ router.get('/resume/:domainId', asyncHandler(async (req: Request, res: Response)
       }
     });
   } catch (error) {
-    console.error('Error checking resume status:', error);
+    console.error('Error resuming onboarding:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }));
 
 // DELETE /api/onboarding/progress/:domainId - Reset onboarding progress
-router.delete('/progress/:domainId', asyncHandler(async (req: Request, res: Response) => {
+router.delete('/progress/:domainId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const domainId = Number(req.params.domainId);
   
   if (!domainId || isNaN(domainId)) {
@@ -303,6 +291,19 @@ router.delete('/progress/:domainId', asyncHandler(async (req: Request, res: Resp
   }
 
   try {
+    // First check if domain exists and user owns it
+    const domain = await prisma.domain.findUnique({
+      where: { id: domainId }
+    });
+
+    if (!domain) {
+      return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    if (domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
     // Delete all progress for this domain (all versions)
     await prisma.onboardingProgress.deleteMany({
       where: { domainId }
@@ -318,13 +319,16 @@ router.delete('/progress/:domainId', asyncHandler(async (req: Request, res: Resp
 }));
 
 // GET /api/onboarding/active - Get all active onboarding sessions
-router.get('/active', asyncHandler(async (req: Request, res: Response) => {
+router.get('/active', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   try {
     const activeSessions = await prisma.onboardingProgress.findMany({
       where: {
         isCompleted: false,
         lastActivity: {
           gte: new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
+        },
+        domain: {
+          userId: req.user.userId // Only show user's own domains
         }
       },
       include: {
@@ -357,7 +361,7 @@ router.get('/active', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 // POST /api/onboarding/save-to-main/:domainId - Save onboarding data directly to main domain tables
-router.post('/save-to-main/:domainId', asyncHandler(async (req: Request, res: Response) => {
+router.post('/save-to-main/:domainId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const domainId = Number(req.params.domainId);
   const stepData = req.body;
 
@@ -368,13 +372,17 @@ router.post('/save-to-main/:domainId', asyncHandler(async (req: Request, res: Re
   try {
     console.log(`Saving onboarding data to main tables for domain ${domainId}`);
 
-    // Verify domain exists
+    // First check if domain exists and user owns it
     const domain = await prisma.domain.findUnique({
       where: { id: domainId }
     });
 
     if (!domain) {
       return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    if (domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     // Update domain context if provided
@@ -427,194 +435,127 @@ router.post('/save-to-main/:domainId', asyncHandler(async (req: Request, res: Re
 
     // Batch upsert AI query results
     if (stepData.queryResults && Array.isArray(stepData.queryResults)) {
-      // Build a map of keyword/phrase to their IDs to minimize DB calls
-      const keywordMap: Record<string, number> = {};
-      const phraseMap: Record<string, number> = {};
-      // Get all keywords for this domain
-      const keywords = await prisma.keyword.findMany({ where: { domainId } });
-      for (const k of keywords) keywordMap[k.term] = k.id;
-      // Get all phrases for these keywords
-      const phrases = await prisma.phrase.findMany({ where: { keywordId: { in: Object.values(keywordMap) } } });
-      for (const p of phrases) phraseMap[`${p.keywordId}|${p.text}`] = p.id;
-
-      // Prepare upsert promises
-      const upsertPromises = stepData.queryResults.map((result: any) => {
-        const keywordId = keywordMap[result.keyword];
-        if (!keywordId) return null;
-        const phraseId = phraseMap[`${keywordId}|${result.phrase}`];
-        if (!phraseId) return null;
-        return prisma.aIQueryResult.upsert({
+      for (const result of stepData.queryResults) {
+        // Find the phrase
+        const phrase = await prisma.phrase.findFirst({
           where: {
-            // Compound unique constraint not defined, so use phraseId+model as unique
-            phraseId_model: {
-              phraseId,
-              model: result.model
+            text: result.phrase,
+            keyword: {
+              domainId: domainId
             }
-          },
-          update: {
-            response: result.response,
-            latency: result.latency,
-            cost: result.cost,
-            presence: result.scores.presence,
-            relevance: result.scores.relevance,
-            accuracy: result.scores.accuracy,
-            sentiment: result.scores.sentiment,
-            overall: result.scores.overall
-          },
-          create: {
-            phraseId,
-            model: result.model,
-            response: result.response,
-            latency: result.latency,
-            cost: result.cost,
-            presence: result.scores.presence,
-            relevance: result.scores.relevance,
-            accuracy: result.scores.accuracy,
-            sentiment: result.scores.sentiment,
-            overall: result.scores.overall
           }
         });
-      }).filter(Boolean);
-      if (upsertPromises.length > 0) {
-        // Run all upserts in parallel
-        await Promise.all(upsertPromises);
+
+        if (phrase) {
+          // Upsert AI query result
+          await prisma.aIQueryResult.upsert({
+            where: {
+              id: result.id || -1 // Use a dummy ID for upsert
+            },
+            update: {
+              model: result.model,
+              response: result.response,
+              latency: result.latency,
+              cost: result.cost,
+              presence: result.scores.presence,
+              relevance: result.scores.relevance,
+              accuracy: result.scores.accuracy,
+              sentiment: result.scores.sentiment,
+              overall: result.scores.overall
+            },
+            create: {
+              phraseId: phrase.id,
+              model: result.model,
+              response: result.response,
+              latency: result.latency,
+              cost: result.cost,
+              presence: result.scores.presence,
+              relevance: result.scores.relevance,
+              accuracy: result.scores.accuracy,
+              sentiment: result.scores.sentiment,
+              overall: result.scores.overall
+            }
+          });
+        }
       }
     }
 
-    // Generate and update dashboard analysis if we have query results
-    if (stepData.queryResults && stepData.queryResults.length > 0) {
-      const totalResults = stepData.queryResults.length;
-      const presenceCount = stepData.queryResults.filter((r: any) => r.scores.presence === 1).length;
-      const mentionRate = (presenceCount / totalResults) * 100;
-      const avgRelevance = stepData.queryResults.reduce((sum: number, r: any) => sum + r.scores.relevance, 0) / totalResults;
-      const avgAccuracy = stepData.queryResults.reduce((sum: number, r: any) => sum + r.scores.accuracy, 0) / totalResults;
-      const avgSentiment = stepData.queryResults.reduce((sum: number, r: any) => sum + r.scores.sentiment, 0) / totalResults;
-      const avgOverall = stepData.queryResults.reduce((sum: number, r: any) => sum + r.scores.overall, 0) / totalResults;
+    // Generate and save dashboard analysis if we have AI results
+    const aiResults = await prisma.aIQueryResult.findMany({
+      where: {
+        phrase: {
+          keyword: {
+            domainId: domainId
+          }
+        }
+      }
+    });
 
-      const visibilityScore = Math.round(
-        (mentionRate * 0.4) + 
-        (avgRelevance * 20) + 
-        (avgAccuracy * 20) + 
-        (avgSentiment * 20)
-      );
-
-      const modelPerformance = ['GPT-4o Mini', 'Claude 3', 'Gemini 1.5'].map(model => {
-        const modelResults = stepData.queryResults.filter((r: any) => r.model === model);
-        const modelPresence = modelResults.filter((r: any) => r.scores.presence === 1).length;
-        const modelAvgRelevance = modelResults.reduce((sum: number, r: any) => sum + r.scores.relevance, 0) / modelResults.length;
-        
-        return {
-          model,
-          score: Math.round((modelPresence / modelResults.length) * 100),
-          responses: modelResults.length,
-          mentions: modelPresence,
-          avgScore: Math.round(modelAvgRelevance * 20) / 20
-        };
-      });
-
-      const phraseCounts = stepData.queryResults.reduce((acc: Record<string, number>, result: any) => {
-        acc[result.phrase] = (acc[result.phrase] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
-
-      const topPhrases = Object.entries(phraseCounts)
-        .map(([phrase, count]) => ({ phrase, count }))
-        .sort((a, b) => (b.count as number) - (a.count as number))
-        .slice(0, 10);
-
-      const keywordPerformance = stepData.selectedKeywords?.map((keyword: string) => {
-        const keywordResults = stepData.queryResults.filter((r: any) => r.keyword === keyword);
-        const visibility = keywordResults.length > 0 ? 
-          (keywordResults.filter((r: any) => r.scores.presence === 1).length / keywordResults.length) * 100 : 0;
-        const mentions = keywordResults.filter((r: any) => r.scores.presence === 1).length;
-        const sentiment = keywordResults.length > 0 ? 
-          keywordResults.reduce((sum: number, r: any) => sum + r.scores.sentiment, 0) / keywordResults.length : 0;
-        
-        return {
-          keyword,
-          visibility: Math.round(visibility),
-          mentions,
-          sentiment: Math.round(sentiment * 10) / 10,
-          volume: 1000,
-          difficulty: 'Medium'
-        };
-      }) || [];
-
-      const performanceData = [
-        { month: 'Jan', score: Math.max(0, visibilityScore - 15) },
-        { month: 'Feb', score: Math.max(0, visibilityScore - 10) },
-        { month: 'Mar', score: Math.max(0, visibilityScore - 7) },
-        { month: 'Apr', score: Math.max(0, visibilityScore - 5) },
-        { month: 'May', score: Math.max(0, visibilityScore - 2) },
-        { month: 'Jun', score: visibilityScore }
-      ];
+    if (aiResults.length > 0) {
+      // Calculate metrics
+      const totalQueries = aiResults.length;
+      const mentions = aiResults.filter(r => r.presence === 1).length;
+      const mentionRate = (mentions / totalQueries) * 100;
+      const avgRelevance = aiResults.reduce((sum, r) => sum + r.relevance, 0) / totalQueries;
+      const avgAccuracy = aiResults.reduce((sum, r) => sum + r.accuracy, 0) / totalQueries;
+      const avgSentiment = aiResults.reduce((sum, r) => sum + r.sentiment, 0) / totalQueries;
+      const avgOverall = aiResults.reduce((sum, r) => sum + r.overall, 0) / totalQueries;
 
       const metrics = {
-        visibilityScore,
+        visibilityScore: Math.round(Math.min(100, Math.max(0, (mentionRate * 0.25) + (avgRelevance * 10) + (avgSentiment * 5)))),
         mentionRate: mentionRate.toFixed(1),
         avgRelevance: avgRelevance.toFixed(1),
         avgAccuracy: avgAccuracy.toFixed(1),
         avgSentiment: avgSentiment.toFixed(1),
         avgOverall: avgOverall.toFixed(1),
-        totalQueries: totalResults,
-        keywordCount: stepData.selectedKeywords?.length || 0,
-        phraseCount: stepData.generatedPhrases?.reduce((sum: number, group: any) => sum + group.phrases.length, 0) || 0,
-        modelPerformance,
-        keywordPerformance,
-        topPhrases: topPhrases.map(p => ({ phrase: p.phrase, count: p.count as number })),
-        performanceData
-      } as any;
+        totalQueries
+      };
 
       const insights = {
         strengths: [
           {
-            title: "AI Visibility Analysis",
-            description: `Analysis with ${mentionRate.toFixed(1)}% mention rate`,
-            metric: `${mentionRate.toFixed(1)}% mention rate`
+            title: "AI Visibility Established",
+            description: `Domain achieves ${metrics.visibilityScore}% visibility score with ${mentions} mentions across ${totalQueries} queries`,
+            metric: `${metrics.visibilityScore}% visibility score`
           }
         ],
-        weaknesses: mentionRate < 50 ? [
-          {
-            title: "Low AI Visibility",
-            description: "Your domain is rarely mentioned in AI responses",
-            metric: `${mentionRate.toFixed(1)}% mention rate`
-          }
-        ] : [],
-        recommendations: [
-          {
-            category: "Content",
-            priority: "High",
-            action: "Continue monitoring AI visibility",
-            expectedImpact: "Maintain current performance",
-            timeline: "ongoing"
-          }
-        ]
+        weaknesses: [],
+        recommendations: []
       };
 
       const industryAnalysis = {
         marketPosition: mentionRate > 50 ? 'leader' : mentionRate > 25 ? 'challenger' : 'niche',
-        competitiveAdvantage: `AI visibility analysis with ${stepData.selectedKeywords?.length || 0} keywords`,
-        marketTrends: ["AI-powered SEO optimization", "Content relevance focus"],
-        growthOpportunities: ["Expand keyword portfolio", "Improve content accuracy"],
+        competitiveAdvantage: `Strong AI visibility with ${aiResults.length} analyzed queries`,
+        marketTrends: ["AI-powered SEO optimization"],
+        growthOpportunities: ["Expand keyword portfolio", "Improve content quality"],
         threats: ["Increasing competition", "Algorithm changes"]
       };
 
       // Update or create dashboard analysis
-      await prisma.dashboardAnalysis.upsert({
-        where: { domainId },
-        update: {
-          metrics,
-          insights,
-          industryAnalysis,
-          updatedAt: new Date()
-        },
-        create: {
-          domainId,
-          metrics,
-          insights,
-          industryAnalysis
-        }
+      const existingAnalysis = await prisma.dashboardAnalysis.findFirst({
+        where: { domainId }
       });
+
+      if (existingAnalysis) {
+        await prisma.dashboardAnalysis.update({
+          where: { id: existingAnalysis.id },
+          data: {
+            metrics,
+            insights,
+            industryAnalysis,
+            updatedAt: new Date()
+          }
+        });
+      } else {
+        await prisma.dashboardAnalysis.create({
+          data: {
+            domainId,
+            metrics,
+            insights,
+            industryAnalysis
+          }
+        });
+      }
     }
 
     console.log(`Successfully saved onboarding data to main tables for domain ${domainId}`);

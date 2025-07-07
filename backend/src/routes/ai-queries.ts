@@ -1,6 +1,7 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma';
 import { aiQueryService } from '../services/aiQueryService';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -245,6 +246,432 @@ async function processQueryBatch(
     }
   }
 }
+
+// Utility function to wrap async route handlers
+function asyncHandler(fn: any) {
+  return (req: Request, res: Response, next: any) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+}
+
+// POST /api/ai-queries/analyze - Analyze a single phrase with AI
+router.post('/analyze', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { phrase, domainId, keyword } = req.body;
+
+    if (!phrase || !domainId) {
+      return res.status(400).json({ error: 'Phrase and domainId are required' });
+    }
+
+    // Check domain ownership
+    const domain = await prisma.domain.findUnique({
+      where: { id: parseInt(domainId) }
+    });
+
+    if (!domain) {
+      return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    if (domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    console.log(`Analyzing phrase "${phrase}" for domain ${domainId}`);
+
+    // Find or create the phrase
+    let phraseRecord = await prisma.phrase.findFirst({
+      where: {
+        text: phrase,
+        keyword: {
+          domainId: parseInt(domainId)
+        }
+      }
+    });
+
+    if (!phraseRecord) {
+      // Find the keyword first
+      const keywordRecord = await prisma.keyword.findFirst({
+        where: {
+          term: keyword,
+          domainId: parseInt(domainId)
+        }
+      });
+
+      if (!keywordRecord) {
+        return res.status(404).json({ error: 'Keyword not found' });
+      }
+
+      // Create the phrase
+      phraseRecord = await prisma.phrase.create({
+        data: {
+          text: phrase,
+          keywordId: keywordRecord.id
+        }
+      });
+    }
+
+    // Analyze with AI
+    const result = await aiQueryService.analyzePhrase(phrase, domain.url);
+
+    // Save the result
+    const aiResult = await prisma.aIQueryResult.create({
+      data: {
+        phraseId: phraseRecord.id,
+        model: result.model,
+        response: result.response,
+        latency: result.latency,
+        cost: result.cost,
+        presence: result.scores.presence,
+        relevance: result.scores.relevance,
+        accuracy: result.scores.accuracy,
+        sentiment: result.scores.sentiment,
+        overall: result.scores.overall
+      }
+    });
+
+    console.log(`Analysis completed for phrase "${phrase}"`);
+    res.json({
+      success: true,
+      result: {
+        ...aiResult,
+        phrase: phrase,
+        keyword: keyword
+      }
+    });
+  } catch (error) {
+    console.error('Error analyzing phrase:', error);
+    res.status(500).json({ error: 'Failed to analyze phrase' });
+  }
+}));
+
+// POST /api/ai-queries/batch-analyze - Analyze multiple phrases
+router.post('/batch-analyze', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { phrases, domainId } = req.body;
+
+    if (!phrases || !Array.isArray(phrases) || !domainId) {
+      return res.status(400).json({ error: 'Phrases array and domainId are required' });
+    }
+
+    // Check domain ownership
+    const domain = await prisma.domain.findUnique({
+      where: { id: parseInt(domainId) }
+    });
+
+    if (!domain) {
+      return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    if (domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    console.log(`Batch analyzing ${phrases.length} phrases for domain ${domainId}`);
+
+    const results = [];
+    const errors = [];
+
+    for (const phraseData of phrases) {
+      try {
+        const { phrase, keyword } = phraseData;
+
+        // Find or create the phrase
+        let phraseRecord = await prisma.phrase.findFirst({
+          where: {
+            text: phrase,
+            keyword: {
+              domainId: parseInt(domainId)
+            }
+          }
+        });
+
+        if (!phraseRecord) {
+          // Find the keyword first
+          const keywordRecord = await prisma.keyword.findFirst({
+            where: {
+              term: keyword,
+              domainId: parseInt(domainId)
+            }
+          });
+
+          if (!keywordRecord) {
+            errors.push({ phrase, error: 'Keyword not found' });
+            continue;
+          }
+
+          // Create the phrase
+          phraseRecord = await prisma.phrase.create({
+            data: {
+              text: phrase,
+              keywordId: keywordRecord.id
+            }
+          });
+        }
+
+        // Analyze with AI
+        const result = await aiQueryService.analyzePhrase(phrase, domain.url);
+
+        // Save the result
+        const aiResult = await prisma.aIQueryResult.create({
+          data: {
+            phraseId: phraseRecord.id,
+            model: result.model,
+            response: result.response,
+            latency: result.latency,
+            cost: result.cost,
+            presence: result.scores.presence,
+            relevance: result.scores.relevance,
+            accuracy: result.scores.accuracy,
+            sentiment: result.scores.sentiment,
+            overall: result.scores.overall
+          }
+        });
+
+        results.push({
+          phrase,
+          keyword,
+          result: aiResult
+        });
+      } catch (error) {
+        console.error(`Error analyzing phrase "${phraseData.phrase}":`, error);
+        errors.push({ phrase: phraseData.phrase, error: error.message });
+      }
+    }
+
+    console.log(`Batch analysis completed: ${results.length} successful, ${errors.length} failed`);
+    res.json({
+      success: true,
+      results,
+      errors,
+      summary: {
+        total: phrases.length,
+        successful: results.length,
+        failed: errors.length
+      }
+    });
+  } catch (error) {
+    console.error('Error in batch analysis:', error);
+    res.status(500).json({ error: 'Failed to perform batch analysis' });
+  }
+}));
+
+// GET /api/ai-queries/results/:domainId - Get AI query results for a domain
+router.get('/results/:domainId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { domainId } = req.params;
+    const { keyword, limit = 50, offset = 0 } = req.query;
+
+    // Check domain ownership
+    const domain = await prisma.domain.findUnique({
+      where: { id: parseInt(domainId) }
+    });
+
+    if (!domain) {
+      return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    if (domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Build where clause
+    const whereClause: any = {
+      phrase: {
+        keyword: {
+          domainId: parseInt(domainId)
+        }
+      }
+    };
+
+    if (keyword) {
+      whereClause.phrase.keyword.term = keyword;
+    }
+
+    // Get results with pagination
+    const results = await prisma.aIQueryResult.findMany({
+      where: whereClause,
+      include: {
+        phrase: {
+          include: {
+            keyword: {
+              select: {
+                term: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: parseInt(limit as string),
+      skip: parseInt(offset as string)
+    });
+
+    // Get total count
+    const totalCount = await prisma.aIQueryResult.count({
+      where: whereClause
+    });
+
+    console.log(`Retrieved ${results.length} AI query results for domain ${domainId}`);
+    res.json({
+      results,
+      pagination: {
+        total: totalCount,
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string),
+        hasMore: totalCount > parseInt(offset as string) + parseInt(limit as string)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching AI query results:', error);
+    res.status(500).json({ error: 'Failed to fetch AI query results' });
+  }
+}));
+
+// DELETE /api/ai-queries/results/:resultId - Delete a specific AI query result
+router.delete('/results/:resultId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { resultId } = req.params;
+
+    // Get the result and check ownership
+    const result = await prisma.aIQueryResult.findUnique({
+      where: { id: parseInt(resultId) },
+      include: {
+        phrase: {
+          include: {
+            keyword: {
+              include: {
+                domain: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!result) {
+      return res.status(404).json({ error: 'AI query result not found' });
+    }
+
+    if (result.phrase.keyword.domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Delete the result
+    await prisma.aIQueryResult.delete({
+      where: { id: parseInt(resultId) }
+    });
+
+    console.log(`Deleted AI query result ${resultId}`);
+    res.json({ success: true, message: 'AI query result deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting AI query result:', error);
+    res.status(500).json({ error: 'Failed to delete AI query result' });
+  }
+}));
+
+// GET /api/ai-queries/stats/:domainId - Get AI query statistics for a domain
+router.get('/stats/:domainId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { domainId } = req.params;
+
+    // Check domain ownership
+    const domain = await prisma.domain.findUnique({
+      where: { id: parseInt(domainId) }
+    });
+
+    if (!domain) {
+      return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    if (domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Get all results for this domain
+    const results = await prisma.aIQueryResult.findMany({
+      where: {
+        phrase: {
+          keyword: {
+            domainId: parseInt(domainId)
+          }
+        }
+      },
+      include: {
+        phrase: {
+          include: {
+            keyword: {
+              select: {
+                term: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Calculate statistics
+    const totalQueries = results.length;
+    const mentions = results.filter(r => r.presence === 1).length;
+    const mentionRate = totalQueries > 0 ? (mentions / totalQueries) * 100 : 0;
+    const avgRelevance = totalQueries > 0 ? results.reduce((sum, r) => sum + r.relevance, 0) / totalQueries : 0;
+    const avgAccuracy = totalQueries > 0 ? results.reduce((sum, r) => sum + r.accuracy, 0) / totalQueries : 0;
+    const avgSentiment = totalQueries > 0 ? results.reduce((sum, r) => sum + r.sentiment, 0) / totalQueries : 0;
+    const avgOverall = totalQueries > 0 ? results.reduce((sum, r) => sum + r.overall, 0) / totalQueries : 0;
+
+    // Group by keyword
+    const keywordStats = results.reduce((acc, result) => {
+      const keyword = result.phrase.keyword.term;
+      if (!acc[keyword]) {
+        acc[keyword] = {
+          keyword,
+          totalQueries: 0,
+          mentions: 0,
+          avgRelevance: 0,
+          avgAccuracy: 0,
+          avgSentiment: 0,
+          avgOverall: 0
+        };
+      }
+      
+      acc[keyword].totalQueries++;
+      if (result.presence === 1) acc[keyword].mentions++;
+      acc[keyword].avgRelevance += result.relevance;
+      acc[keyword].avgAccuracy += result.accuracy;
+      acc[keyword].avgSentiment += result.sentiment;
+      acc[keyword].avgOverall += result.overall;
+      
+      return acc;
+    }, {} as Record<string, any>);
+
+    // Calculate averages for each keyword
+    Object.values(keywordStats).forEach((stat: any) => {
+      stat.avgRelevance = stat.totalQueries > 0 ? stat.avgRelevance / stat.totalQueries : 0;
+      stat.avgAccuracy = stat.totalQueries > 0 ? stat.avgAccuracy / stat.totalQueries : 0;
+      stat.avgSentiment = stat.totalQueries > 0 ? stat.avgSentiment / stat.totalQueries : 0;
+      stat.avgOverall = stat.totalQueries > 0 ? stat.avgOverall / stat.totalQueries : 0;
+      stat.mentionRate = stat.totalQueries > 0 ? (stat.mentions / stat.totalQueries) * 100 : 0;
+    });
+
+    const stats = {
+      totalQueries,
+      mentions,
+      mentionRate: mentionRate.toFixed(1),
+      avgRelevance: avgRelevance.toFixed(2),
+      avgAccuracy: avgAccuracy.toFixed(2),
+      avgSentiment: avgSentiment.toFixed(2),
+      avgOverall: avgOverall.toFixed(2),
+      keywordStats: Object.values(keywordStats)
+    };
+
+    console.log(`Retrieved AI query stats for domain ${domainId}`);
+    res.json(stats);
+  } catch (error) {
+    console.error('Error fetching AI query stats:', error);
+    res.status(500).json({ error: 'Failed to fetch AI query statistics' });
+  }
+}));
 
 router.post('/:domainId', async (req, res) => {
     const domainId = Number(req.params.domainId);

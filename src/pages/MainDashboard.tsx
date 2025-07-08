@@ -58,7 +58,7 @@ const ProfessionalDashboard = () => {
       setError(null);
       try {
         // Fetch completed domains
-        const domainsResponse = await fetch('http://localhost:3002/api/dashboard/all', {
+        const domainsResponse = await fetch('https://phrase-score-insight.onrender.com/api/dashboard/all', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',

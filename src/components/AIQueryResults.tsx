@@ -140,8 +140,8 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
     }, Math.max(1200000, totalExpected * 3000)); // 20 minutes minimum, or 3 seconds per query
 
     const url = versionId 
-      ? `http://localhost:3002/api/ai-queries/${domainId}?versionId=${versionId}`
-      : `http://localhost:3002/api/ai-queries/${domainId}`;
+      ? `https://phrase-score-insight.onrender.com/api/ai-queries/${domainId}?versionId=${versionId}`
+      : `https://phrase-score-insight.onrender.com/api/ai-queries/${domainId}`;
     fetchEventSource(url, {
       method: 'POST',
       headers: {

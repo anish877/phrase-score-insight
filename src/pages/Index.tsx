@@ -236,7 +236,7 @@ const Index = () => {
         // Trigger first-time AI analysis before redirecting to dashboard
         try {
           console.log('Triggering first-time AI analysis for dashboard...');
-          const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/first-time-analysis`, {
+          const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}/first-time-analysis`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`,

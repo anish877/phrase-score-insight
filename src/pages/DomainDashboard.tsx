@@ -467,7 +467,7 @@ const DomainDashboard = () => {
     try {
       setVersionLoading(true);
       // Use the endpoint that includes calculated metrics
-      const response = await fetch(`http://localhost:3002/api/domain/${domainId}/versions`, {
+      const response = await fetch(`https://phrase-score-insight.onrender.com/api/domain/${domainId}/versions`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json',
@@ -562,7 +562,7 @@ const DomainDashboard = () => {
       console.log('Fetching domain data for ID:', domainId, 'Version ID:', versionId);
       
       // Always fetch version-specific data
-      const versionUrl = `http://localhost:3002/api/dashboard/${domainId}?versionId=${versionId}`;
+      const versionUrl = `https://phrase-score-insight.onrender.com/api/dashboard/${domainId}?versionId=${versionId}`;
       console.log('Making request to:', versionUrl);
       
       const versionResponse = await fetch(versionUrl, {
@@ -662,7 +662,7 @@ const DomainDashboard = () => {
     try {
       setCompetitorLoading(true);
       setError(null);
-      const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/competitors`, {
+      const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}/competitors`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json',
@@ -688,7 +688,7 @@ const DomainDashboard = () => {
   const fetchSuggestedCompetitors = async () => {
     try {
       setSuggestionsLoading(true);
-      const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/suggested-competitors`, {
+      const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}/suggested-competitors`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json',
@@ -713,7 +713,7 @@ const DomainDashboard = () => {
       setCompetitorLoading(true);
       setError(null);
       const compList = typeof customCompetitors !== 'undefined' ? customCompetitors : competitors;
-      const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/competitors`, {
+      const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}/competitors`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

@@ -41,7 +41,7 @@ export interface ResumeCheckResult {
 }
 
 class OnboardingService {
-  private baseUrl = 'https://phrase-score-insight.onrender.com/api/onboarding';
+  private baseUrl = 'http://localhost:3002/api/onboarding';
   private autoSaveTimeout: NodeJS.Timeout | null = null;
 
   // Save onboarding progress

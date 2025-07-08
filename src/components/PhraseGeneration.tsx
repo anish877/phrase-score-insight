@@ -42,8 +42,8 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
       const phrasesMap: Record<string, string[]> = {};
       const token = localStorage.getItem('authToken');
       const url = versionId 
-        ? `https://phrase-score-insight.onrender.com/api/phrases/${domainId}?versionId=${versionId}&token=${encodeURIComponent(token || '')}`
-        : `https://phrase-score-insight.onrender.com/api/phrases/${domainId}?token=${encodeURIComponent(token || '')}`;
+        ? `http://localhost:3002/api/phrases/${domainId}?versionId=${versionId}&token=${encodeURIComponent(token || '')}`
+        : `http://localhost:3002/api/phrases/${domainId}?token=${encodeURIComponent(token || '')}`;
       const ctrl = new AbortController();
 
       // Create a custom EventSource with authorization header

@@ -61,6 +61,10 @@ const DomainResponseScoring: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user, loading: authLoading } = useAuth();
+  
+  // Get versionId from URL query params
+  const urlParams = new URLSearchParams(window.location.search);
+  const versionId = urlParams.get('versionId');
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -69,93 +73,79 @@ const DomainResponseScoring: React.FC = () => {
     }
   }, [user, authLoading, navigate]);
 
-  // Show loading while checking authentication
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100">
-        <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto"></div>
-          <p className="text-slate-600">Checking authentication...</p>
-        </div>
-      </div>
-    );
-  }
-
   useEffect(() => {
-    if (!domainId) return;
+    if (!domainId) {
+      setLoading(false);
+      return;
+    }
+    
     setLoading(true);
     setError(null);
-            fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-            'Content-Type': 'application/json',
+    
+    // Build URL with versionId if available
+    const url = versionId 
+      ? `http://localhost:3002/api/dashboard/${domainId}?versionId=${versionId}`
+      : `http://localhost:3002/api/dashboard/${domainId}`;
+      
+    fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+        'Content-Type': 'application/json',
+      },
+    })
+    .then(res => {
+      if (!res.ok) throw new Error('Failed to fetch domain data');
+      return res.json();
+    })
+    .then((data: { phrases?: Phrase[]; aiQueryResults?: AIQueryResultRaw[]; metrics?: Metrics }) => {
+      // Build phraseId -> text map if available
+      const phraseMap = Object.fromEntries((data.phrases || []).map((p: Phrase) => [p.id, p.text]));
+      setQueryResults(
+        (data.aiQueryResults || []).map((r: AIQueryResultRaw) => ({
+          model: r.model || '',
+          phrase: r.phrase || phraseMap[r.phraseId] || '',
+          keyword: r.keyword || '',
+          response: r.response || '',
+          latency: r.latency || 0,
+          cost: r.cost || 0,
+          progress: r.progress || 0,
+          severity: r.severity || 0,
+          scores: r.scores || {
+            presence: Number(r.presence) || 0,
+            relevance: Number(r.relevance) || 0,
+            accuracy: Number(r.accuracy) || 0,
+            sentiment: Number(r.sentiment) || 0,
+            overall: Number(r.overall) || 0,
           },
-        })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch domain data');
-        return res.json();
-      })
-      .then((data: { phrases?: Phrase[]; aiQueryResults?: AIQueryResultRaw[]; metrics?: Metrics }) => {
-        // Build phraseId -> text map if available
-        const phraseMap = Object.fromEntries((data.phrases || []).map((p: Phrase) => [p.id, p.text]));
-        setQueryResults(
-          (data.aiQueryResults || []).map((r: AIQueryResultRaw) => ({
-            model: r.model || '',
-            phrase: r.phrase || phraseMap[r.phraseId] || '',
-            keyword: r.keyword || '',
-            response: r.response || '',
-            latency: r.latency || 0,
-            cost: r.cost || 0,
-            progress: r.progress || 0,
-            severity: r.severity || 0,
-            scores: r.scores || {
-              presence: Number(r.presence) || 0,
-              relevance: Number(r.relevance) || 0,
-              accuracy: Number(r.accuracy) || 0,
-              sentiment: Number(r.sentiment) || 0,
-              overall: Number(r.overall) || 0,
-            },
-          }))
-        );
-        // Build stats from metrics if available
-        if (data.metrics) {
-          setQueryStats({
-            models: (data.metrics.modelPerformance || []).map((m: ModelPerformance) => ({
-              model: m.model,
-              presenceRate: Number(m.presenceRate) || 0,
-              avgRelevance: Number(m.avgRelevance) || 0,
-              avgAccuracy: Number(m.avgAccuracy) || 0,
-              avgSentiment: Number(m.avgSentiment) || 0,
-              avgOverall: Number(m.avgOverall) || 0,
-            })),
-            overall: {
-              presenceRate: Number(data.metrics.presenceRate) || 0,
-              avgRelevance: Number(data.metrics.avgRelevance) || 0,
-              avgAccuracy: Number(data.metrics.avgAccuracy) || 0,
-              avgSentiment: Number(data.metrics.avgSentiment) || 0,
-              avgOverall: Number(data.metrics.avgOverall) || 0,
-            },
-            totalResults: data.aiQueryResults?.length || 0,
-          });
-        } else {
-          setQueryStats(null);
-        }
-      })
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false));
+        }))
+      );
+      // Build stats from metrics if available
+      if (data.metrics) {
+        setQueryStats({
+          models: (data.metrics.modelPerformance || []).map((m: ModelPerformance) => ({
+            model: m.model,
+            presenceRate: Number(m.presenceRate) || 0,
+            avgRelevance: Number(m.avgRelevance) || 0,
+            avgAccuracy: Number(m.avgAccuracy) || 0,
+            avgSentiment: Number(m.avgSentiment) || 0,
+            avgOverall: Number(m.avgOverall) || 0,
+          })),
+          overall: {
+            presenceRate: Number(data.metrics.presenceRate) || 0,
+            avgRelevance: Number(data.metrics.avgRelevance) || 0,
+            avgAccuracy: Number(data.metrics.avgAccuracy) || 0,
+            avgSentiment: Number(data.metrics.avgSentiment) || 0,
+            avgOverall: Number(data.metrics.avgOverall) || 0,
+          },
+          totalResults: data.aiQueryResults?.length || 0,
+        });
+      } else {
+        setQueryStats(null);
+      }
+    })
+    .catch(err => setError(err.message))
+    .finally(() => setLoading(false));
   }, [domainId]);
-
-  // Show loading while checking authentication
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100">
-        <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mx-auto"></div>
-          <p className="text-slate-600">Checking authentication...</p>
-        </div>
-      </div>
-    );
-  }
 
   // Don't render anything if not authenticated (will redirect)
   if (!user) {
@@ -197,7 +187,34 @@ const DomainResponseScoring: React.FC = () => {
         <ResponseScoring
           queryResults={queryResults}
           queryStats={queryStats}
-          onNext={() => navigate(`/dashboard/${domainId}`)}
+          onNext={async () => {
+            // Trigger first-time AI analysis before redirecting to dashboard
+            try {
+              console.log('Triggering first-time AI analysis for dashboard...');
+              const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/first-time-analysis`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ versionId })
+              });
+              
+              if (response.ok) {
+                const result = await response.json();
+                console.log('First-time AI analysis completed:', result.message);
+              } else {
+                console.warn('First-time AI analysis failed, but continuing to dashboard');
+              }
+            } catch (analysisError) {
+              console.warn('Error triggering first-time AI analysis:', analysisError);
+              // Continue to dashboard even if analysis fails
+            }
+            
+            // Navigate to dashboard with versionId if available
+            const dashboardUrl = versionId ? `/dashboard/${domainId}?versionId=${versionId}` : `/dashboard/${domainId}`;
+            navigate(dashboardUrl);
+          }}
           onPrev={() => navigate(-1)}
         />
       </div>

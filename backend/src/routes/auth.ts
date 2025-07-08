@@ -5,7 +5,7 @@ import { authenticateToken } from '../middleware/auth';
 const router = Router();
 
 // Utility function to wrap async route handlers
-function asyncHandler(fn: any) {
+function asyncHandler(fn: (req: Request, res: Response, next: any) => Promise<void>) {
   return (req: Request, res: Response, next: any) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
@@ -17,15 +17,18 @@ router.post('/register', asyncHandler(async (req: Request, res: Response) => {
 
   // Validate input
   if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
+    res.status(400).json({ error: 'Email and password are required' });
+    return;
   }
 
   if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    return;
   }
 
   if (!email.includes('@')) {
-    return res.status(400).json({ error: 'Please provide a valid email address' });
+    res.status(400).json({ error: 'Please provide a valid email address' });
+    return;
   }
 
   try {
@@ -34,7 +37,8 @@ router.post('/register', asyncHandler(async (req: Request, res: Response) => {
   } catch (error) {
     if (error instanceof Error) {
       if (error.message.includes('already exists')) {
-        return res.status(409).json({ error: error.message });
+        res.status(409).json({ error: error.message });
+        return;
       }
     }
     throw error;
@@ -47,7 +51,8 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
 
   // Validate input
   if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
+    res.status(400).json({ error: 'Email and password are required' });
+    return;
   }
 
   try {
@@ -56,7 +61,8 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
   } catch (error) {
     if (error instanceof Error) {
       if (error.message.includes('Invalid email or password')) {
-        return res.status(401).json({ error: error.message });
+        res.status(401).json({ error: error.message });
+        return;
       }
     }
     throw error;
@@ -67,7 +73,8 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
 router.get('/me', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
   const user = await authService.getUserById(req.user!.userId);
   if (!user) {
-    return res.status(404).json({ error: 'User not found' });
+    res.status(404).json({ error: 'User not found' });
+    return;
   }
   res.json({ user });
 }));
@@ -77,7 +84,8 @@ router.put('/profile', authenticateToken, asyncHandler(async (req: Request, res:
   const { name } = req.body;
 
   if (name !== undefined && typeof name !== 'string') {
-    return res.status(400).json({ error: 'Name must be a string' });
+    res.status(400).json({ error: 'Name must be a string' });
+    return;
   }
 
   await authService.updateProfile(req.user!.userId, name);
@@ -89,11 +97,13 @@ router.put('/password', authenticateToken, asyncHandler(async (req: Request, res
   const { currentPassword, newPassword } = req.body;
 
   if (!currentPassword || !newPassword) {
-    return res.status(400).json({ error: 'Current password and new password are required' });
+    res.status(400).json({ error: 'Current password and new password are required' });
+    return;
   }
 
   if (newPassword.length < 6) {
-    return res.status(400).json({ error: 'New password must be at least 6 characters long' });
+    res.status(400).json({ error: 'New password must be at least 6 characters long' });
+    return;
   }
 
   try {
@@ -102,7 +112,8 @@ router.put('/password', authenticateToken, asyncHandler(async (req: Request, res
   } catch (error) {
     if (error instanceof Error) {
       if (error.message.includes('Current password is incorrect')) {
-        return res.status(400).json({ error: error.message });
+        res.status(400).json({ error: error.message });
+        return;
       }
     }
     throw error;
@@ -114,7 +125,8 @@ router.post('/verify', asyncHandler(async (req: Request, res: Response) => {
   const { token } = req.body;
 
   if (!token) {
-    return res.status(400).json({ error: 'Token is required' });
+    res.status(400).json({ error: 'Token is required' });
+    return;
   }
 
   try {

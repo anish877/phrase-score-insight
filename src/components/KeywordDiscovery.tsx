@@ -56,8 +56,8 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, versionId
     const ctrl = new AbortController();
     const token = localStorage.getItem('authToken');
     const url = versionId 
-      ? `https://phrase-score-insight.onrender.com/api/keywords/stream/${domainId}?versionId=${versionId}&token=${encodeURIComponent(token || '')}`
-      : `https://phrase-score-insight.onrender.com/api/keywords/stream/${domainId}?token=${encodeURIComponent(token || '')}`;
+      ? `http://localhost:3002/api/keywords/stream/${domainId}?versionId=${versionId}&token=${encodeURIComponent(token || '')}`
+      : `http://localhost:3002/api/keywords/stream/${domainId}?token=${encodeURIComponent(token || '')}`;
     fetchEventSource(url, {
       signal: ctrl.signal,
       onopen(_response) {
@@ -414,8 +414,8 @@ const Footer: React.FC<FooterProps> = ({ onPrev, onNext, isSaving, selectedCount
         setSaving(true);
         try {
             const url = versionId 
-              ? `https://phrase-score-insight.onrender.com/api/keywords/${domainId}/selection?versionId=${versionId}`
-              : `https://phrase-score-insight.onrender.com/api/keywords/${domainId}/selection`;
+              ? `http://localhost:3002/api/keywords/${domainId}/selection?versionId=${versionId}`
+              : `http://localhost:3002/api/keywords/${domainId}/selection`;
             
             const response = await fetch(url, {
               method: 'PATCH',

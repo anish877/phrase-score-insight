@@ -56,7 +56,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const verifyToken = async (tokenToVerify: string) => {
     try {
-      const response = await fetch('https://phrase-score-insight.onrender.com/api/auth/verify', {
+      const response = await fetch('http://localhost:3002/api/auth/verify', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -91,7 +91,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setLoading(true);
     
     try {
-      const response = await fetch('https://phrase-score-insight.onrender.com/api/auth/login', {
+      const response = await fetch('http://localhost:3002/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -122,7 +122,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setLoading(true);
     
     try {
-      const response = await fetch('https://phrase-score-insight.onrender.com/api/auth/register', {
+      const response = await fetch('http://localhost:3002/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -158,7 +158,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!token) throw new Error('Not authenticated');
 
     try {
-      const response = await fetch('https://phrase-score-insight.onrender.com/api/auth/profile', {
+      const response = await fetch('http://localhost:3002/api/auth/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -185,7 +185,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!token) throw new Error('Not authenticated');
 
     try {
-      const response = await fetch('https://phrase-score-insight.onrender.com/api/auth/password', {
+      const response = await fetch('http://localhost:3002/api/auth/password', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

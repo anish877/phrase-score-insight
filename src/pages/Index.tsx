@@ -226,11 +226,36 @@ const Index = () => {
         queryResults,
         queryStats
       };
-      
       try {
         console.log('Completing analysis with versionId:', versionId);
         // Save progress and mark as completed
         await onboardingService.saveProgress(domainId, currentStep, stepData, true);
+        // Reset onboarding progress (delete progress record)
+        await onboardingService.resetProgress(domainId, versionId);
+        
+        // Trigger first-time AI analysis before redirecting to dashboard
+        try {
+          console.log('Triggering first-time AI analysis for dashboard...');
+          const response = await fetch(`http://localhost:3002/api/dashboard/${domainId}/first-time-analysis`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ versionId })
+          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            console.log('First-time AI analysis completed:', result.message);
+          } else {
+            console.warn('First-time AI analysis failed, but continuing to dashboard');
+          }
+        } catch (analysisError) {
+          console.warn('Error triggering first-time AI analysis:', analysisError);
+          // Continue to dashboard even if analysis fails
+        }
+        
         // Navigate to dashboard after successful save with versionId if available
         const dashboardUrl = versionId ? `/dashboard/${domainId}?versionId=${versionId}` : `/dashboard/${domainId}`;
         console.log('Redirecting to dashboard URL:', dashboardUrl);

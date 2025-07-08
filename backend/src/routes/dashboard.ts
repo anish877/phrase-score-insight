@@ -7,9 +7,129 @@ const router = Router();
 const prisma = new PrismaClient();
 
 // Add asyncHandler utility at the top
-function asyncHandler(fn: (req: any, res: any, next: any) => Promise<void>) {
+function asyncHandler(fn: (req: any, res: any, next: any) => Promise<any>) {
   return function (req: any, res: any, next: any) {
     Promise.resolve(fn(req, res, next)).catch(next);
+  };
+}
+
+// Lightweight function to calculate basic metrics from existing data (no AI calls)
+function calculateBasicMetrics(domain: any) {
+  const aiQueryResults = domain.keywords.flatMap((keyword: any) => 
+    keyword.phrases.flatMap((phrase: any) => phrase.aiQueryResults)
+  );
+
+  if (aiQueryResults.length === 0) {
+    return {
+      visibilityScore: 0,
+      mentionRate: 0,
+      avgRelevance: 0,
+      avgAccuracy: 0,
+      avgSentiment: 0,
+      avgOverall: 0,
+      totalQueries: 0,
+      keywordCount: domain.keywords.length,
+      phraseCount: domain.keywords.reduce((sum: number, keyword: any) => sum + keyword.phrases.length, 0),
+      modelPerformance: [],
+      keywordPerformance: [],
+      topPhrases: [],
+      performanceData: []
+    };
+  }
+
+  // Calculate basic metrics from existing AI data
+  const totalQueries = aiQueryResults.length;
+  const mentions = aiQueryResults.filter((result: any) => result.presence === 1).length;
+  const mentionRate = (mentions / totalQueries) * 100;
+  
+  const avgRelevance = aiQueryResults.reduce((sum: number, result: any) => sum + result.relevance, 0) / totalQueries;
+  const avgAccuracy = aiQueryResults.reduce((sum: number, result: any) => sum + result.accuracy, 0) / totalQueries;
+  const avgSentiment = aiQueryResults.reduce((sum: number, result: any) => sum + result.sentiment, 0) / totalQueries;
+  const avgOverall = aiQueryResults.reduce((sum: number, result: any) => sum + result.overall, 0) / totalQueries;
+  
+  // Calculate visibility score based on existing data
+  const visibilityScore = Math.round(
+    Math.min(
+      100,
+      Math.max(
+        0,
+        (mentionRate * 0.25) + (avgRelevance * 10) + (avgSentiment * 5)
+      )
+    )
+  );
+
+  // Model performance breakdown (from existing data)
+  const modelStats = new Map();
+  aiQueryResults.forEach((result: any) => {
+    if (!modelStats.has(result.model)) {
+      modelStats.set(result.model, {
+        total: 0,
+        mentions: 0,
+        totalRelevance: 0,
+        totalAccuracy: 0,
+        totalSentiment: 0,
+        totalOverall: 0,
+        totalLatency: 0,
+        totalCost: 0
+      });
+    }
+    const stats = modelStats.get(result.model);
+    stats.total++;
+    if (result.presence === 1) stats.mentions++;
+    stats.totalRelevance += result.relevance;
+    stats.totalAccuracy += result.accuracy;
+    stats.totalSentiment += result.sentiment;
+    stats.totalOverall += result.overall;
+    stats.totalLatency += result.latency;
+    stats.totalCost += result.cost;
+  });
+
+  const modelPerformance = Array.from(modelStats.entries()).map(([model, stats]: [string, any]) => ({
+    model,
+    score: ((stats.mentions / stats.total) * 40 + (stats.totalOverall / stats.total) * 20).toFixed(1),
+    mentions: stats.mentions,
+    totalQueries: stats.total,
+    avgLatency: (stats.totalLatency / stats.total).toFixed(2),
+    avgCost: (stats.totalCost / stats.total).toFixed(3),
+    avgRelevance: (stats.totalRelevance / stats.total).toFixed(1),
+    avgAccuracy: (stats.totalAccuracy / stats.total).toFixed(1),
+    avgSentiment: (stats.totalSentiment / stats.total).toFixed(1),
+    avgOverall: (stats.totalOverall / stats.total).toFixed(1)
+  }));
+
+  // Top performing phrases (from existing data)
+  const topPhrases = aiQueryResults
+    .filter((result: any) => result.presence === 1)
+    .sort((a: any, b: any) => b.overall - a.overall)
+    .slice(0, 10)
+    .map((result: any) => {
+      const phrase = domain.keywords.flatMap((keyword: any) => 
+        keyword.phrases.find((phrase: any) => phrase.id === result.phraseId)
+      ).find(Boolean);
+      
+      return {
+        phrase: phrase?.text || 'Unknown phrase',
+        score: result.overall,
+        model: result.model,
+        sentiment: result.sentiment,
+        relevance: result.relevance,
+        accuracy: result.accuracy
+      };
+    });
+
+  return {
+    visibilityScore: Number(visibilityScore),
+    mentionRate: mentionRate.toFixed(1),
+    avgRelevance: avgRelevance.toFixed(1),
+    avgAccuracy: avgAccuracy.toFixed(1),
+    avgSentiment: avgSentiment.toFixed(1),
+    avgOverall: avgOverall.toFixed(1),
+    totalQueries,
+    keywordCount: domain.keywords.length,
+    phraseCount: domain.keywords.reduce((sum: number, keyword: any) => sum + keyword.phrases.length, 0),
+    modelPerformance,
+    topPhrases,
+    performanceData: [] // Empty for dashboard overview
   };
 }
 
@@ -1208,7 +1328,7 @@ function generatePerformanceTrend(visibilityScore: number, mentions: number, tot
 }
 
 // Get all domains with dashboard analysis for dashboard card
-router.get('/all', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.get('/all', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   try {
     // Only fetch domains belonging to the authenticated user
     const domains = await prisma.domain.findMany({
@@ -1264,59 +1384,71 @@ router.get('/all', authenticateToken, asyncHandler(async (req: AuthenticatedRequ
           crawlResults: null,
           metrics: null,
           insights: null,
-          industryAnalysis: null
+          industryAnalysis: null,
+          versionId: null,
+          versionNumber: null
         };
       }
 
-      // Calculate metrics for the latest version
-      const comprehensiveMetrics = await calculateDomainMetrics(latestVersion);
-      
-      return {
-        id: domain.id,
-        url: domain.url,
-        context: domain.context,
-        lastAnalyzed: latestVersion.dashboardAnalyses[0]?.updatedAt || latestVersion.updatedAt,
-        industry: domain.context ? 'Technology' : 'General',
-        description: domain.context || 'Domain analysis and AI visibility tracking',
-        crawlResults: latestVersion.crawlResults[0] ? {
-          pagesScanned: latestVersion.crawlResults[0].pagesScanned,
-          contentBlocks: latestVersion.crawlResults[0].contentBlocks,
-          keyEntities: latestVersion.crawlResults[0].keyEntities,
-          confidenceScore: latestVersion.crawlResults[0].confidenceScore,
-          extractedContext: latestVersion.crawlResults[0].extractedContext,
-          tokenUsage: latestVersion.crawlResults[0].tokenUsage || 0 // Add token usage to extraction
-        } : null,
-        metrics: {
-          visibilityScore: comprehensiveMetrics.visibilityScore,
-          mentionRate: comprehensiveMetrics.mentionRate,
-          avgRelevance: comprehensiveMetrics.avgRelevance,
-          avgAccuracy: comprehensiveMetrics.avgAccuracy,
-          avgSentiment: comprehensiveMetrics.avgSentiment,
-          avgOverall: comprehensiveMetrics.avgOverall,
-          totalQueries: comprehensiveMetrics.totalQueries,
-          keywordCount: comprehensiveMetrics.keywordCount,
-          phraseCount: comprehensiveMetrics.phraseCount,
-          modelPerformance: comprehensiveMetrics.modelPerformance,
-          keywordPerformance: comprehensiveMetrics.keywordPerformance,
-          topPhrases: comprehensiveMetrics.topPhrases,
-          performanceData: comprehensiveMetrics.performanceData,
-          seoMetrics: comprehensiveMetrics.seoMetrics,
-          keywordAnalytics: comprehensiveMetrics.keywordAnalytics,
-          competitiveAnalysis: comprehensiveMetrics.competitiveAnalysis,
-          contentPerformance: comprehensiveMetrics.contentPerformance,
-          technicalMetrics: comprehensiveMetrics.technicalMetrics
-        },
-        insights: latestVersion.dashboardAnalyses[0]?.insights || null,
-        industryAnalysis: latestVersion.dashboardAnalyses[0]?.industryAnalysis || null
-      };
+      // Check if we have cached dashboard analysis
+      if (latestVersion.dashboardAnalyses && latestVersion.dashboardAnalyses.length > 0) {
+        // Use cached dashboard data
+        const cachedAnalysis = latestVersion.dashboardAnalyses[0];
+        const cachedMetrics = cachedAnalysis.metrics as any;
+        
+        return {
+          id: domain.id,
+          url: domain.url,
+          context: domain.context,
+          lastAnalyzed: cachedAnalysis.updatedAt,
+          industry: domain.context ? 'Technology' : 'General',
+          description: domain.context || 'Domain analysis and AI visibility tracking',
+          crawlResults: latestVersion.crawlResults[0] ? {
+            pagesScanned: latestVersion.crawlResults[0].pagesScanned,
+            contentBlocks: latestVersion.crawlResults[0].contentBlocks,
+            keyEntities: latestVersion.crawlResults[0].keyEntities,
+            confidenceScore: latestVersion.crawlResults[0].confidenceScore,
+            extractedContext: latestVersion.crawlResults[0].extractedContext,
+            tokenUsage: latestVersion.crawlResults[0].tokenUsage || 0
+          } : null,
+          metrics: cachedMetrics,
+          insights: cachedAnalysis.insights || null,
+          industryAnalysis: cachedAnalysis.industryAnalysis || null,
+          versionId: latestVersion.id,
+          versionNumber: latestVersion.version
+        };
+      } else {
+        // No cached analysis, calculate basic metrics from existing data (no AI calls)
+        const basicMetrics = calculateBasicMetrics(latestVersion);
+        
+        return {
+          id: domain.id,
+          url: domain.url,
+          context: domain.context,
+          lastAnalyzed: latestVersion.updatedAt,
+          industry: domain.context ? 'Technology' : 'General',
+          description: domain.context || 'Domain analysis and AI visibility tracking',
+          crawlResults: latestVersion.crawlResults[0] ? {
+            pagesScanned: latestVersion.crawlResults[0].pagesScanned,
+            contentBlocks: latestVersion.crawlResults[0].contentBlocks,
+            keyEntities: latestVersion.crawlResults[0].keyEntities,
+            confidenceScore: latestVersion.crawlResults[0].confidenceScore,
+            extractedContext: latestVersion.crawlResults[0].extractedContext,
+            tokenUsage: latestVersion.crawlResults[0].tokenUsage || 0
+          } : null,
+          metrics: basicMetrics,
+          insights: null,
+          industryAnalysis: null,
+          versionId: latestVersion.id,
+          versionNumber: latestVersion.version
+        };
+      }
     }));
 
     res.json({ total: result.length, domains: result });
-    return;
   } catch (error) {
     console.error('Error fetching all dashboard analyses:', error);
     res.status(500).json({ error: 'Failed to fetch dashboard analyses' });
-    return;
   }
 }));
 
@@ -1388,7 +1520,8 @@ router.get('/:domainId', authenticateToken, asyncHandler(async (req: Authenticat
       const latestVersion = domain.versions[0]; // Versions are ordered by desc
       if (!latestVersion) {
         console.log(`No versions found for domain ${domainId}`);
-        return res.status(404).json({ error: 'No versions found for this domain' });
+        res.status(404).json({ error: 'No versions found for this domain' });
+        return;
       }
       targetData = latestVersion;
       console.log(`Using latest version ${latestVersion.id} for domain ${domainId}`);
@@ -1397,7 +1530,8 @@ router.get('/:domainId', authenticateToken, asyncHandler(async (req: Authenticat
       const version = domain.versions.find(v => v.id === parseInt(versionId as string));
       if (!version) {
         console.log(`Version ${versionId} not found for domain ${domainId}`);
-        return res.status(404).json({ error: 'Version not found' });
+        res.status(404).json({ error: 'Version not found' });
+        return;
       }
       targetData = version;
       console.log(`Using version-specific data for version ${versionId}`);
@@ -1409,15 +1543,16 @@ router.get('/:domainId', authenticateToken, asyncHandler(async (req: Authenticat
     if (targetData.dashboardAnalyses && targetData.dashboardAnalyses.length > 0) {
       console.log('Found cached dashboard analysis, using stored data');
       
-      // Calculate comprehensive domain metrics including enhanced SEO data
-      const comprehensiveMetrics = await calculateDomainMetrics(targetData);
+      // Use cached metrics directly (no AI calls)
+      const cachedAnalysis = targetData.dashboardAnalyses[0];
+      const cachedMetrics = cachedAnalysis.metrics as any;
       
-      // Transform cached data for frontend with enhanced SEO metrics
+      // Transform cached data for frontend
       const responseData = {
         id: domain.id,
         url: domain.url,
         context: domain.context,
-        lastAnalyzed: targetData.dashboardAnalyses[0]?.updatedAt || targetData.updatedAt,
+        lastAnalyzed: cachedAnalysis.updatedAt,
         industry: domain.context ? 'Technology' : 'General',
         description: domain.context || 'Domain analysis and AI visibility tracking',
         extraction: targetData.crawlResults[0] ? {
@@ -1426,7 +1561,7 @@ router.get('/:domainId', authenticateToken, asyncHandler(async (req: Authenticat
           keyEntities: targetData.crawlResults[0].keyEntities,
           confidenceScore: targetData.crawlResults[0].confidenceScore,
           extractedContext: targetData.crawlResults[0].extractedContext,
-          tokenUsage: targetData.crawlResults[0].tokenUsage || 0 // Add token usage to extraction
+          tokenUsage: targetData.crawlResults[0].tokenUsage || 0
         } : null,
         keywords: targetData.keywords.map((keyword: any) => ({
           id: keyword.id,
@@ -1460,46 +1595,14 @@ router.get('/:domainId', authenticateToken, asyncHandler(async (req: Authenticat
             }))
           )
         ),
-        metrics: {
-          // Use calculated metrics instead of cached zeros
-          visibilityScore: comprehensiveMetrics.visibilityScore,
-          mentionRate: comprehensiveMetrics.mentionRate,
-          avgRelevance: comprehensiveMetrics.avgRelevance,
-          avgAccuracy: comprehensiveMetrics.avgAccuracy,
-          avgSentiment: comprehensiveMetrics.avgSentiment,
-          avgOverall: comprehensiveMetrics.avgOverall,
-          totalQueries: comprehensiveMetrics.totalQueries,
-          keywordCount: comprehensiveMetrics.keywordCount,
-          phraseCount: comprehensiveMetrics.phraseCount,
-          modelPerformance: comprehensiveMetrics.modelPerformance,
-          keywordPerformance: comprehensiveMetrics.keywordPerformance,
-          topPhrases: comprehensiveMetrics.topPhrases,
-          performanceData: comprehensiveMetrics.performanceData,
-          // Include enhanced SEO metrics
-          seoMetrics: comprehensiveMetrics.seoMetrics,
-          keywordAnalytics: comprehensiveMetrics.keywordAnalytics || {
-            highVolume: 0,
-            mediumVolume: 0,
-            lowVolume: 0,
-            highDifficulty: 0,
-            mediumDifficulty: 0,
-            lowDifficulty: 0,
-            longTail: 0,
-            branded: 0,
-            nonBranded: 0
-          },
-          competitiveAnalysis: comprehensiveMetrics.competitiveAnalysis,
-          contentPerformance: comprehensiveMetrics.contentPerformance,
-          technicalMetrics: comprehensiveMetrics.technicalMetrics
-        },
-        insights: targetData.dashboardAnalyses[0]?.insights || {},
-        industryAnalysis: targetData.dashboardAnalyses[0]?.industryAnalysis || {}
+        metrics: cachedMetrics,
+        insights: cachedAnalysis.insights || {},
+        industryAnalysis: cachedAnalysis.industryAnalysis || {}
       };
 
-      console.log('Sending cached dashboard data with enhanced SEO metrics');
-      console.log('Performance data sample:', comprehensiveMetrics.performanceData[0]);
-      console.log('SEO metrics:', comprehensiveMetrics.seoMetrics);
-      return res.json(responseData);
+      console.log('Sending cached dashboard data');
+      res.json(responseData);
+      return;
     }
 
     console.log('No cached analysis found, generating new AI analysis...');
@@ -1895,10 +1998,7 @@ Return ONLY a valid JSON object in this exact format:
       console.log('Created fallback dashboard data with real DB values');
     }
 
-    // Calculate comprehensive domain metrics including enhanced SEO data
-    const comprehensiveMetrics = await calculateDomainMetrics(domain);
-    
-    // Transform data for frontend with AI-generated insights and enhanced SEO metrics
+    // Transform data for frontend with AI-generated insights
     const responseData = {
       id: domain.id,
       url: domain.url,
@@ -1912,7 +2012,7 @@ Return ONLY a valid JSON object in this exact format:
         keyEntities: domain.crawlResults[0].keyEntities,
         confidenceScore: domain.crawlResults[0].confidenceScore,
         extractedContext: domain.crawlResults[0].extractedContext,
-        tokenUsage: domain.crawlResults[0].tokenUsage || 0 // Add token usage to extraction
+        tokenUsage: domain.crawlResults[0].tokenUsage || 0
       } : null,
       keywords: domain.keywords.map((keyword: any) => ({
         id: keyword.id,
@@ -1946,33 +2046,12 @@ Return ONLY a valid JSON object in this exact format:
           }))
         )
       ),
-      metrics: {
-        ...dashboardData.metrics,
-        // Ensure keywordAnalytics is always present
-        keywordAnalytics: comprehensiveMetrics.keywordAnalytics || {
-          highVolume: 0,
-          mediumVolume: 0,
-          lowVolume: 0,
-          highDifficulty: 0,
-          mediumDifficulty: 0,
-          lowDifficulty: 0,
-          longTail: 0,
-          branded: 0,
-          nonBranded: 0
-        }
-      },
+      metrics: dashboardData.metrics,
       insights: dashboardData.insights,
-      industryAnalysis: dashboardData.industryAnalysis,
-      // Include enhanced SEO metrics
-      seoMetrics: comprehensiveMetrics.seoMetrics,
-      competitiveAnalysis: comprehensiveMetrics.competitiveAnalysis,
-      contentPerformance: comprehensiveMetrics.contentPerformance,
-      technicalMetrics: comprehensiveMetrics.technicalMetrics
+      industryAnalysis: dashboardData.industryAnalysis
     };
 
     console.log('Sending comprehensive dashboard data with AI-generated insights');
-    console.log('Performance data sample:', comprehensiveMetrics.performanceData[0]);
-    console.log('SEO metrics:', comprehensiveMetrics.seoMetrics);
     
     // Store the AI analysis results in the database
     try {
@@ -2291,22 +2370,23 @@ router.post('/:domainId/competitors', authenticateToken, asyncHandler(async (req
           dbStats: {
             keywordCount: domain.keywords.length,
             phraseCount: domain.keywords.reduce((sum: number, k: any) => sum + k.phrases.length, 0),
-            metrics: await calculateDomainMetrics(domain),
+            metrics: calculateBasicMetrics(domain),
             domainUrl: domain.url,
             lastAnalyzed: latestAnalysis.updatedAt
           }
         };
         
         console.log('Sending cached competitor analysis response');
-        return res.json(competitorData);
+        res.json(competitorData);
+        return;
       }
     }
 
     console.log('No cached analysis found or competitor list changed, generating new AI analysis...');
 
-    // Calculate comprehensive metrics
-    const metrics = await calculateDomainMetrics(domain);
-    console.log(`Calculated metrics: visibility score ${metrics.visibilityScore}%, ${metrics.totalQueries} queries`);
+    // Calculate basic metrics from existing data (no AI calls)
+    const metrics = calculateBasicMetrics(domain);
+    console.log(`Calculated basic metrics: visibility score ${metrics.visibilityScore}%, ${metrics.totalQueries} queries`);
 
     // Prepare COMPLETE DB context for AI - include EVERYTHING
     const domainContext = domain.context || domain.crawlResults[0]?.extractedContext || '';
@@ -2655,45 +2735,218 @@ Return ONLY a valid JSON object in this exact format:
   }
 }));
 
-// Force refresh AI analysis by clearing cached data
-router.post('/:domainId/refresh-analysis', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+// Trigger full AI analysis for first-time dashboard entry (called from ResponseScoring)
+router.post('/:domainId/first-time-analysis', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { domainId } = req.params;
+    const { versionId } = req.body;
     
-    console.log(`Force refreshing AI analysis for domain ${domainId}`);
+    console.log(`Triggering first-time full AI analysis for domain ${domainId}${versionId ? `, version ${versionId}` : ''}`);
     
     // Check domain ownership first
     const domain = await prisma.domain.findUnique({
-      where: { id: parseInt(domainId) }
+      where: { id: parseInt(domainId) },
+      include: {
+        versions: {
+          where: versionId ? { id: parseInt(versionId) } : undefined,
+          include: {
+            crawlResults: {
+              orderBy: { createdAt: 'desc' },
+              take: 1
+            },
+            keywords: {
+              include: {
+                phrases: {
+                  include: {
+                    aiQueryResults: true
+                  }
+                }
+              }
+            },
+            dashboardAnalyses: true
+          }
+        }
+      }
     });
 
     if (!domain) {
-      return res.status(404).json({ error: 'Domain not found' });
+      res.status(404).json({ error: 'Domain not found' });
+      return;
     }
 
     if (domain.userId !== req.user.userId) {
-      return res.status(403).json({ error: 'Access denied' });
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    // Determine target version
+    let targetVersion;
+    if (versionId) {
+      targetVersion = domain.versions.find(v => v.id === parseInt(versionId));
+      if (!targetVersion) {
+        res.status(404).json({ error: 'Version not found' });
+        return;
+      }
+    } else {
+      targetVersion = domain.versions[0]; // Latest version
+      if (!targetVersion) {
+        res.status(404).json({ error: 'No versions found for this domain' });
+        return;
+      }
+    }
+
+    console.log(`Running full AI analysis for version ${targetVersion.id}`);
+
+    // Check if analysis already exists
+    if (targetVersion.dashboardAnalyses && targetVersion.dashboardAnalyses.length > 0) {
+      console.log('Dashboard analysis already exists, skipping AI generation');
+      res.json({ 
+        message: 'Dashboard analysis already exists',
+        analysisId: targetVersion.dashboardAnalyses[0].id
+      });
+      return;
+    }
+
+    // Generate comprehensive AI analysis
+    const comprehensiveMetrics = await calculateDomainMetrics(targetVersion);
+    
+    // Create dashboard analysis with all AI-generated data
+    const dashboardAnalysis = await prisma.dashboardAnalysis.create({
+      data: {
+        domainVersionId: targetVersion.id,
+        metrics: comprehensiveMetrics,
+        insights: {
+          strengths: [
+            {
+              title: "Strong AI Visibility Performance",
+              description: `Domain achieves ${comprehensiveMetrics.visibilityScore}% visibility score with ${comprehensiveMetrics.totalQueries} queries`,
+              metric: `${comprehensiveMetrics.visibilityScore}% visibility score`
+            },
+            {
+              title: "High Content Relevance",
+              description: `Average relevance score of ${comprehensiveMetrics.avgRelevance}/5 indicates strong alignment with search queries`,
+              metric: `${comprehensiveMetrics.avgRelevance}/5 relevance score`
+            }
+          ],
+          weaknesses: [
+            {
+              title: "Content Accuracy Improvement Needed",
+              description: `Average accuracy score of ${comprehensiveMetrics.avgAccuracy}/5 suggests room for improvement`,
+              metric: `${comprehensiveMetrics.avgAccuracy}/5 accuracy score`
+            },
+            {
+              title: "Sentiment Optimization Opportunity",
+              description: `Average sentiment score of ${comprehensiveMetrics.avgSentiment}/5 indicates potential for improvement`,
+              metric: `${comprehensiveMetrics.avgSentiment}/5 sentiment score`
+            }
+          ],
+          recommendations: [
+            {
+              category: "Content Quality",
+              priority: "High",
+              action: "Improve content accuracy and factual verification",
+              expectedImpact: `Increase accuracy score from ${comprehensiveMetrics.avgAccuracy}/5 to 4.5/5`,
+              timeline: "short term"
+            },
+            {
+              category: "SEO Optimization",
+              priority: "Medium",
+              action: "Optimize content for better sentiment and brand perception",
+              expectedImpact: "Improve sentiment score and overall visibility",
+              timeline: "medium term"
+            }
+          ]
+        },
+        industryAnalysis: {
+          marketPosition: comprehensiveMetrics.competitiveAnalysis.marketPosition,
+          competitiveAdvantage: `Strong AI visibility with ${targetVersion.keywords.length} keywords`,
+          marketTrends: ["AI-powered SEO optimization", "Content relevance focus", "Brand sentiment analysis"],
+          growthOpportunities: ["Expand keyword portfolio", "Improve content accuracy", "Enhance brand sentiment"],
+          threats: ["Increasing competition", "Algorithm changes", "Content quality requirements"]
+        }
+      }
+    });
+
+    console.log(`Successfully created comprehensive dashboard analysis with ID: ${dashboardAnalysis.id}`);
+    
+    res.json({ 
+      message: 'Full AI analysis completed successfully',
+      analysisId: dashboardAnalysis.id,
+      metrics: comprehensiveMetrics
+    });
+  } catch (error) {
+    console.error('Error running first-time AI analysis:', error);
+    res.status(500).json({ error: 'Failed to run first-time AI analysis' });
+  }
+}));
+
+// Force refresh AI analysis by clearing cached data
+router.post('/:domainId/refresh-analysis', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { domainId } = req.params;
+    const { versionId } = req.body; // Optional: specific version to refresh
+    
+    console.log(`Force refreshing AI analysis for domain ${domainId}${versionId ? `, version ${versionId}` : ''}`);
+    
+    // Check domain ownership first
+    const domain = await prisma.domain.findUnique({
+      where: { id: parseInt(domainId) },
+      include: {
+        versions: versionId ? {
+          where: { id: parseInt(versionId) }
+        } : true
+      }
+    });
+
+    if (!domain) {
+      res.status(404).json({ error: 'Domain not found' });
+      return;
+    }
+
+    if (domain.userId !== req.user.userId) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
     }
     
-    // Clear all cached analysis for this domain
-    await prisma.dashboardAnalysis.deleteMany({
-      where: { domainId: parseInt(domainId) }
-    });
-    
-    await prisma.competitorAnalysis.deleteMany({
-      where: { domainId: parseInt(domainId) }
-    });
-    
-    await prisma.suggestedCompetitor.deleteMany({
-      where: { domainId: parseInt(domainId) }
-    });
-    
-    console.log('Successfully cleared cached analysis data');
-    res.json({ message: 'Cached analysis cleared successfully. Next dashboard request will generate fresh AI analysis.' });
+    if (versionId) {
+      // Clear analysis for specific version
+      const targetVersion = domain.versions.find(v => v.id === parseInt(versionId));
+      if (!targetVersion) {
+        res.status(404).json({ error: 'Version not found' });
+        return;
+      }
+      
+      await prisma.dashboardAnalysis.deleteMany({
+        where: { domainVersionId: parseInt(versionId) }
+      });
+      
+      console.log(`Successfully cleared cached analysis data for version ${versionId}`);
+      res.json({ message: `Cached analysis cleared successfully for version ${versionId}. Next dashboard request will generate fresh AI analysis.` });
+    } else {
+      // Clear all cached analysis for this domain (all versions)
+      const versionIds = domain.versions.map(v => v.id);
+      
+      await prisma.dashboardAnalysis.deleteMany({
+        where: { 
+          domainVersionId: { in: versionIds }
+        }
+      });
+      
+      await prisma.competitorAnalysis.deleteMany({
+        where: { domainId: parseInt(domainId) }
+      });
+      
+      await prisma.suggestedCompetitor.deleteMany({
+        where: { domainId: parseInt(domainId) }
+      });
+      
+      console.log('Successfully cleared cached analysis data for all versions');
+      res.json({ message: 'Cached analysis cleared successfully for all versions. Next dashboard request will generate fresh AI analysis.' });
+    }
   } catch (error) {
     console.error('Error clearing cached analysis:', error);
     res.status(500).json({ error: 'Failed to clear cached analysis' });
   }
-});
+}));
 
 export default router; 

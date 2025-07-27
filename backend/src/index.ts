@@ -25,7 +25,8 @@ const allowedOrigins = [
   'http://localhost:4173',
   'https://aichecker.blueoceanglobaltech.com',
   'https://phrase-score-insight-lxkj.vercel.app',
-  'https://domainanalyzer-rosy.vercel.app'
+  'https://domainanalyzer-rosy.vercel.app',
+  'https://phrase-score-insight.vercel.app'
 ];
 
 const corsOptions: cors.CorsOptions = {

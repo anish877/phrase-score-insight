@@ -87,9 +87,10 @@ router.post('/:domainId', authenticateToken, asyncHandler(async (req: Authentica
     const analysis = {
       domainId: parseInt(domainId),
       competitorList: competitors.join('\n'),
-      analysis: 'Competitor analysis would be generated here',
-      insights: [],
-      recommendations: []
+      competitors: JSON.stringify(competitors),
+      marketInsights: JSON.stringify([]),
+      strategicRecommendations: JSON.stringify([]),
+      competitiveAnalysis: JSON.stringify({}),
     };
 
     // Save the analysis
@@ -149,9 +150,10 @@ router.post('/analyze', async (req, res) => {
 
     sendEvent({ event: 'progress', message: 'Analyzing competitor domain...', progress: 30 });
 
-    // Create comprehensive AI prompt for competitor analysis
+    // Create comprehensive AI prompt for competitor analysis, including location if available
+    const locationContext = targetDomainData?.location ? `\nLocation: ${targetDomainData.location}` : '';
     const analysisPrompt = `
-You are an expert SEO and AI visibility analyst. Compare "${targetDomain}" and "${competitorDomain}" in detail.
+You are an expert SEO and AI visibility analyst. Compare "${targetDomain}" and "${competitorDomain}" in detail.${locationContext}
 
 1. Provide a summary of the competitive landscape.
 2. Create a metrics table for both domains with: traffic, domain authority, backlinks, page speed, mobile score, AI visibility score, keyword count, phrase count, average relevance, accuracy, sentiment.

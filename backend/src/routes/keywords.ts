@@ -8,7 +8,8 @@ const router = Router();
 const prisma = new PrismaClient();
 
 // GET /keywords/:domainId - get keywords for a domain
-router.get('/:domainId', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+router.get('/:domainId', authenticateToken, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
   const domainId = Number(req.params.domainId);
   const { versionId } = req.query; // Get versionId from query params
   if (!domainId) { res.status(400).json({ error: 'Domain ID is required' }); return; }
@@ -43,10 +44,10 @@ router.get('/:domainId', authenticateToken, async (req: AuthenticatedRequest, re
     // Get domain for context
     const domain = await prisma.domain.findUnique({
       where: { id: domainId },
-      select: { url: true, context: true }
+      select: { url: true, context: true, userId: true, location: true }
     });
 
-    if (!domain || domain.userId !== req.user.userId) {
+    if (!domain || domain.userId !== authReq.user.userId) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -54,12 +55,12 @@ router.get('/:domainId', authenticateToken, async (req: AuthenticatedRequest, re
     let context = domain.context;
     if (!context) {
       // Use GPT-4o Mini to extract context if not present
-      const extraction = await crawlAndExtractWithGpt4o(domain.url);
+      const extraction = await crawlAndExtractWithGpt4o(domain.url, undefined, undefined, undefined, domain.location || undefined);
       context = extraction.extractedContext;
       await prisma.domain.update({ where: { id: domainId }, data: { context } });
     }
     
-    const gptKeywords = await gptService.generateKeywordsForDomain(domain.url, context);
+    const gptKeywords = await gptService.generateKeywordsForDomain(domain.url, context, domain.location || undefined);
     
     // Save keywords to database with version support
     const savedKeywords = await Promise.all(

@@ -67,7 +67,10 @@ export class AuthService {
     const token = this.generateToken(user.id, user.email);
 
     return {
-      user,
+      user: {
+        ...user,
+        name: user.name === null ? undefined : user.name
+      },
       token
     };
   }
@@ -98,7 +101,7 @@ export class AuthService {
       user: {
         id: user.id,
         email: user.email,
-        name: user.name
+        name: user.name === null ? undefined : user.name
       },
       token
     };

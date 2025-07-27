@@ -163,27 +163,21 @@ async function crawlWebsiteWithProgress(
 
   let progressIncrement = 50 / Math.max(1, queue.length);
 
-  while (queue.length > 0 && visited.size < maxPages) {
-    const url = queue.shift();
-    if (!url || visited.has(url)) continue;
-
+  // Helper function to crawl a single page
+  async function crawlSinglePage(url: string) {
+    if (!url || visited.has(url)) return;
     try {
       console.log(`Crawling: ${url}`); // Debug log
-      
       const response = await axios.get(url, {
         timeout: 10000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; SEO-Analyzer/1.0)',
         }
       });
-      
       visited.add(url);
       discoveredUrls.push(url);
       stats.pagesScanned = visited.size;
-      
       const $ = cheerio.load(response.data);
-
-      // ENHANCED: More comprehensive content extraction
       const contentSelectors = [
         'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
         'article', 'section', '.content', '.main',
@@ -199,8 +193,6 @@ async function crawlWebsiteWithProgress(
         '.benefits', '.advantages', '.process',
         '.portfolio', '.projects', '.work'
       ];
-
-      // Extract content
       contentSelectors.forEach(selector => {
         $(selector).each((_, element) => {
           const text = $(element).text().trim();
@@ -209,8 +201,6 @@ async function crawlWebsiteWithProgress(
           }
         });
       });
-
-      // Extract metadata
       const title = $('title').text().trim();
       const description = $('meta[name="description"]').attr('content');
       const keywords = $('meta[name="keywords"]').attr('content');
@@ -219,8 +209,6 @@ async function crawlWebsiteWithProgress(
       const ogType = $('meta[property="og:type"]').attr('content');
       const twitterTitle = $('meta[name="twitter:title"]').attr('content');
       const twitterDescription = $('meta[name="twitter:description"]').attr('content');
-      
-      // Extract schema.org structured data
       const schemaScripts = $('script[type="application/ld+json"]');
       schemaScripts.each((_, script) => {
         try {
@@ -232,11 +220,7 @@ async function crawlWebsiteWithProgress(
           // Ignore invalid JSON
         }
       });
-      
-      // Add URL context for better analysis
       contentBlocks.push(`Page URL: ${url}`);
-      
-      // Add all meta information
       if (title) contentBlocks.push(`Page Title: ${title}`);
       if (description) contentBlocks.push(`Meta Description: ${description}`);
       if (keywords) contentBlocks.push(`Meta Keywords: ${keywords}`);
@@ -245,27 +229,16 @@ async function crawlWebsiteWithProgress(
       if (ogType) contentBlocks.push(`Open Graph Type: ${ogType}`);
       if (twitterTitle) contentBlocks.push(`Twitter Title: ${twitterTitle}`);
       if (twitterDescription) contentBlocks.push(`Twitter Description: ${twitterDescription}`);
-
-      // Extract navigation and footer content
       const nav = $('nav, .nav, .navigation, .menu, .navbar').text().trim();
       if (nav.length > 10) contentBlocks.push(`Navigation: ${nav}`);
-
       const footer = $('footer, .footer, .site-footer').text().trim();
       if (footer.length > 10) contentBlocks.push(`Footer: ${footer}`);
-
-      // Extract contact information
       const contactInfo = $('.contact, .contact-info, .address, .phone, .email').text().trim();
       if (contactInfo.length > 10) contentBlocks.push(`Contact Info: ${contactInfo}`);
-
-      // Extract business information
       const businessInfo = $('.about, .company, .business, .mission, .vision, .values').text().trim();
       if (businessInfo.length > 10) contentBlocks.push(`Business Info: ${businessInfo}`);
-
-      // Extract services/products
       const services = $('.services, .products, .offerings, .solutions').text().trim();
       if (services.length > 10) contentBlocks.push(`Services: ${services}`);
-
-      // Update progress
       stats.contentBlocks = contentBlocks.length;
       onProgress?.({
         phase: 'content',
@@ -273,14 +246,51 @@ async function crawlWebsiteWithProgress(
         progress: 20 + (visited.size / maxPages) * 30,
         stats
       });
-
-      // Add delay to be respectful
-      await delay(500);
-
+      // --- Link Discovery ---
+      // Only add new links if we haven't hit maxPages yet
+      if (visited.size < maxPages) {
+        const pageDomain = (() => {
+          try {
+            return new URL(url).hostname.replace(/^www\./, '');
+          } catch { return null; }
+        })();
+        $('a[href]').each((_, el) => {
+          const href = $(el).attr('href');
+          if (!href) return;
+          let fullUrl = '';
+          if (href.startsWith('http')) {
+            try {
+              const linkDomain = new URL(href).hostname.replace(/^www\./, '');
+              if (linkDomain === pageDomain) fullUrl = href;
+            } catch { /* ignore invalid URLs */ }
+          } else if (href.startsWith('/')) {
+            fullUrl = `https://${pageDomain}${href}`;
+          }
+          // Only add if not visited, not already queued, and within maxPages
+          if (fullUrl && !visited.has(fullUrl) && !queue.includes(fullUrl) && (queue.length + visited.size) < maxPages) {
+            queue.push(fullUrl);
+          }
+        });
+      }
+      await delay(50);
     } catch (error) {
       console.warn(`Failed to crawl ${url}:`, error);
       // Continue with other URLs
     }
+  }
+
+  // Parallel crawling with concurrency limit
+  const CONCURRENCY = 3;
+  while (queue.length > 0 && visited.size < maxPages) {
+    const batch: string[] = [];
+    while (batch.length < CONCURRENCY && queue.length > 0 && visited.size + batch.length < maxPages) {
+      const nextUrl = queue.shift();
+      if (nextUrl && !visited.has(nextUrl)) {
+        batch.push(nextUrl);
+      }
+    }
+    if (batch.length === 0) break;
+    await Promise.all(batch.map(url => crawlSinglePage(url)));
   }
 
   return { contentBlocks, urls: discoveredUrls };
@@ -290,7 +300,8 @@ export async function crawlAndExtractWithGpt4o(
   domains: string[] | string,
   onProgress?: ProgressCallback,
   customPaths?: string[],
-  priorityUrls?: string[]
+  priorityUrls?: string[],
+  location?: string // Add location param
 ): Promise<ExtractionResult> {
   try {
     // Support both string and array for backward compatibility
@@ -329,6 +340,9 @@ export async function crawlAndExtractWithGpt4o(
     });
 
     // Use GPT-4o for AI analysis
+    const locationContext = location ? `\nLocation: ${location}` : '';
+    // Deduplicate and limit content blocks
+    const uniqueBlocks = Array.from(new Set(allContentBlocks)).slice(0, 20);
     const analysisPrompt = `Analyze this website content and extract comprehensive business context. Focus on:
 
 1. **Business Overview**: What does this company do? What are their main products/services?
@@ -337,11 +351,11 @@ export async function crawlAndExtractWithGpt4o(
 4. **Brand Positioning**: How do they position themselves in the market?
 5. **Key Differentiators**: What are their competitive advantages?
 6. **Industry Context**: What industry/niche are they in?
-7. **Geographic Focus**: Where do they operate?
+7. **Geographic Focus**: Where do they operate?${locationContext}
 8. **Company Size/Type**: Are they a startup, enterprise, agency, etc.?
 
 Website Content:
-${allContentBlocks.slice(0, 50).join('\n\n')}
+${uniqueBlocks.join('\n\n')}
 
 Return a comprehensive analysis that captures the essence of this business for SEO and marketing purposes. Be specific and detailed.`;
 
@@ -407,22 +421,38 @@ Return a comprehensive analysis that captures the essence of this business for S
   }
 }
 
-export async function generatePhrases(keyword: string, domain?: string, context?: string): Promise<{ phrases: string[], tokenUsage: number }> {
+export async function generatePhrases(keyword: string, domain?: string, context?: string, location?: string): Promise<{ phrases: string[], tokenUsage: number }> {
   try {
     const domainContext = domain ? `\nDomain: ${domain}` : '';
     const businessContext = context ? `\nBusiness Context: ${context}` : '';
+    const locationContext = location && location.trim() ? `\nLocation: ${location.trim()}` : '';
+    console.log(locationContext);
     
-    const prompt = `Generate 5 high-converting search phrases for the keyword "${keyword}". These should be natural, user-intent focused phrases that people would actually search for.
+    const prompt = `Generate 5 intent-based search phrases for the keyword "${keyword}". These should be natural, conversational queries that real users would type into search engines.
 
 Requirements:
-- Include the exact keyword "${keyword}"
-- Make them conversational and natural
-- Focus on user intent (informational, navigational, transactional)
-- Consider different search contexts
-- Make them specific and actionable
-- Avoid overly generic phrases
+- Create phrases that follow these intent patterns:
+  * "Who are the best [keyword] providers in [location]?"
+  * "Top-rated companies for [keyword] solutions"
+  * "Which company offers [keyword] for [specific use case]?"
+  * "Best [keyword] brands in [location]"
+  * "Top companies for [keyword] tools/services"
+- Include the keyword in the phrase
+- Make them conversational and natural like real user searches
+- Include location context when relevant (${locationContext})
+- Focus on commercial intent and brand discovery
+- Avoid overly generic or keyword-stuffed phrases
+- Make them specific enough to surface real brands and companies
+- Consider the business context: ${businessContext}
 
-${domainContext}${businessContext}
+Examples of good intent-based phrases:
+- "Who are the best office occupancy sensor providers in [LOCATION]?"
+- "Top-rated companies for office occupancy detection solutions"
+- "Which company offers affordable occupancy sensors for offices?"
+- "Best office sensor brands in USA"
+- "Top companies for space utilization tools"
+
+${domainContext}${businessContext}${locationContext}
 
 Return ONLY a JSON array of 5 strings, no other text:
 ["phrase 1", "phrase 2", "phrase 3", "phrase 4", "phrase 5"]`;
@@ -430,11 +460,11 @@ Return ONLY a JSON array of 5 strings, no other text:
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'You are an expert SEO specialist who generates high-converting search phrases.' },
+        { role: 'system', content: 'You are an expert SEO specialist who generates intent-based search phrases that help users discover brands and companies. Focus on natural, conversational queries that surface real businesses.' },
         { role: 'user', content: prompt }
       ],
-      max_tokens: 500,
-      temperature: 0.7
+      max_tokens: 600,
+      temperature: 0.8
     });
     const text = completion.choices[0].message?.content;
     if (!text) throw new Error('Empty response from GPT-4o API');
@@ -454,26 +484,13 @@ Return ONLY a JSON array of 5 strings, no other text:
   }
 }
 
-export class EnhancedApiService {
-  async submitDomainWithProgress(
-    domain: string,
-    onProgress: ProgressCallback
-  ): Promise<ExtractionResult> {
-    return await crawlAndExtractWithGpt4o(domain, onProgress);
-  }
-
-  async getDomain(domainId: number) {
-    // Implementation for getting domain data
-    return { id: domainId, url: 'example.com' };
-  }
-}
-
-export async function generateKeywordsForDomain(domain: string, context: string): Promise<{ keywords: Array<{ term: string, volume: number, difficulty: string, cpc: number }>, tokenUsage: number }> {
+export async function generateKeywordsForDomain(domain: string, context: string, location?: string): Promise<{ keywords: Array<{ term: string, volume: number, difficulty: string, cpc: number }>, tokenUsage: number }> {
   try {
-    const prompt = `Generate 20 relevant SEO keywords for this domain and business context. Focus on high-value, searchable terms that would drive qualified traffic.
+    const locationContext = location ? `\nLocation: ${location}` : '';
+    const prompt = `Generate 20 relevant SEO keywords for this domain and business context. Focus on high-value, searchable terms that would drive qualified traffic.This keywords will be used to generate phrases for the domain.And we will send these phrases to a LLM to check visiblity of the domain. So make sure to generate keywords that are relevant to the domain and business context. dont use the name of the domain in the keywords. 
 
 Domain: ${domain}
-Business Context: ${context}
+Business Context: ${context}${locationContext}
 
 Requirements:
 - Mix of high, medium, and low volume keywords
@@ -483,10 +500,13 @@ Requirements:
 - Include long-tail variations
 - Consider the business type and industry
 
-For each keyword, provide realistic SEO metrics:
-- Volume: Monthly search volume (100-50000)
-- Difficulty: SEO competition level (Low/Medium/High)
-- CPC: Cost per click for PPC (0.50-15.00)
+For each keyword, provide realistic SEO metrics based on real-world data:
+- Volume: Monthly search volume (100-50000) - be realistic based on term length and specificity
+- Difficulty: SEO competition level (Low/Medium/High) based on:
+  * Low: 100-1,000 searches, niche terms, long-tail phrases, local terms
+  * Medium: 1,000-10,000 searches, industry terms, moderate competition
+  * High: 10,000+ searches, broad terms, major brand competition
+- CPC: Cost per click for PPC (0.50-15.00) - higher for commercial intent
 
 Return ONLY a JSON array of objects with this exact structure:
 [
@@ -501,7 +521,7 @@ Return ONLY a JSON array of objects with this exact structure:
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'You are an expert SEO specialist who generates high-value keywords with realistic metrics.' },
+        { role: 'system', content: 'You are an expert SEO specialist who generates high-value keywords with realistic metrics based on real-world search data and competition analysis.' },
         { role: 'user', content: prompt }
       ],
       max_tokens: 2000,
@@ -519,14 +539,32 @@ Return ONLY a JSON array of objects with this exact structure:
       if (!Array.isArray(keywords)) {
         throw new Error('Response is not an array');
       }
-      // Validate and normalize each keyword
+      // Validate and normalize each keyword with improved difficulty logic
       return {
-        keywords: keywords.map((kw: any) => ({
-          term: String(kw.term || '').trim(),
-          volume: Math.max(100, Math.min(50000, Number(kw.volume) || 1000)),
-          difficulty: ['Low', 'Medium', 'High'].includes(kw.difficulty) ? kw.difficulty : 'Medium',
-          cpc: Math.max(0.50, Math.min(15.00, Number(kw.cpc) || 2.50))
-        })).filter(kw => kw.term.length > 0),
+        keywords: keywords.map((kw: any) => {
+          const term = String(kw.term || '').trim();
+          const volume = Math.max(100, Math.min(50000, Number(kw.volume) || 1000));
+          
+          // Improved difficulty calculation based on volume and term characteristics
+          let difficulty = kw.difficulty;
+          if (!['Low', 'Medium', 'High'].includes(difficulty)) {
+            if (volume <= 1000) difficulty = 'Low';
+            else if (volume <= 10000) difficulty = 'Medium';
+            else difficulty = 'High';
+          }
+          
+          // Adjust CPC based on difficulty and commercial intent
+          let cpc = Math.max(0.50, Math.min(15.00, Number(kw.cpc) || 2.50));
+          if (difficulty === 'High') cpc = Math.max(cpc, 3.00);
+          if (difficulty === 'Low') cpc = Math.min(cpc, 5.00);
+          
+          return {
+            term,
+            volume,
+            difficulty,
+            cpc: Math.round(cpc * 100) / 100 // Round to 2 decimal places
+          };
+        }).filter(kw => kw.term.length > 0),
         tokenUsage: completion.usage?.total_tokens || 0
       };
     } catch (parseError) {
@@ -540,29 +578,63 @@ Return ONLY a JSON array of objects with this exact structure:
 }
 
 function generateDomainFallbackKeywords(domain: string, context: string): Array<{ term: string, volume: number, difficulty: string, cpc: number }> {
-  // Fallback keyword generation when AI fails
+  // Enhanced fallback keyword generation with better difficulty distribution
   const domainName = domain.replace(/^www\./, '').replace(/\./g, ' ');
   const words = domainName.split(' ').filter(word => word.length > 2);
   
   const baseKeywords = [
-    ...words,
+    // Low difficulty keywords (long-tail, specific)
+    ...words.map(word => `${word} services near me`),
+    ...words.map(word => `${word} company reviews`),
+    ...words.map(word => `${word} pricing 2024`),
+    ...words.map(word => `${word} contact information`),
+    ...words.map(word => `${word} about us`),
+    
+    // Medium difficulty keywords (industry terms)
     ...words.map(word => `${word} services`),
     ...words.map(word => `${word} company`),
     ...words.map(word => `best ${word}`),
+    ...words.map(word => `${word} solutions`),
+    ...words.map(word => `${word} experts`),
+    
+    // High difficulty keywords (broad terms)
+    ...words,
     ...words.map(word => `${word} near me`),
     ...words.map(word => `${word} reviews`),
     ...words.map(word => `${word} pricing`),
-    ...words.map(word => `${word} contact`),
-    ...words.map(word => `${word} about`),
-    ...words.map(word => `${word} solutions`)
+    ...words.map(word => `${word} contact`)
   ];
 
-  return baseKeywords.slice(0, 20).map((term, index) => ({
-    term: term.toLowerCase(),
-    volume: Math.max(100, 1000 - (index * 50)),
-    difficulty: index < 5 ? 'High' : index < 10 ? 'Medium' : 'Low',
-    cpc: Math.max(0.50, 5.00 - (index * 0.25))
-  }));
+  return baseKeywords.slice(0, 20).map((term, index) => {
+    // Distribute difficulty levels more realistically
+    let difficulty: string;
+    let volume: number;
+    let cpc: number;
+    
+    if (index < 7) {
+      // Low difficulty: long-tail, specific terms
+      difficulty = 'Low';
+      volume = Math.max(100, 500 - (index * 50));
+      cpc = Math.max(0.50, 2.00 - (index * 0.15));
+    } else if (index < 14) {
+      // Medium difficulty: industry terms
+      difficulty = 'Medium';
+      volume = Math.max(1000, 5000 - ((index - 7) * 300));
+      cpc = Math.max(1.50, 4.00 - ((index - 7) * 0.25));
+    } else {
+      // High difficulty: broad terms
+      difficulty = 'High';
+      volume = Math.max(5000, 15000 - ((index - 14) * 500));
+      cpc = Math.max(3.00, 8.00 - ((index - 14) * 0.5));
+    }
+    
+    return {
+      term: term.toLowerCase(),
+      volume,
+      difficulty,
+      cpc: Math.round(cpc * 100) / 100
+    };
+  });
 }
 
 // Export the service for backward compatibility

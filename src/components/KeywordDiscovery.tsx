@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, X, Check, Search, Target, Brain, Loader2, AlertCircle, TrendingUp, Filter } from 'lucide-react';
+import { Plus, X, Check, Search, Target, Brain, Loader2, AlertCircle, TrendingUp, Filter, Info, ChevronDown, ChevronUp, Lightbulb, BarChart3, Zap } from 'lucide-react';
 import { apiService, Keyword as ApiKeyword } from '@/services/api';
 import { useDebounce } from 'use-debounce';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
@@ -29,6 +29,8 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, versionId
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [keywords, setKeywords] = useState<ApiKeyword[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [showAllKeywords, setShowAllKeywords] = useState(false);
+  const [showDifficultyExplanation, setShowDifficultyExplanation] = useState(false);
   const loadingSteps = [
     'Analyzing brand context...',
     'Connecting to keyword intelligence APIs...',
@@ -56,8 +58,8 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, versionId
     const ctrl = new AbortController();
     const token = localStorage.getItem('authToken');
     const url = versionId 
-      ? `https://phrase-score-insight.onrender.com/api/keywords/stream/${domainId}?versionId=${versionId}&token=${encodeURIComponent(token || '')}`
-      : `https://phrase-score-insight.onrender.com/api/keywords/stream/${domainId}?token=${encodeURIComponent(token || '')}`;
+      ? `${import.meta.env.VITE_API_URL}/api/keywords/stream/${domainId}?versionId=${versionId}&token=${encodeURIComponent(token || '')}`
+      : `${import.meta.env.VITE_API_URL}/api/keywords/stream/${domainId}?token=${encodeURIComponent(token || '')}`;
     fetchEventSource(url, {
       signal: ctrl.signal,
       onopen(_response) {
@@ -119,6 +121,21 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, versionId
   const sortedKeywords = useMemo(() =>
     [...keywords].sort((a, b) => b.volume - a.volume),
     [keywords]
+  );
+
+  // Get representative keywords (one from each difficulty level)
+  const representativeKeywords = useMemo(() => {
+    const highDifficulty = sortedKeywords.filter(k => k.difficulty === 'High').slice(0, 1);
+    const mediumDifficulty = sortedKeywords.filter(k => k.difficulty === 'Medium').slice(0, 1);
+    const lowDifficulty = sortedKeywords.filter(k => k.difficulty === 'Low').slice(0, 1);
+    
+    return [...highDifficulty, ...mediumDifficulty, ...lowDifficulty];
+  }, [sortedKeywords]);
+
+  // Get filtered keywords for the "View All" section
+  const filteredKeywords = useMemo(() => 
+    sortedKeywords.filter(k => k.term.toLowerCase().includes(searchFilter.toLowerCase())),
+    [sortedKeywords, searchFilter]
   );
 
   const addCustomKeyword = () => {
@@ -195,33 +212,198 @@ const KeywordDiscovery: React.FC<KeywordDiscoveryProps> = ({ domainId, versionId
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         <div className="lg:col-span-3">
-          <div className="flex flex-col md:flex-row gap-4 mb-6">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
-              <Input placeholder="Search keywords..." value={searchFilter} onChange={(e) => setSearchFilter(e.target.value)} className="pl-10" />
-            </div>
-          </div>
-          <div className="space-y-6">
-            {sortedKeywords.filter(k => k.term.toLowerCase().includes(searchFilter.toLowerCase())).length > 0 ? sortedKeywords.filter(k => k.term.toLowerCase().includes(searchFilter.toLowerCase())).map((keyword) => (
-              <div
-                key={keyword.term}
-                className={`flex items-center justify-between p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedKeywords.includes(keyword.term) ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
-                onClick={() => toggleKeyword(keyword.term)}
-              >
-                <div className="flex items-center space-x-3">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center ${selectedKeywords.includes(keyword.term) ? 'bg-blue-500' : 'bg-slate-200'}`}>{selectedKeywords.includes(keyword.term) && <Check className="w-4 h-4 text-white" />}</div>
-                  <span className="font-medium text-slate-800">{keyword.term}</span>
-                </div>
-                <div className="flex items-center space-x-4 text-sm text-right">
-                  <div className="w-20">
-                    <div className="font-semibold text-slate-700">{keyword.volume.toLocaleString()}</div>
-                    <div className="text-xs text-slate-500">Volume</div>
-                  </div>
-                  <Badge className={`w-16 justify-center ${keyword.difficulty === 'Low' ? 'bg-green-100 text-green-800' : keyword.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>{keyword.difficulty}</Badge>
-                </div>
+          {/* Difficulty Explanation Card */}
+          <Card className="mb-6 border-blue-200 bg-blue-50">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg text-blue-900 flex items-center">
+                  <Info className="h-5 w-5 mr-2" />
+                  Understanding Keyword Difficulty
+                </CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowDifficultyExplanation(!showDifficultyExplanation)}
+                  className="text-blue-700 hover:text-blue-900"
+                >
+                  {showDifficultyExplanation ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </Button>
               </div>
-            )) : <NoResultsCard />}
-          </div>
+            </CardHeader>
+            {showDifficultyExplanation && (
+              <CardContent className="pt-0">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white rounded-lg p-4 border border-blue-200">
+                    <div className="flex items-center mb-2">
+                      <Badge className="bg-green-100 text-green-800 border-green-200 mr-2">Low</Badge>
+                      <Zap className="h-4 w-4 text-green-600" />
+                    </div>
+                    <h4 className="font-semibold text-slate-800 mb-2">Easy to Rank</h4>
+                    <p className="text-sm text-slate-600">Lower competition, faster results. Great for new websites or niche markets.</p>
+                    <div className="mt-2 text-xs text-slate-500">
+                      <strong>Volume:</strong> 100-1,000 searches/month<br/>
+                      <strong>Competition:</strong> Small businesses, blogs<br/>
+                      <strong>Time to Rank:</strong> 1-3 months
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 border border-blue-200">
+                    <div className="flex items-center mb-2">
+                      <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 mr-2">Medium</Badge>
+                      <BarChart3 className="h-4 w-4 text-yellow-600" />
+                    </div>
+                    <h4 className="font-semibold text-slate-800 mb-2">Balanced Opportunity</h4>
+                    <p className="text-sm text-slate-600">Moderate competition with good traffic potential. Requires quality content and SEO.</p>
+                    <div className="mt-2 text-xs text-slate-500">
+                      <strong>Volume:</strong> 1,000-10,000 searches/month<br/>
+                      <strong>Competition:</strong> Established businesses<br/>
+                      <strong>Time to Rank:</strong> 3-6 months
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 border border-blue-200">
+                    <div className="flex items-center mb-2">
+                      <Badge className="bg-red-100 text-red-800 border-red-200 mr-2">High</Badge>
+                      <TrendingUp className="h-4 w-4 text-red-600" />
+                    </div>
+                    <h4 className="font-semibold text-slate-800 mb-2">High Competition</h4>
+                    <p className="text-sm text-slate-600">Competitive keywords with high traffic. Requires strong domain authority and resources.</p>
+                    <div className="mt-2 text-xs text-slate-500">
+                      <strong>Volume:</strong> 10,000+ searches/month<br/>
+                      <strong>Competition:</strong> Major brands, enterprises<br/>
+                      <strong>Time to Rank:</strong> 6-12+ months
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+
+          {/* Representative Keywords Section */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center text-xl text-slate-900">
+                <Lightbulb className="h-6 w-6 mr-3 text-blue-600" />
+                AI-Recommended Keywords
+              </CardTitle>
+              <CardDescription>
+                Our AI has analyzed your domain and selected the most representative keywords from each difficulty level
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {representativeKeywords.map((keyword) => (
+                  <div
+                    key={keyword.term}
+                    className={`flex items-center justify-between p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                      selectedKeywords.includes(keyword.term) 
+                        ? 'border-blue-500 bg-blue-50' 
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                    onClick={() => toggleKeyword(keyword.term)}
+                  >
+                    <div className="flex items-center space-x-4">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        selectedKeywords.includes(keyword.term) ? 'bg-blue-500' : 'bg-slate-200'
+                      }`}>
+                        {selectedKeywords.includes(keyword.term) && <Check className="w-5 h-5 text-white" />}
+                      </div>
+                      <div>
+                        <span className="font-semibold text-slate-800 text-lg">{keyword.term}</span>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <Badge className={`${
+                            keyword.difficulty === 'Low' ? 'bg-green-100 text-green-800' : 
+                            keyword.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {keyword.difficulty} Difficulty
+                          </Badge>
+                          <span className="text-sm text-slate-500">•</span>
+                          <span className="text-sm text-slate-600">{keyword.volume.toLocaleString()} monthly searches</span>
+                          <span className="text-sm text-slate-500">•</span>
+                          <span className="text-sm text-slate-600">${keyword.cpc} avg. CPC</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-slate-700">{keyword.volume.toLocaleString()}</div>
+                      <div className="text-xs text-slate-500">Volume</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* View All Keywords Section */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl text-slate-900">All Discovered Keywords</CardTitle>
+                  <CardDescription>
+                    {keywords.length} AI-generated keywords based on your domain analysis
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowAllKeywords(!showAllKeywords)}
+                  className="flex items-center space-x-2"
+                >
+                  {showAllKeywords ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  <span>{showAllKeywords ? 'Hide' : 'View All'} Keywords</span>
+                </Button>
+              </div>
+            </CardHeader>
+            {showAllKeywords && (
+              <CardContent>
+                <div className="flex flex-col md:flex-row gap-4 mb-6">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
+                    <Input 
+                      placeholder="Search keywords..." 
+                      value={searchFilter} 
+                      onChange={(e) => setSearchFilter(e.target.value)} 
+                      className="pl-10" 
+                    />
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  {filteredKeywords.length > 0 ? filteredKeywords.map((keyword) => (
+                    <div
+                      key={keyword.term}
+                      className={`flex items-center justify-between p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                        selectedKeywords.includes(keyword.term) 
+                          ? 'border-blue-500 bg-blue-50' 
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                      onClick={() => toggleKeyword(keyword.term)}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                          selectedKeywords.includes(keyword.term) ? 'bg-blue-500' : 'bg-slate-200'
+                        }`}>
+                          {selectedKeywords.includes(keyword.term) && <Check className="w-4 h-4 text-white" />}
+                        </div>
+                        <span className="font-medium text-slate-800">{keyword.term}</span>
+                      </div>
+                      <div className="flex items-center space-x-4 text-sm text-right">
+                        <div className="w-20">
+                          <div className="font-semibold text-slate-700">{keyword.volume.toLocaleString()}</div>
+                          <div className="text-xs text-slate-500">Volume</div>
+                        </div>
+                        <Badge className={`w-16 justify-center ${
+                          keyword.difficulty === 'Low' ? 'bg-green-100 text-green-800' : 
+                          keyword.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {keyword.difficulty}
+                        </Badge>
+                      </div>
+                    </div>
+                  )) : <NoResultsCard />}
+                </div>
+              </CardContent>
+            )}
+          </Card>
         </div>
 
         <div className="space-y-6">
@@ -414,8 +596,8 @@ const Footer: React.FC<FooterProps> = ({ onPrev, onNext, isSaving, selectedCount
         setSaving(true);
         try {
             const url = versionId 
-              ? `https://phrase-score-insight.onrender.com/api/keywords/${domainId}/selection?versionId=${versionId}`
-              : `https://phrase-score-insight.onrender.com/api/keywords/${domainId}/selection`;
+              ? `${import.meta.env.VITE_API_URL}/api/keywords/${domainId}/selection?versionId=${versionId}`
+              : `${import.meta.env.VITE_API_URL}/api/keywords/${domainId}/selection`;
             
             const response = await fetch(url, {
               method: 'PATCH',

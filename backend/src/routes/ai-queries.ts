@@ -111,7 +111,8 @@ async function processQueryBatch(
   completedQueries: { current: number }, 
   totalQueries: number,
   domain?: string,
-  context?: string
+  context?: string,
+  location?: string // <-- add location as string
 ) {
   const batches = [];
   for (let i = 0; i < queries.length; i += batchSize) {
@@ -146,7 +147,7 @@ async function processQueryBatch(
           res.write(`event: progress\ndata: ${JSON.stringify({ message: `Querying ${model} for "${query.phrase}" - Generating comprehensive search response...` })}\n\n`);
           
           // Get AI response using Gemini under the hood with timeout and domain context
-          const queryPromise = aiQueryService.query(query.phrase, model, domain);
+          const queryPromise = aiQueryService.query(query.phrase, model, domain, location);
           const timeoutPromise = new Promise<never>((_, reject) => 
             setTimeout(() => reject(new Error('Query timeout - AI model taking too long to respond')), 25000)
           );
@@ -265,7 +266,8 @@ router.post('/analyze', authenticateToken, asyncHandler(async (req: Authenticate
 
     // Check domain ownership
     const domain = await prisma.domain.findUnique({
-      where: { id: parseInt(domainId) }
+      where: { id: parseInt(domainId) },
+      select: { url: true, userId: true, location: true }
     });
 
     if (!domain) {
@@ -311,7 +313,17 @@ router.post('/analyze', authenticateToken, asyncHandler(async (req: Authenticate
     }
 
     // Analyze with AI
-    const result = await aiQueryService.analyzePhrase(phrase, domain.url);
+    // const result = await aiQueryService.analyzePhrase(phrase, domain.url);
+    // Instead, use aiQueryService.query and aiQueryService.scoreResponse
+    const aiQuery = await aiQueryService.query(phrase, 'GPT-4o Mini', domain.url, domain.location || undefined);
+    const scores = await aiQueryService.scoreResponse(phrase, aiQuery.response, 'GPT-4o Mini', domain.url, domain.location || undefined);
+    const result = {
+      model: 'GPT-4o Mini',
+      response: aiQuery.response,
+      latency: 0, // Optionally calculate if needed
+      cost: aiQuery.cost,
+      scores
+    };
 
     // Save the result
     const aiResult = await prisma.aIQueryResult.create({
@@ -355,7 +367,8 @@ router.post('/batch-analyze', authenticateToken, asyncHandler(async (req: Authen
 
     // Check domain ownership
     const domain = await prisma.domain.findUnique({
-      where: { id: parseInt(domainId) }
+      where: { id: parseInt(domainId) },
+      select: { url: true, userId: true, location: true }
     });
 
     if (!domain) {
@@ -409,7 +422,17 @@ router.post('/batch-analyze', authenticateToken, asyncHandler(async (req: Authen
         }
 
         // Analyze with AI
-        const result = await aiQueryService.analyzePhrase(phrase, domain.url);
+        // const result = await aiQueryService.analyzePhrase(phrase, domain.url);
+        // Instead, use aiQueryService.query and aiQueryService.scoreResponse
+        const aiQuery = await aiQueryService.query(phrase, 'GPT-4o Mini', domain.url, domain.location || undefined);
+        const scores = await aiQueryService.scoreResponse(phrase, aiQuery.response, 'GPT-4o Mini', domain.url, domain.location || undefined);
+        const result = {
+          model: 'GPT-4o Mini',
+          response: aiQuery.response,
+          latency: 0, // Optionally calculate if needed
+          cost: aiQuery.cost,
+          scores
+        };
 
         // Save the result
         const aiResult = await prisma.aIQueryResult.create({
@@ -434,7 +457,11 @@ router.post('/batch-analyze', authenticateToken, asyncHandler(async (req: Authen
         });
       } catch (error) {
         console.error(`Error analyzing phrase "${phraseData.phrase}":`, error);
-        errors.push({ phrase: phraseData.phrase, error: error.message });
+        if (error instanceof Error) {
+          errors.push({ phrase: phraseData.phrase, error: error.message });
+        } else {
+          errors.push({ phrase: phraseData.phrase, error: String(error) });
+        }
       }
     }
 
@@ -554,7 +581,7 @@ router.delete('/results/:resultId', authenticateToken, asyncHandler(async (req: 
       return res.status(404).json({ error: 'AI query result not found' });
     }
 
-    if (result.phrase.keyword.domain.userId !== req.user.userId) {
+    if (result.phrase.keyword.domain && result.phrase.keyword.domain.userId !== req.user.userId) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -718,7 +745,7 @@ router.post('/:domainId', async (req, res) => {
         // Get domain information for context
         const domainObj = await prisma.domain.findUnique({
             where: { id: domainId },
-            select: { url: true, context: true }
+            select: { url: true, context: true, location: true }
         });
 
         if (!domainObj) {
@@ -728,6 +755,7 @@ router.post('/:domainId', async (req, res) => {
         }
         const domain = domainObj.url || undefined;
         const context = domainObj.context || undefined;
+        const location = domainObj.location || undefined;
 
         const allQueries = phrases.flatMap((item: any) =>
             item.phrases.map((phrase: string) => ({
@@ -747,7 +775,7 @@ router.post('/:domainId', async (req, res) => {
         res.write(`event: progress\ndata: ${JSON.stringify({ message: `Initializing AI analysis engine - Processing ${totalQueries} queries across ${AI_MODELS.length} AI models for domain visibility analysis...` })}\n\n`);
 
         // Process queries in optimized batches with domain context
-        await processQueryBatch(allQueries, batchSize, res, allResults, completedQueries, totalQueries, domain, context);
+        await processQueryBatch(allQueries, batchSize, res, allResults, completedQueries, totalQueries, domain, context, location);
 
         res.write(`event: complete\ndata: {}\n\n`);
         res.end();

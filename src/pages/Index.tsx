@@ -36,6 +36,7 @@ const Index = () => {
   const [customPaths, setCustomPaths] = useState<string[]>([]);
   const [priorityUrls, setPriorityUrls] = useState<string[]>([]);
   const [priorityPaths, setPriorityPaths] = useState<string[]>([]);
+  const [location, setLocation] = useState<string>('');
   const [isSavingMain, setIsSavingMain] = useState(false);
   const [resumeStep, setResumeStep] = useState<number | undefined>(undefined);
   const { user, loading: authLoading } = useAuth();
@@ -81,6 +82,9 @@ const Index = () => {
               }
               if (resumeCheck.stepData?.domainId) {
                 setDomainId(resumeCheck.stepData.domainId);
+              }
+              if (resumeCheck.stepData?.location) {
+                setLocation(resumeCheck.stepData.location);
               }
               setResumeStep(undefined);
             }
@@ -236,7 +240,7 @@ const Index = () => {
         // Trigger first-time AI analysis before redirecting to dashboard
         try {
           console.log('Triggering first-time AI analysis for dashboard...');
-          const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}/first-time-analysis`, {
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/dashboard/${domainId}/first-time-analysis`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -296,6 +300,11 @@ const Index = () => {
       console.log('Restored brandContext');
     }
     
+    if (stepData.location) {
+      setLocation(stepData.location);
+      console.log('Restored location:', stepData.location);
+    }
+    
     if (stepData.selectedKeywords && Array.isArray(stepData.selectedKeywords)) {
       setSelectedKeywords(stepData.selectedKeywords);
       console.log('Restored selectedKeywords:', stepData.selectedKeywords.length);
@@ -340,6 +349,7 @@ const Index = () => {
     setDomainId(0);
     setVersionId(null);
     setBrandContext('');
+    setLocation('');
     setSelectedKeywords([]);
     setGeneratedPhrases([]);
     setQueryResults([]);
@@ -513,6 +523,8 @@ const Index = () => {
           setPriorityUrls={setPriorityUrls}
           priorityPaths={priorityPaths}
           setPriorityPaths={setPriorityPaths}
+          location={location}
+          setLocation={setLocation}
           onNext={nextStep} 
         />
       )}
@@ -527,6 +539,7 @@ const Index = () => {
           customPaths={customPaths}
           priorityUrls={priorityUrls}
           priorityPaths={priorityPaths}
+          location={location}
           onNext={nextStep}
           onPrev={prevStep}
         />
@@ -545,6 +558,7 @@ const Index = () => {
                 domainId,
                 versionId,
                 brandContext,
+                location,
                 selectedKeywords,
                 generatedPhrases,
                 queryResults,

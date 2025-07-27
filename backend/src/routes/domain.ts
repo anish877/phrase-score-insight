@@ -7,16 +7,17 @@ const router = Router();
 const prisma = new PrismaClient();
 
 // Add asyncHandler utility at the top if not present
-function asyncHandler(fn: (req: AuthenticatedRequest, res: Response, next: any) => Promise<any>) {
-  return function (req: AuthenticatedRequest, res: Response, next: any) {
+function asyncHandler(fn: (req: Request, res: Response, next: any) => Promise<any>) {
+  return function (req: Request, res: Response, next: any) {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
 }
 
 // GET /domain/check/:url - Check if domain exists and return version info
-router.get('/check/:url', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.get('/check/:url', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
   try {
     const { url } = req.params;
+    const authReq = req as AuthenticatedRequest;
     
     // Try multiple URL formats to find the domain
     const possibleUrls = [
@@ -50,7 +51,7 @@ router.get('/check/:url', authenticateToken, asyncHandler(async (req: Authentica
       }
     }
 
-    if (!domain || domain.userId !== req.user.userId) {
+    if (!domain || domain.userId !== authReq.user.userId) {
       return res.json({ exists: false });
     }
 
@@ -88,8 +89,9 @@ router.get('/check/:url', authenticateToken, asyncHandler(async (req: Authentica
 }));
 
 // POST /domain - create/find domain, run extraction, and stream progress
-router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  const { url, subdomains, customPaths, priorityUrls, createNewVersion = false, versionName } = req.body;
+router.post('/', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
+  const { url, subdomains, customPaths, priorityUrls, createNewVersion = false, versionName, location } = req.body;
   
   // Validate input before setting SSE headers
   if (!url) {
@@ -139,9 +141,17 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
     let isNewVersion = false;
 
     if (domain) {
-      if (domain.userId !== req.user.userId) {
+      if (domain.userId !== authReq.user.userId) {
         sendErrorAndEnd('Access denied', 'You do not have permission to access this domain');
         return;
+      }
+      // Update location if provided and different
+      if (location && location !== domain.location) {
+        await prisma.domain.update({
+          where: { id: domain.id },
+          data: { location }
+        });
+        domain.location = location;
       }
       if (createNewVersion) {
         // Create new version
@@ -172,7 +182,8 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
         data: { 
           url: domainsToExtract[0],
           version: 1,
-          userId: req.user.userId
+          userId: authReq.user.userId,
+          location: location || null
         },
         include: {
           versions: true
@@ -306,10 +317,11 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
     console.error('Domain extraction streaming error:', err);
     sendErrorAndEnd('Failed to process domain', err.message);
   }
-});
+}));
 
 // GET /domain/search - search domain by URL
-router.get('/search', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+router.get('/search', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
   const { url } = req.query;
   if (!url) { 
     res.status(400).json({ error: 'URL parameter is required' }); 
@@ -330,7 +342,7 @@ router.get('/search', authenticateToken, async (req: AuthenticatedRequest, res: 
       }
     });
     
-    if (!domain || domain.userId !== req.user.userId) { 
+    if (!domain || domain.userId !== authReq.user.userId) { 
       res.status(404).json({ error: 'Domain not found' }); 
       return; 
     }
@@ -340,10 +352,11 @@ router.get('/search', authenticateToken, async (req: AuthenticatedRequest, res: 
     console.error('Domain search error:', err);
     res.status(500).json({ error: 'Failed to search domain', details: err.message });
   }
-});
+}));
 
 // GET /domain/:id - get domain and extraction data
-router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+router.get('/:id', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
   const id = Number(req.params.id);
   if (!id) { res.status(400).json({ error: 'Domain id is required' }); return; }
   
@@ -362,7 +375,7 @@ router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Res
       } 
     });
     
-    if (!domain || domain.userId !== req.user.userId) { res.status(404).json({ error: 'Domain not found' }); return; }
+    if (!domain || domain.userId !== authReq.user.userId) { res.status(404).json({ error: 'Domain not found' }); return; }
     
     // Find the latest version
     const latestVersion = domain.versions[0]; // Versions are ordered by desc
@@ -384,10 +397,11 @@ router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Res
     console.error('Domain fetch error:', err);
     res.status(500).json({ error: 'Failed to fetch domain', details: err.message });
   }
-});
+}));
 
 // GET /domain/:id/versions - get all versions for a domain
-router.get('/:id/versions', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.get('/:id/versions', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
   const domainId = Number(req.params.id);
   
   if (!domainId) {
@@ -396,7 +410,7 @@ router.get('/:id/versions', authenticateToken, asyncHandler(async (req: Authenti
 
   // Fetch domain to check ownership
   const domain = await prisma.domain.findUnique({ where: { id: domainId } });
-  if (!domain || domain.userId !== req.user.userId) {
+  if (!domain || domain.userId !== authReq.user.userId) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
@@ -485,7 +499,8 @@ router.get('/:id/versions', authenticateToken, asyncHandler(async (req: Authenti
 }));
 
 // GET /domain/:domainId/versions - Get all versions for a domain
-router.get('/:domainId/versions', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.get('/:domainId/versions', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
   try {
     const { domainId } = req.params;
     const id = Number(domainId);
@@ -496,7 +511,7 @@ router.get('/:domainId/versions', authenticateToken, asyncHandler(async (req: Au
 
     // Fetch domain to check ownership
     const domain = await prisma.domain.findUnique({ where: { id } });
-    if (!domain || domain.userId !== req.user.userId) {
+    if (!domain || domain.userId !== authReq.user.userId) {
       return res.status(403).json({ error: 'Access denied' });
     }
 

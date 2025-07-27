@@ -65,6 +65,9 @@ router.get('/:domainId', async (req: any, res: Response) => {
     }
     const domain = domainObj?.url || '';
     const context = domainObj?.context || '';
+    const location = domainObj?.location && domainObj.location.trim() ? domainObj.location.trim() : undefined;
+    
+
 
     if (!keywords.length) {
       console.log(`No selected keywords found for domain ${domainId}, versionId: ${versionId}`);
@@ -78,7 +81,7 @@ router.get('/:domainId', async (req: any, res: Response) => {
     let totalAIQueries = 0;
     let phrasesPerKeyword: Record<string, number> = {};
     
-    sendEvent('progress', { message: 'Initializing advanced AI phrase generation engine...' });
+    sendEvent('progress', { message: 'Initializing intent-based AI phrase generation engine...' });
     sendEvent('stats', { 
       totalKeywords: keywords.length, 
       totalPhrases: 0, 
@@ -89,10 +92,10 @@ router.get('/:domainId', async (req: any, res: Response) => {
     for (let i = 0; i < keywords.length; i++) {
       const { id: keywordId, term } = keywords[i];
       try {
-        sendEvent('progress', { message: `Generating high-converting phrases for "${term}" (${i+1}/${keywords.length}) - Analyzing search intent patterns...` });
+        sendEvent('progress', { message: `Generating intent-based phrases for "${term}" (${i+1}/${keywords.length}) - Creating brand discovery queries...` });
         
         // Generate phrases using AI, now with domain and context
-        const phrasesResult = await gptService.generatePhrases(term, domain, context);
+        const phrasesResult = await gptService.generatePhrases(term, domain, context, location);
         totalAIQueries += 1; // Count each AI call
         
         phrasesPerKeyword[term] = 0;
@@ -124,7 +127,7 @@ router.get('/:domainId', async (req: any, res: Response) => {
           });
         }
         
-        sendEvent('progress', { message: `Generated ${phrasesResult.phrases.length} high-impact phrases for "${term}" - Optimized for search intent and conversion...` });
+        sendEvent('progress', { message: `Generated ${phrasesResult.phrases.length} intent-based phrases for "${term}" - Optimized for brand discovery and user intent...` });
         
       } catch (err: any) {
         console.error(`Failed to generate phrases for "${term}":`, err);
@@ -132,7 +135,7 @@ router.get('/:domainId', async (req: any, res: Response) => {
       }
     }
 
-    sendEvent('progress', { message: `Advanced AI phrase generation complete! Generated ${totalPhrases} high-converting phrases from ${totalAIQueries} AI intelligence queries.` });
+    sendEvent('progress', { message: `Intent-based AI phrase generation complete! Generated ${totalPhrases} brand discovery phrases from ${totalAIQueries} AI intelligence queries.` });
     sendEvent('complete', {});
     res.end();
   } catch (err: any) {

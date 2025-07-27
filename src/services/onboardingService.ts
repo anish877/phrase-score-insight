@@ -12,6 +12,7 @@ export interface OnboardingStepData {
   domainId?: number;
   versionId?: number | null;
   brandContext?: string;
+  location?: string;
   selectedKeywords?: string[];
   generatedPhrases?: Array<{keyword: string, phrases: string[]}>;
   queryResults?: any[];
@@ -41,7 +42,7 @@ export interface ResumeCheckResult {
 }
 
 class OnboardingService {
-  private baseUrl = 'https://phrase-score-insight.onrender.com/api/onboarding';
+  private baseUrl = `${import.meta.env.VITE_API_URL}/api/onboarding`;
   private autoSaveTimeout: NodeJS.Timeout | null = null;
 
   // Save onboarding progress

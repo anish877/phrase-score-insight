@@ -4,7 +4,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not set in environment variables');
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
-async function queryWithGpt4o(phrase: string, modelType: 'GPT-4o Mini' | 'Claude 3' | 'Gemini 1.5' = 'GPT-4o Mini', domain?: string): Promise<{ response: string, cost: number }> {
+async function queryWithGpt4o(phrase: string, modelType: 'GPT-4o Mini' | 'Claude 3' | 'Gemini 1.5' = 'GPT-4o Mini', domain?: string, location?: string): Promise<{ response: string, cost: number }> {
     // Use different system prompts for each modelType, but always call GPT-4o
     let systemPrompt = '';
     if (modelType === 'GPT-4o Mini') {
@@ -88,11 +88,13 @@ TONE AND APPROACH:
 - Current and up-to-date
 - Clear and well-structured`;
     }
+    const locationContext = location ? `\nLocation: ${location}` : '';
+    const userPrompt = `Please provide a detailed, comprehensive response to this search query: ${phrase}${domain ? `\nDomain: ${domain}` : ''}${locationContext}`;
     const completion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Please provide a detailed, comprehensive response to this search query: ${phrase}` }
+            { role: 'user', content: userPrompt }
         ],
         max_tokens: 2000,
         temperature: 0.7
@@ -105,13 +107,14 @@ TONE AND APPROACH:
     return { response: responseText, cost };
 }
 
-async function scoreResponseWithAI(phrase: string, response: string, model: string, domain?: string): Promise<{ presence: number; relevance: number; accuracy: number; sentiment: number; overall: number; }> {
+async function scoreResponseWithAI(phrase: string, response: string, model: string, domain?: string, location?: string): Promise<{ presence: number; relevance: number; accuracy: number; sentiment: number; overall: number; }> {
     // Use GPT-4o for scoring as well
     const domainContext = domain ? `\n\nTARGET DOMAIN: ${domain}` : '';
+    const locationContext = location ? `\nLOCATION: ${location}` : '';
     const scoringPrompt = `You are an advanced SEO analysis tool, simulating the behavior of a real-world search engine evaluator. Your job is to assess, with extreme realism and strictness, how likely it is that the TARGET DOMAIN would appear in the top search results for a given query, based on a simulated AI-generated SERP response.
 
 SEARCH QUERY: "${phrase}"
-AI RESPONSE: "${response}"${domainContext}
+AI RESPONSE: "${response}"${domainContext}${locationContext}
 
 EVALUATION INSTRUCTIONS:
 - Simulate a real-world Google SERP, considering domain authority, topical relevance, content quality, and the competitive landscape for the query.
@@ -227,10 +230,10 @@ Be extremely strict and realistic in your evaluation. Return ONLY the JSON objec
 }
 
 export const aiQueryService = {
-    query: async (phrase: string, model: 'GPT-4o Mini' | 'Claude 3' | 'Gemini 1.5', domain?: string): Promise<{ response: string, cost: number }> => {
-        return await queryWithGpt4o(phrase, model, domain);
+    query: async (phrase: string, model: 'GPT-4o Mini' | 'Claude 3' | 'Gemini 1.5', domain?: string, location?: string): Promise<{ response: string, cost: number }> => {
+        return await queryWithGpt4o(phrase, model, domain, location);
     },
-    scoreResponse: async (phrase: string, response: string, model: string, domain?: string): Promise<{ presence: number; relevance: number; accuracy: number; sentiment: number; overall: number; }> => {
-        return await scoreResponseWithAI(phrase, response, model, domain);
+    scoreResponse: async (phrase: string, response: string, model: string, domain?: string, location?: string): Promise<{ presence: number; relevance: number; accuracy: number; sentiment: number; overall: number; }> => {
+        return await scoreResponseWithAI(phrase, response, model, domain, location);
     }
 }; 

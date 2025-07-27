@@ -6,9 +6,9 @@ const router = Router();
 const prisma = new PrismaClient();
 
 // Utility function to wrap async route handlers
-function asyncHandler(fn: any) {
+function asyncHandler(fn: (req: AuthenticatedRequest, res: Response, next?: any) => Promise<any>) {
   return (req: Request, res: Response, next: any) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
+    Promise.resolve(fn(req as AuthenticatedRequest, res, next)).catch(next);
   };
 }
 
@@ -221,7 +221,7 @@ router.get('/resume/:domainId', authenticateToken, asyncHandler(async (req: Auth
 
     // Determine what data is available for resumption
     const hasDomainContext = !!progress.domain?.context;
-    const hasKeywords = progress.domain?.keywords?.length > 0;
+    const hasKeywords = Array.isArray(progress.domain?.keywords) && progress.domain.keywords.length > 0;
     const hasPhrases = phrases.length > 0;
     const hasAIResults = aiResults.length > 0;
 
@@ -264,7 +264,7 @@ router.get('/resume/:domainId', authenticateToken, asyncHandler(async (req: Auth
         where: { 
           domainId_domainVersionId: {
             domainId,
-            domainVersionId: versionId ?? null
+            domainVersionId: typeof versionId === 'number' && !isNaN(versionId) ? versionId : 0
           }
         },
         data: {

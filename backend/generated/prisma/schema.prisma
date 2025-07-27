@@ -1,0 +1,194 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  domains   Domain[]
+}
+
+model Domain {
+  id                   Int                   @id @default(autoincrement())
+  url                  String                @unique
+  context              String?               @db.Text
+  version              Int                   @default(1) // Track current version number
+  userId               Int?
+  user                 User?                 @relation(fields: [userId], references: [id])
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  crawlResults         CrawlResult[]
+  keywords             Keyword[]
+  dashboardAnalyses    DashboardAnalysis[]
+  competitorAnalyses   CompetitorAnalysis[]
+  suggestedCompetitors SuggestedCompetitor[]
+  onboardingProgresses OnboardingProgress[]
+  versions             DomainVersion[] // Link to all versions
+  location             String? // User's location (city/country)
+}
+
+// New model to track different versions of domain analysis
+model DomainVersion {
+  id        Int      @id @default(autoincrement())
+  domain    Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  domainId  Int
+  version   Int // Version number
+  name      String? // Optional version name/description
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Analysis data for this version
+  crawlResults         CrawlResult[]
+  keywords             Keyword[]
+  dashboardAnalyses    DashboardAnalysis[]
+  competitorAnalyses   CompetitorAnalysis[]
+  suggestedCompetitors SuggestedCompetitor[]
+  onboardingProgresses OnboardingProgress[]
+
+  @@unique([domainId, version])
+  @@index([domainId, version])
+}
+
+model CrawlResult {
+  id               Int            @id @default(autoincrement())
+  domain           Domain?        @relation(fields: [domainId], references: [id])
+  domainId         Int?
+  domainVersion    DomainVersion? @relation(fields: [domainVersionId], references: [id])
+  domainVersionId  Int?
+  pagesScanned     Int
+  contentBlocks    Int
+  keyEntities      Int
+  confidenceScore  Float
+  extractedContext String         @db.Text
+  tokenUsage       Int? // Add this line to persist GPT token usage
+  createdAt        DateTime       @default(now())
+}
+
+// New models for keywords with versioning support
+model Keyword {
+  id              Int            @id @default(autoincrement())
+  term            String
+  volume          Int
+  difficulty      String
+  cpc             Float
+  domainId        Int?
+  domain          Domain?        @relation(fields: [domainId], references: [id])
+  domainVersionId Int?
+  domainVersion   DomainVersion? @relation(fields: [domainVersionId], references: [id])
+  isSelected      Boolean        @default(false)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  phrases         Phrase[]
+
+  @@unique([term, domainId, domainVersionId])
+  @@index([domainId, domainVersionId])
+}
+
+model Phrase {
+  id             Int             @id @default(autoincrement())
+  text           String
+  keyword        Keyword         @relation(fields: [keywordId], references: [id])
+  keywordId      Int
+  aiQueryResults AIQueryResult[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model AIQueryResult {
+  id        Int      @id @default(autoincrement())
+  phrase    Phrase   @relation(fields: [phraseId], references: [id])
+  phraseId  Int
+  model     String
+  response  String   @db.Text
+  latency   Float
+  cost      Float
+  presence  Int
+  relevance Int
+  accuracy  Int
+  sentiment Int
+  overall   Float
+  createdAt DateTime @default(now())
+}
+
+// New models for storing AI analysis results with versioning support
+model DashboardAnalysis {
+  id               Int            @id @default(autoincrement())
+  domain           Domain?        @relation(fields: [domainId], references: [id])
+  domainId         Int?
+  domainVersion    DomainVersion? @relation(fields: [domainVersionId], references: [id])
+  domainVersionId  Int?
+  metrics          Json // Store all metrics as JSON
+  insights         Json // Store insights as JSON
+  industryAnalysis Json // Store industry analysis as JSON
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([domainId, domainVersionId])
+}
+
+model CompetitorAnalysis {
+  id                       Int            @id @default(autoincrement())
+  domain                   Domain?        @relation(fields: [domainId], references: [id])
+  domainId                 Int?
+  domainVersion            DomainVersion? @relation(fields: [domainVersionId], references: [id])
+  domainVersionId          Int?
+  competitors              Json // Store competitors array as JSON
+  marketInsights           Json // Store market insights as JSON
+  strategicRecommendations Json // Store recommendations as JSON
+  competitiveAnalysis      Json // Store competitive analysis as JSON
+  competitorList           String         @db.Text // Store the list of competitors analyzed
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
+
+  @@index([domainId, domainVersionId])
+}
+
+model SuggestedCompetitor {
+  id               Int            @id @default(autoincrement())
+  domain           Domain?        @relation(fields: [domainId], references: [id])
+  domainId         Int?
+  domainVersion    DomainVersion? @relation(fields: [domainVersionId], references: [id])
+  domainVersionId  Int?
+  name             String
+  competitorDomain String
+  reason           String         @db.Text
+  type             String // 'direct' or 'indirect'
+  createdAt        DateTime       @default(now())
+
+  @@index([domainId, domainVersionId])
+}
+
+// Onboarding Progress Tracking with versioning support
+model OnboardingProgress {
+  id              Int            @id @default(autoincrement())
+  domainId        Int?
+  domain          Domain?        @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  domainVersionId Int?
+  domainVersion   DomainVersion? @relation(fields: [domainVersionId], references: [id], onDelete: Cascade)
+  currentStep     Int            @default(0) // 0-5 for the 6 steps
+  isCompleted     Boolean        @default(false)
+  stepData        Json? // Store step-specific data
+  lastActivity    DateTime       @default(now())
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([domainId, domainVersionId]) // Ensure one progress record per domain OR version
+  @@index([isCompleted])
+  @@index([lastActivity])
+}

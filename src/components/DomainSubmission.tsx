@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import type { CSSObjectWithLabel } from 'react-select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -8,6 +9,9 @@ import { CheckCircle, Globe, Shield, TrendingUp, Clock, Plus, Upload, History, A
 import { useToast } from '@/components/ui/use-toast';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import Select from 'react-select';
+import countryList from 'react-select-country-list';
+import { City, Country } from 'country-state-city';
 
 interface DomainSubmissionProps {
   domain: string;
@@ -21,6 +25,8 @@ interface DomainSubmissionProps {
   setPriorityUrls?: (urls: string[]) => void;
   priorityPaths?: string[];
   setPriorityPaths?: (paths: string[]) => void;
+  location?: string;
+  setLocation?: (location: string) => void;
 }
 
 interface DomainVersion {
@@ -53,7 +59,9 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
   priorityUrls: priorityUrlsProp,
   setPriorityUrls: setPriorityUrlsProp,
   priorityPaths: priorityPathsProp,
-  setPriorityPaths: setPriorityPathsProp
+  setPriorityPaths: setPriorityPathsProp,
+  location: locationProp,
+  setLocation: setLocationProp
 }) => {
   const [customPaths, setCustomPathsState] = useState<string[]>(customPathsProp || []);
   const [priorityUrls, setPriorityUrlsState] = useState<string[]>(priorityUrlsProp || []);
@@ -64,13 +72,31 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
   const [versionName, setVersionName] = useState('');
   const [isCreatingVersion, setIsCreatingVersion] = useState(false);
   const { toast } = useToast();
+  const [selectedCountry, setSelectedCountry] = useState<{ value: string; label: string } | null>(null);
+  const [selectedCity, setSelectedCity] = useState<{ value: string; label: string } | null>(null);
+  const countryOptions = countryList().getData();
+  const cityOptions = selectedCountry
+    ? City.getCitiesOfCountry(selectedCountry.value).map(city => ({ value: city.name, label: city.name }))
+    : [];
+  const [location, setLocationState] = useState<string>(locationProp || '');
 
   // Sync with parent state
   useEffect(() => {
     if (setCustomPathsProp) setCustomPathsProp(customPaths);
     if (setPriorityUrlsProp) setPriorityUrlsProp(priorityUrls);
     if (setPriorityPathsProp) setPriorityPathsProp(priorityPaths);
-  }, [customPaths, priorityUrls, priorityPaths, setCustomPathsProp, setPriorityUrlsProp, setPriorityPathsProp]);
+    if (setLocationProp) setLocationProp(location);
+  }, [customPaths, priorityUrls, priorityPaths, setCustomPathsProp, setPriorityUrlsProp, setPriorityPathsProp, location, setLocationProp]);
+
+  // Update location state when both are selected
+  useEffect(() => {
+    if (selectedCountry && selectedCity) {
+      setLocationState(`${selectedCity.label}, ${selectedCountry.label}`);
+    } else {
+      setLocationState('');
+    }
+    // eslint-disable-next-line
+  }, [selectedCountry, selectedCity]);
 
   const validateDomain = (value: string) => {
     // Only allow domains, not full URLs
@@ -207,7 +233,7 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
 
     setIsLoading(true);
     try {
-      const response = await fetch(`https://phrase-score-insight.onrender.com/api/domain/check/${encodeURIComponent(domain.trim())}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/domain/check/${encodeURIComponent(domain.trim())}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json',
@@ -246,7 +272,7 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
     
     setIsCreatingVersion(true);
     try {
-      const response = await fetch('https://phrase-score-insight.onrender.com/api/domain', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/domain`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -258,7 +284,8 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
           versionName: versionName || `Version ${(domainCheckResult.currentVersion || 0) + 1}`,
           customPaths,
           priorityUrls,
-          priorityPaths
+          priorityPaths,
+          location // Pass location to backend
         })
       });
 
@@ -312,7 +339,7 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
       });
       return;
     }
-
+    // Optionally validate location (not required)
     // Check if domain exists first
     const result = await checkDomain();
     
@@ -333,6 +360,11 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const selectMenuPortalTarget = typeof window !== 'undefined' ? document.body : undefined;
+  const selectStyles = {
+    menuPortal: (base: CSSObjectWithLabel, _props: unknown): CSSObjectWithLabel => ({ ...base, zIndex: 9999 }),
   };
 
   return (
@@ -376,6 +408,39 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
               >
                 {isLoading ? 'Checking...' : 'Check Domain'}
               </Button>
+            </div>
+            {/* Location Input */}
+            <div className="flex gap-4 mt-4 text-sm text-gray-500">
+              <div className="flex-1">
+                <Label htmlFor="country" className="text-sm text-gray-500">Country</Label>
+                <Select
+                  id="country"
+                  options={countryOptions}
+                  value={selectedCountry}
+                  onChange={option => {
+                    setSelectedCountry(option);
+                    setSelectedCity(null); // Reset city when country changes
+                  }}
+                  placeholder="Select country..."
+                  classNamePrefix="react-select"
+                  menuPortalTarget={selectMenuPortalTarget}
+                  styles={selectStyles}
+                />
+              </div>
+              <div className="flex-1 text-sm text-gray-500">
+                <Label htmlFor="city" className="text-sm text-gray-500">State</Label>
+                <Select
+                  id="city"
+                  options={cityOptions}
+                  value={selectedCity}
+                  onChange={option => setSelectedCity(option)}
+                  placeholder={selectedCountry ? "Select city..." : "Select country first"}
+                  isDisabled={!selectedCountry}
+                  classNamePrefix="react-select"
+                  menuPortalTarget={selectMenuPortalTarget}
+                  styles={selectStyles}
+                />
+              </div>
             </div>
             
             {domainCheckResult && (

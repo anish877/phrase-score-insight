@@ -42,8 +42,8 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
       const phrasesMap: Record<string, string[]> = {};
       const token = localStorage.getItem('authToken');
       const url = versionId 
-        ? `https://phrase-score-insight.onrender.com/api/phrases/${domainId}?versionId=${versionId}&token=${encodeURIComponent(token || '')}`
-        : `https://phrase-score-insight.onrender.com/api/phrases/${domainId}?token=${encodeURIComponent(token || '')}`;
+        ? `${import.meta.env.VITE_API_URL}/api/phrases/${domainId}?versionId=${versionId}&token=${encodeURIComponent(token || '')}`
+        : `${import.meta.env.VITE_API_URL}/api/phrases/${domainId}?token=${encodeURIComponent(token || '')}`;
       const ctrl = new AbortController();
 
       // Create a custom EventSource with authorization header
@@ -159,7 +159,7 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
           Phrase Generation
         </h2>
         <p className="text-lg text-slate-600">
-          AI-Generated Phrases
+          Intent-Based AI Phrases for Brand Discovery
         </p>
       </div>
 
@@ -168,7 +168,7 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
           <CardContent className="py-12">
             <div className="text-center space-y-4">
               <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-blue-600 mx-auto"></div>
-              <h3 className="text-xl font-semibold text-slate-900">AI Generating Phrases...</h3>
+              <h3 className="text-xl font-semibold text-slate-900">AI Generating Intent-Based Phrases...</h3>
               <p className="text-slate-600">{progressMsg}</p>
               <div className="text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded-full inline-block">
                 AI Processing
@@ -189,7 +189,7 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
             <Card className="shadow-sm border border-slate-200">
               <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-blue-600">{stats.totalPhrases}</div>
-                <div className="text-sm text-slate-600">AI-Generated Phrases</div>
+                <div className="text-sm text-slate-600">Intent-Based Phrases</div>
               </CardContent>
             </Card>
             <Card className="shadow-sm border border-slate-200">
@@ -213,10 +213,10 @@ const PhraseGeneration: React.FC<PhraseGenerationProps> = ({
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between text-slate-900">
                     <span>{item.keyword}</span>
-                    <Badge variant="secondary" className="bg-slate-100 text-slate-700">{item.phrases.length} AI phrases</Badge>
+                    <Badge variant="secondary" className="bg-slate-100 text-slate-700">{item.phrases.length} intent phrases</Badge>
                   </CardTitle>
                   <CardDescription className="text-slate-600">
-                    AI-generated search phrases for this keyword
+                    Intent-based search phrases for brand discovery
                   </CardDescription>
                 </CardHeader>
                 <CardContent>

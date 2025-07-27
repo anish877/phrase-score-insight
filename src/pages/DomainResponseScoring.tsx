@@ -84,8 +84,8 @@ const DomainResponseScoring: React.FC = () => {
     
     // Build URL with versionId if available
     const url = versionId 
-      ? `https://phrase-score-insight.onrender.com/api/dashboard/${domainId}?versionId=${versionId}`
-      : `https://phrase-score-insight.onrender.com/api/dashboard/${domainId}`;
+      ? `${import.meta.env.VITE_API_URL}/api/dashboard/${domainId}?versionId=${versionId}`
+      : `${import.meta.env.VITE_API_URL}/api/dashboard/${domainId}`;
       
     fetch(url, {
       headers: {
@@ -191,7 +191,7 @@ const DomainResponseScoring: React.FC = () => {
             // Trigger first-time AI analysis before redirecting to dashboard
             try {
               console.log('Triggering first-time AI analysis for dashboard...');
-              const response = await fetch(`https://phrase-score-insight.onrender.com/api/dashboard/${domainId}/first-time-analysis`, {
+              const response = await fetch(`${import.meta.env.VITE_API_URL}/api/dashboard/${domainId}/first-time-analysis`, {
                 method: 'POST',
                 headers: {
                   'Authorization': `Bearer ${localStorage.getItem('authToken')}`,

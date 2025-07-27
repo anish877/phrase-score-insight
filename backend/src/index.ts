@@ -23,7 +23,9 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',
   'http://localhost:4173',
-  'https://phrase-score-insight-lxkj.vercel.app'
+  'https://aichecker.blueoceanglobaltech.com',
+  'https://phrase-score-insight-lxkj.vercel.app',
+  'https://domainanalyzer-rosy.vercel.app'
 ];
 
 const corsOptions: cors.CorsOptions = {
@@ -34,7 +36,8 @@ const corsOptions: cors.CorsOptions = {
     } else {
       callback(new Error('Not allowed by CORS'));
     }
-  }
+  },
+  credentials: true
 };
 
 // Middleware

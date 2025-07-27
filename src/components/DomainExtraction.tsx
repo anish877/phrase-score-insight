@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle, Globe, Brain, FileText, AlertCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, Globe, Brain, FileText, AlertCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 interface DomainExtractionProps {
@@ -17,6 +17,7 @@ interface DomainExtractionProps {
   customPaths?: string[];
   priorityUrls?: string[];
   priorityPaths?: string[];
+  location?: string;
 }
 
 const DomainExtraction: React.FC<DomainExtractionProps> = ({ 
@@ -30,7 +31,8 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
   onPrev,
   customPaths,
   priorityUrls,
-  priorityPaths
+  priorityPaths,
+  location
 }) => {
 
   const [isLoading, setIsLoading] = useState(false);
@@ -50,6 +52,7 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
   const [responseTime, setResponseTime] = useState(0);
   const startTimeRef = useRef(Date.now());
   const { toast } = useToast();
+  const [isContextExpanded, setIsContextExpanded] = useState(false);
 
   const phases = [
     { id: 'discovery', name: 'Domain Discovery', icon: <Globe className="h-5 w-5" /> },
@@ -90,13 +93,13 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
     const processStream = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch('https://phrase-score-insight.onrender.com/api/domain', {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/domain`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           },
-          body: JSON.stringify({ url: domain, subdomains, customPaths, priorityUrls }),
+          body: JSON.stringify({ url: domain, subdomains, customPaths, priorityUrls, location }),
           signal: controller.signal,
         });
 
@@ -375,7 +378,27 @@ const DomainExtraction: React.FC<DomainExtractionProps> = ({
                   <div>
                     <h3 className="text-lg font-semibold text-slate-900 mb-3">Brand Context Summary</h3>
                     <div className="bg-slate-50 rounded-lg p-6 border-l-4 border-blue-500">
-                      <p className="text-slate-700 leading-relaxed">{extractedContext}</p>
+                      <p className="text-slate-700 leading-relaxed">
+                        {isContextExpanded || !extractedContext || extractedContext.length <= 300
+                          ? extractedContext
+                          : extractedContext.slice(0, 300) + '...'}
+                      </p>
+                      {extractedContext && extractedContext.length > 300 && (
+                        <button
+                          className="mt-2 flex items-center text-blue-600 hover:text-blue-800 text-sm font-medium focus:outline-none"
+                          onClick={() => setIsContextExpanded((v) => !v)}
+                        >
+                          {isContextExpanded ? (
+                            <>
+                              <ChevronUp className="w-4 h-4 mr-1" /> Show Less
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="w-4 h-4 mr-1" /> Show More
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
 

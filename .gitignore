@@ -1,6 +1,11 @@
 
 node_modules
 
+# Lock files - only keep pnpm lock
+package-lock.json
+yarn.lock
+bun.lockb
+
 .env
 =======
 # Logs

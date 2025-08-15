@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Search, Plus, TrendingUp, Calendar, Globe, BarChart3, Sparkles, Target, Zap, ArrowUpRight, Filter, SortDesc, Clock, Play, User, LogOut } from 'lucide-react';
-import { onboardingService } from '@/services/onboardingService';
+// Onboarding service removed
 import { useAuth } from '@/contexts/AuthContext';
 
 interface DashboardDomain {
@@ -33,7 +33,6 @@ interface ActiveOnboardingSession {
   };
   currentStep: number;
   lastActivity: string;
-  domainVersionId?: number | null;
 }
 
 const ProfessionalDashboard = () => {
@@ -79,9 +78,8 @@ const ProfessionalDashboard = () => {
         const domainsData = await domainsResponse.json();
         setDomains(domainsData.domains || []);
 
-        // Fetch active onboarding sessions
-        const sessionsResponse = await onboardingService.getActiveSessions();
-        setActiveSessions(sessionsResponse.activeSessions);
+        // Onboarding sessions removed
+        setActiveSessions([]);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
       } finally {
@@ -396,8 +394,8 @@ const ProfessionalDashboard = () => {
                 className="group border-0 shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 bg-gradient-to-br from-white to-slate-50 overflow-hidden cursor-pointer"
                 role="button"
                 tabIndex={0}
-                onClick={() => navigate(`/analyze?domainId=${session.domain.id}${session.domainVersionId ? `&versionId=${session.domainVersionId}` : ''}`)}
-                onKeyPress={e => { if (e.key === 'Enter' || e.key === ' ') navigate(`/analyze?domainId=${session.domain.id}${session.domainVersionId ? `&versionId=${session.domainVersionId}` : ''}`); }}
+                onClick={() => navigate(`/analyze?domainId=${session.domain.id}`)}
+                                  onKeyPress={e => { if (e.key === 'Enter' || e.key === ' ') navigate(`/analyze?domainId=${session.domain.id}`); }}
                 aria-label={`Resume analysis for ${domain.url}`}
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>

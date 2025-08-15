@@ -37,9 +37,7 @@ interface DomainData {
   context: string;
   crawlResults: Array<{
     pagesScanned: number;
-    contentBlocks: number;
-    keyEntities: number;
-    confidenceScore: number;
+    analyzedUrls: string[];
     extractedContext: string;
   }>;
   keywords: Array<{

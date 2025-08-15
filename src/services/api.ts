@@ -1,4 +1,4 @@
-const API_BASE_URL = `${import.meta.env.VITE_API_URL}/api`;
+const API_BASE_URL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : 'http://localhost:3002/api';
 
 // Helper function to get auth token
 const getAuthToken = (): string | null => {
@@ -43,9 +43,7 @@ export interface DomainResponse {
   };
   extraction: {
     pagesScanned: number;
-    contentBlocks: number;
-    keyEntities: number;
-    confidenceScore: number;
+    analyzedUrls: string[];
     extractedContext: string;
   } | null;
 }
@@ -60,6 +58,13 @@ export interface Keyword {
   isSelected: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface KeywordAnalysis {
+  semanticAnalysis?: Record<string, unknown>;
+  keywordAnalysis?: Record<string, unknown>;
+  searchVolumeClassification?: Record<string, unknown>;
+  intentClassification?: Record<string, unknown>;
 }
 
 export const apiService = {
@@ -91,7 +96,7 @@ export const apiService = {
     return handleApiResponse(response);
   },
 
-  async getKeywords(domainId: number): Promise<{ keywords: Keyword[], selected: string[] }> {
+  async getKeywords(domainId: number): Promise<{ keywords: Keyword[], analysis?: KeywordAnalysis }> {
     const response = await fetch(`${API_BASE_URL}/keywords/${domainId}`, {
       headers: getAuthHeaders(),
     });
@@ -114,6 +119,16 @@ export const apiService = {
       headers: getAuthHeaders(),
     });
     if (!response.ok) throw new Error('Failed to fetch generated phrases');
+    return handleApiResponse(response);
+  },
+
+  async addPhrase(domainId: number, keyword: string, phrase: string): Promise<{ success: boolean, phrase: { id: number, text: string, keywordId: number } }> {
+    const response = await fetch(`${API_BASE_URL}/phrases/${domainId}`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ keyword, phrase }),
+    });
+
     return handleApiResponse(response);
   },
 };

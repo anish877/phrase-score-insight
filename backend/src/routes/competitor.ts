@@ -132,7 +132,7 @@ router.post('/analyze', async (req, res) => {
       include: {
         keywords: {
           include: {
-            phrases: {
+            generatedIntentPhrases: {
               include: {
                 aiQueryResults: true
               }
@@ -198,7 +198,7 @@ Be realistic, use all provided data, and do not add any extra text.
     sendEvent({ event: 'progress', message: 'Running AI analysis...', progress: 60 });
 
     // Run AI analysis
-    // Replace GoogleGenerativeAI/model with OpenAI GPT-4o Mini logic for competitor analysis
+    // Replace GoogleGenerativeAI/model with OpenAI GPT-4o logic for competitor analysis
     // TODO: Call OpenAI API here and assign the response text to aiResponseText
     let aiResponseText = '';
     // aiResponseText = await callOpenAIGpt4oMini(analysisPrompt, ...);

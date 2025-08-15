@@ -1,284 +1,312 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma';
-import { gptService } from '../services/geminiService';
-import { crawlAndExtractWithGpt4o } from '../services/geminiService';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
+import { generateKeywordsForDomain } from '../services/geminiService';
+import OpenAI from 'openai';
 
 const router = Router();
 const prisma = new PrismaClient();
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
-// GET /keywords/:domainId - get keywords for a domain
+// GET /api/keywords/:domainId - Get keywords for a domain
 router.get('/:domainId', authenticateToken, async (req: Request, res: Response) => {
   const authReq = req as AuthenticatedRequest;
   const domainId = Number(req.params.domainId);
-  const { versionId } = req.query; // Get versionId from query params
-  if (!domainId) { res.status(400).json({ error: 'Domain ID is required' }); return; }
+  const { selected } = req.query;
+  
+  if (!domainId) {
+    return res.status(400).json({ error: 'Invalid domainId' });
+  }
 
   try {
-    console.log('Fetching keywords for domainId:', domainId, 'versionId:', versionId);
-    
-    // Determine where to look for keywords based on versionId
-    const whereClause = versionId 
-      ? { domainVersionId: Number(versionId) }
-      : { domainId, domainVersionId: null };
-    
-    // Get keywords for the specified version or main domain
-    const keywords = await prisma.keyword.findMany({
-      where: whereClause,
-      orderBy: { volume: 'desc' }
-    });
-
-    console.log('Found keywords count:', keywords.length);
-
-    // If we already have keywords, return them
-    if (keywords.length > 0) {
-      console.log('Returning existing keywords:', keywords.length);
-      console.log('Selected keywords:', keywords.filter(k => k.isSelected).map(k => k.term));
-       res.json({ keywords });
-       return
-    }
-
-    // Otherwise, generate keywords using GPT-4o Mini and save
-    console.log('No existing keywords, generating with GPT-4o Mini for domain:', domainId, 'versionId:', versionId);
-    
-    // Get domain for context
+    // Verify domain access
     const domain = await prisma.domain.findUnique({
       where: { id: domainId },
-      select: { url: true, context: true, userId: true, location: true }
+      select: { id: true, userId: true }
     });
 
     if (!domain || domain.userId !== authReq.user.userId) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Get context from domain or extract if missing
-    let context = domain.context;
-    if (!context) {
-      // Use GPT-4o Mini to extract context if not present
-      const extraction = await crawlAndExtractWithGpt4o(domain.url, undefined, undefined, undefined, domain.location || undefined);
-      context = extraction.extractedContext;
-      await prisma.domain.update({ where: { id: domainId }, data: { context } });
-    }
+    // Build where clause based on query parameters
+    const whereClause: any = { domainId };
     
-    const gptKeywords = await gptService.generateKeywordsForDomain(domain.url, context, domain.location || undefined);
-    
-    // Save keywords to database with version support
-    const savedKeywords = await Promise.all(
-      gptKeywords.keywords.map(kw =>
-        prisma.keyword.create({
-          data: {
-            term: kw.term,
-            volume: kw.volume,
-            difficulty: kw.difficulty,
-            cpc: kw.cpc,
-            domainId: versionId ? null : domainId, // Only set domainId if not a version
-            domainVersionId: versionId ? Number(versionId) : null, // Set versionId if provided
-            isSelected: false // Explicitly set default value
-          }
-        })
-      )
-    );
-    res.json({ keywords: savedKeywords });
-  } catch (err: any) {
-    console.error('Keyword fetch error:', err);
-    res.status(500).json({ error: 'Failed to fetch keywords', details: err.message });
-  }
-});
-
-// PATCH /keywords/:domainId/selection - update selected keywords
-router.patch('/:domainId/selection', async (req: Request, res: Response) => {
-  const domainId = Number(req.params.domainId);
-  const { versionId } = req.query; // Get versionId from query params
-  let { selectedKeywords } = req.body;
-
-  console.log(`Updating keyword selection for domain ${domainId}, versionId: ${versionId}:`, selectedKeywords);
-
-  if (!domainId || !Array.isArray(selectedKeywords)) {
-    res.status(400).json({ error: 'Domain ID and selectedKeywords array are required' });
-    return;
-  }
-
-  try {
-    // Normalize keywords to lowercase for comparison
-    const selectedKeywordsLower = selectedKeywords.map((k: string) => k.trim().toLowerCase());
-
-    // Determine where to look for keywords based on versionId
-    const whereClause = versionId 
-      ? { domainVersionId: Number(versionId) }
-      : { domainId, domainVersionId: null };
-
-    // Fetch all keywords for the domain/version
-    const existingKeywords = await prisma.keyword.findMany({ where: whereClause });
-
-    // Add missing keywords (preserve original casing)
-    for (const kw of selectedKeywords) {
-      if (!existingKeywords.some(k => k.term.toLowerCase() === kw.trim().toLowerCase())) {
-        await prisma.keyword.create({
-          data: {
-            term: kw.trim(),
-            volume: 0,
-            difficulty: 'N/A',
-            cpc: 0,
-            domainId: versionId ? null : domainId, // Only set domainId if not a version
-            domainVersionId: versionId ? Number(versionId) : null, // Set versionId if provided
-            isSelected: true,
-          }
-        });
-      }
+    if (selected === 'true') {
+      whereClause.isSelected = true;
     }
 
-    // Unselect all
-    await prisma.keyword.updateMany({
-      where: whereClause,
-      data: { isSelected: false }
-    });
-    console.log(`Unselected all keywords for domain ${domainId}, versionId: ${versionId}`);
-
-    // Select all in the list (case-insensitive)
-    // Prisma does not support 'in' with mode: 'insensitive', so update individually
-    for (const kw of selectedKeywords) {
-      await prisma.keyword.updateMany({
-        where: {
-          ...whereClause,
-          term: { equals: kw.trim(), mode: 'insensitive' }
-        },
-        data: { isSelected: true }
-      });
-    }
-
-    // Return updated keywords
-    const updatedKeywords = await prisma.keyword.findMany({ where: whereClause });
-    console.log(`Returning ${updatedKeywords.length} keywords, ${updatedKeywords.filter(k => k.isSelected).length} selected`);
-    res.json({ keywords: updatedKeywords });
-  } catch (err: any) {
-    console.error('Keyword selection update error:', err);
-    res.status(500).json({ error: 'Failed to update keyword selection', details: err.message });
-  }
-});
-
-// GET /keywords/stream/:domainId - stream keywords for a domain in real-time
-router.get('/stream/:domainId', async (req: any, res: Response) => {
-  // Handle authentication for SSE endpoint
-  const token = req.query.token as string;
-  
-  if (!token) {
-    res.status(401).json({ error: 'No token provided' });
-    return;
-  }
-
-  try {
-    // Verify token manually since we can't use middleware for SSE
-    const jwt = require('jsonwebtoken');
-    const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = { userId: decoded.userId, email: decoded.email };
-  } catch (error) {
-    res.status(401).json({ error: 'Invalid token' });
-    return;
-  }
-  const domainId = Number(req.params.domainId);
-  const { versionId } = req.query; // Get versionId from query params
-  if (!domainId) { res.status(400).json({ error: 'Domain ID is required' }); return; }
-
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-
-  const sendEvent = (event: string, data: any) => {
-    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-  };
-
-  try {
-    console.log('Streaming keywords for domainId:', domainId, 'versionId:', versionId);
-    
-    // Determine where to look for keywords based on versionId
-    const whereClause = versionId 
-      ? { domainVersionId: Number(versionId) }
-      : { domainId, domainVersionId: null };
-    
-    // Get keywords for the specified version or main domain
+    // Get keywords for the domain
     const keywords = await prisma.keyword.findMany({
       where: whereClause,
-      orderBy: { volume: 'desc' }
+      orderBy: { volume: 'desc' },
+      select: {
+        id: true,
+        term: true,
+        volume: true,
+        difficulty: true,
+        cpc: true,
+        domainId: true,
+        isSelected: true,
+        createdAt: true,
+        updatedAt: true
+      }
     });
 
-    // If we already have keywords, stream them
-    if (keywords.length > 0) {
-      console.log(`Streaming ${keywords.length} existing keywords for domain ${domainId}, versionId: ${versionId}`);
-      console.log('Selected keywords:', keywords.filter(k => k.isSelected).map(k => k.term));
-      sendEvent('progress', { message: 'Loading existing keywords...' });
-      for (const kw of keywords) {
-        sendEvent('keyword', kw);
-      }
-      sendEvent('complete', {});
-      res.end();
-      return;
-    }
+    res.json({
+      success: true,
+      keywords,
+      totalKeywords: keywords.length
+    });
 
-    // Otherwise, generate keywords using AI and stream as we process
-    sendEvent('progress', { message: 'Analyzing brand context and market positioning for keyword discovery...' });
-    
-    // Get domain for context
+  } catch (error) {
+    console.error('Error fetching keywords:', error);
+    res.status(500).json({ error: 'Failed to fetch keywords' });
+  }
+});
+
+// POST /api/keywords/:domainId/select - Select/deselect keywords
+router.post('/:domainId/select', authenticateToken, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
+  const domainId = Number(req.params.domainId);
+  const { keywordIds, selected } = req.body;
+
+  if (!domainId || !keywordIds || typeof selected !== 'boolean') {
+    return res.status(400).json({ error: 'DomainId, keywordIds, and selected are required' });
+  }
+
+  try {
+    // Verify domain access
     const domain = await prisma.domain.findUnique({
       where: { id: domainId },
-      select: { url: true, context: true }
+      select: { id: true, userId: true }
     });
 
-    if (!domain) {
-      sendEvent('error', { error: 'Domain not found' });
-      res.end();
-      return;
-    }
-    
-    let context = domain.context;
-    if (!context) {
-      sendEvent('progress', { message: 'Extracting comprehensive brand context with advanced AI analysis...' });
-      const extraction = await crawlAndExtractWithGpt4o(domain.url);
-      context = extraction.extractedContext;
-      await prisma.domain.update({ where: { id: domainId }, data: { context } });
+    if (!domain || domain.userId !== authReq.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
-    sendEvent('progress', { message: 'Generating high-impact keywords using advanced SEO intelligence...' });
-    const gptKeywords = await gptService.generateKeywordsForDomain(domain.url, context);
+    // Convert keywordIds to integers and update keyword selection status
+    const numericKeywordIds = keywordIds.map((id: any) => Number(id));
     
-    sendEvent('progress', { message: 'Categorizing keywords by search intent and user behavior patterns...' });
-    
-    // Use all AI-generated keywords, not just top 10
-    const allKeywords = gptKeywords.keywords;
+    await prisma.keyword.updateMany({
+      where: {
+        id: { in: numericKeywordIds },
+        domainId
+      },
+      data: { isSelected: selected }
+    });
 
-    sendEvent('progress', { message: `Processing ${allKeywords.length} AI-generated keywords with real-world SEO metrics...` });
+    res.json({ success: true, message: `Keywords ${selected ? 'selected' : 'deselected'} successfully` });
 
-    for (let i = 0; i < allKeywords.length; i++) {
-      const kw = allKeywords[i];
-      // Save to DB with version support
-      const saved = await prisma.keyword.create({
-        data: {
-          term: kw.term,
-          volume: kw.volume,
-          difficulty: kw.difficulty,
-          cpc: kw.cpc,
-          domainId: versionId ? null : domainId, // Only set domainId if not a version
-          domainVersionId: versionId ? Number(versionId) : null, // Set versionId if provided
-          isSelected: false
+  } catch (error) {
+    console.error('Error updating keyword selection:', error);
+    res.status(500).json({ error: 'Failed to update keyword selection' });
+  }
+});
+
+// POST /api/keywords/analyze - Analyze a single keyword using AI
+router.post('/analyze', authenticateToken, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
+  const { keyword, domain, location, domainId } = req.body;
+
+  if (!keyword || !domain) {
+    return res.status(400).json({ error: 'Keyword and domain are required' });
+  }
+
+  try {
+    // Get domain context if domainId is provided
+    let domainContext = '';
+    if (domainId) {
+      try {
+        const domainRecord = await prisma.domain.findUnique({
+          where: { id: parseInt(domainId) },
+          select: { context: true, locationContext: true }
+        });
+        if (domainRecord?.context) {
+          domainContext = domainRecord.context;
         }
-      });
-      
-      sendEvent('keyword', saved);
-      
-      // Send progress update every 10 keywords
-      if ((i + 1) % 10 === 0) {
-        sendEvent('progress', { message: `Processed ${i + 1}/${allKeywords.length} keywords...` });
+      } catch (error) {
+        console.warn('Could not fetch domain context:', error);
       }
     }
 
-    sendEvent('progress', { message: `Advanced AI keyword generation complete! Generated ${allKeywords.length} high-value keywords with realistic SEO metrics.` });
-    sendEvent('complete', {});
-    res.end();
-  } catch (err: any) {
-    console.error('Keyword streaming error:', err);
-    sendEvent('error', { error: err.message });
-    res.end();
+    // Create comprehensive AI analysis prompt
+    const analysisPrompt = `
+You are an expert SEO analyst with access to Google Keyword Planner, Ahrefs, and SEMrush data. Analyze the keyword "${keyword}" for the domain ${domain}.
+
+Domain Context: ${domainContext || 'No specific context provided'}
+Location: ${location || 'Global'}
+
+Please provide a comprehensive analysis with the following data for a keyword analysis table:
+
+1. **Search Volume**: Estimate monthly search volume (realistic numbers)
+2. **Keyword Difficulty (KD)**: Score from 0-100 based on competition
+3. **Competition Level**: Low, Medium, or High
+4. **Cost Per Click (CPC)**: Estimated cost for paid advertising
+5. **Search Intent**: Informational, Commercial, Transactional, or Navigational
+6. **Organic Traffic Potential**: Estimated organic traffic based on volume and difficulty
+7. **Paid Traffic Potential**: Estimated paid traffic potential
+8. **Trend**: Rising, Stable, or Declining
+9. **Current Position**: Estimated current ranking position (0 if not ranked)
+10. **Target URL**: Suggested URL for this keyword
+
+Consider the following factors:
+- Keyword length and specificity
+- Commercial intent and monetization potential
+- Competition from established websites
+- Seasonal trends and market demand
+- Location-specific factors if applicable
+- Domain authority and content relevance
+
+Return ONLY a JSON object with this exact structure:
+{
+  "keyword": "exact keyword phrase",
+  "volume": 2500,
+  "kd": 65,
+  "competition": "Medium",
+  "cpc": 3.50,
+  "intent": "Commercial",
+  "organic": 150,
+  "paid": 75,
+  "trend": "Rising",
+  "position": 0,
+  "url": "https://domain.com/keyword-page",
+  "analysis": "Brief analysis of keyword potential and strategy"
+}
+`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: analysisPrompt }],
+      temperature: 0.3,
+      max_tokens: 1000
+    });
+
+    const response = completion.choices[0]?.message?.content;
+    if (!response) {
+      throw new Error('No response from AI analysis');
+    }
+
+    let analysisResult;
+    try {
+      // Clean the response to remove markdown formatting
+      let cleanResponse = response.trim();
+      if (cleanResponse.startsWith('```json')) {
+        cleanResponse = cleanResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (cleanResponse.startsWith('```')) {
+        cleanResponse = cleanResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+      
+      analysisResult = JSON.parse(cleanResponse);
+    } catch (parseError) {
+      console.error('Error parsing AI analysis response:', parseError);
+      throw new Error('Failed to parse AI analysis response');
+    }
+
+    // Validate and ensure all required fields are present
+    const validatedResult = {
+      keyword: analysisResult.keyword || keyword,
+      volume: analysisResult.volume || 1000,
+      kd: analysisResult.kd || 50,
+      competition: analysisResult.competition || 'Medium',
+      cpc: analysisResult.cpc || 2.50,
+      intent: analysisResult.intent || 'Commercial',
+      organic: analysisResult.organic || Math.floor((analysisResult.volume || 1000) * 0.1),
+      paid: analysisResult.paid || Math.floor((analysisResult.volume || 1000) * 0.05),
+      trend: analysisResult.trend || 'Stable',
+      position: analysisResult.position || 0,
+      url: analysisResult.url || `https://${domain}/${keyword.toLowerCase().replace(/\s+/g, '-')}`,
+      analysis: analysisResult.analysis || 'AI analysis completed successfully',
+      tokenUsage: completion.usage?.total_tokens || 0
+    };
+
+    res.json({
+      success: true,
+      ...validatedResult
+    });
+
+  } catch (error) {
+    console.error('Keyword analysis error:', error);
+    res.status(500).json({ 
+      error: 'Failed to analyze keyword with AI',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// POST /api/keywords/:domainId/custom - Add a custom analyzed keyword to the domain
+router.post('/:domainId/custom', authenticateToken, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
+  const domainId = Number(req.params.domainId);
+  const { keyword, volume, kd, competition, cpc, intent, organic, paid, trend, position, url, analysis } = req.body;
+
+  if (!domainId || !keyword) {
+    return res.status(400).json({ error: 'DomainId and keyword are required' });
+  }
+
+  try {
+    // Verify domain access
+    const domain = await prisma.domain.findUnique({
+      where: { id: domainId },
+      select: { id: true, userId: true, url: true }
+    });
+
+    if (!domain || domain.userId !== authReq.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Check if keyword already exists for this domain
+    const existingKeyword = await prisma.keyword.findFirst({
+      where: {
+        term: keyword,
+        domainId: domainId
+      }
+    });
+
+    if (existingKeyword) {
+      return res.status(400).json({ error: 'Keyword already exists for this domain' });
+    }
+
+    // Create the custom keyword
+    const newKeyword = await prisma.keyword.create({
+      data: {
+        term: keyword,
+        volume: volume || 1000,
+        difficulty: competition || 'Medium',
+        cpc: cpc || 2.50,
+        intent: intent || 'Commercial',
+        domainId: domainId,
+        isSelected: false
+      }
+    });
+
+    res.json({
+      success: true,
+      keyword: {
+        id: newKeyword.id.toString(),
+        keyword: newKeyword.term,
+        intent: newKeyword.intent || 'Commercial',
+        volume: newKeyword.volume,
+        kd: parseInt(newKeyword.difficulty) || 50,
+        competition: newKeyword.difficulty === 'High' ? 'High' : newKeyword.difficulty === 'Low' ? 'Low' : 'Medium',
+        cpc: newKeyword.cpc,
+        organic: organic || Math.floor(newKeyword.volume * 0.1),
+        paid: paid || Math.floor(newKeyword.volume * 0.05),
+        trend: trend || 'Stable',
+        position: position || 0,
+        url: url || `https://${domain.url}/${newKeyword.term.toLowerCase().replace(/\s+/g, '-')}`,
+        updated: new Date().toISOString().split('T')[0],
+        isCustom: true,
+        selected: false
+      }
+    });
+
+  } catch (error) {
+    console.error('Error adding custom keyword:', error);
+    res.status(500).json({ error: 'Failed to add custom keyword' });
   }
 });
 

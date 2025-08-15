@@ -41,6 +41,11 @@ build/Release
 node_modules/
 jspm_packages/
 
+# Lock files - only keep pnpm lock
+package-lock.json
+yarn.lock
+bun.lockb
+
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 

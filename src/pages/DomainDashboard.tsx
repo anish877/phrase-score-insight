@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, TrendingUp, TrendingDown, Calendar, Globe, BarChart3, Eye, MessageSquare, Star, Users, Target, AlertTriangle, Lightbulb, RefreshCw, Activity, Shield, Award, Zap, Link as LinkIcon, FileText, LayoutDashboard, Search, Target as TargetIcon, BarChart3 as BarChart3Icon, Cpu, FileText as FileTextIcon, Users as UsersIcon, MessageSquare as MessageSquareIcon, History, Settings, ChevronRight, Home, Layers, TrendingUp as TrendingUpIcon, Activity as ActivityIcon, Globe as GlobeIcon, Zap as ZapIcon, Shield as ShieldIcon, Award as AwardIcon, Calculator } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Calendar, Globe, BarChart3, Eye, MessageSquare, Star, Users, Target, AlertTriangle, Lightbulb, RefreshCw, Activity, Shield, Award, Zap, Link as LinkIcon, FileText, LayoutDashboard, Search, Target as TargetIcon, BarChart3 as BarChart3Icon, Cpu, FileText as FileTextIcon, Users as UsersIcon, MessageSquare as MessageSquareIcon, History, Settings, ChevronRight, Home, Layers, TrendingUp as TrendingUpIcon, Activity as ActivityIcon, Globe as GlobeIcon, Zap as ZapIcon, Shield as ShieldIcon, Award as AwardIcon, Calculator, Lock, CreditCard, Crown } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, Legend } from 'recharts';
 import type { Keyword } from '@/services/api';
 import type { AIQueryResult } from '@/components/AIQueryResults';
@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { LineChart as ReLineChart, Line as ReLine, XAxis as ReXAxis, YAxis as ReYAxis, Tooltip as ReTooltip, Legend as ReLegend, ResponsiveContainer as ReResponsiveContainer, CartesianGrid as ReCartesianGrid } from 'recharts';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface DomainData {
   id: number;
@@ -24,9 +25,7 @@ interface DomainData {
   description: string;
   crawlResults: Array<{
     pagesScanned: number;
-    contentBlocks: number;
-    keyEntities: number;
-    confidenceScore: number;
+    analyzedUrls: string[];
     extractedContext: string;
   }>;
   keywords: Keyword[];
@@ -195,7 +194,7 @@ function pickPhraseBarKey(arr: Record<string, unknown>[]): string {
 }
 
 const modelColors: Record<string, string> = {
-  'GPT-4o': 'bg-blue-100 text-blue-800',
+          'GPT-4o': 'bg-blue-100 text-blue-800',
   'Claude 3': 'bg-green-100 text-green-800',
   'Gemini 1.5': 'bg-slate-100 text-slate-800',
 };
@@ -377,27 +376,150 @@ const AIResultsTable: React.FC<{ results: FlatAIQueryResult[], phrases: Phrase[]
   );
 };
 
-// Add DomainVersion type
-interface DomainVersion {
-  id: number;
-  version: number;
-  name?: string;
-  createdAt: string;
-  metrics?: {
-    visibilityScore?: number;
-    mentionRate?: number;
-    avgRelevance?: number;
-    avgAccuracy?: number;
-    avgSentiment?: number;
-    avgOverall?: number;
-    totalQueries?: number;
-    seoMetrics?: { 
-      organicTraffic?: number; 
-      domainAuthority?: number;
-      backlinks?: number;
-    };
-  };
-}
+// Payment Popup Component
+const PaymentPopup: React.FC<{ isOpen: boolean; onClose: () => void; featureName: string; onUnlockAll?: () => void }> = ({ isOpen, onClose, featureName, onUnlockAll }) => {
+  console.log('PaymentPopup props:', { isOpen, featureName });
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-2xl z-[9999] p-0 overflow-hidden bg-white/95 backdrop-blur-xl border border-white/20 shadow-xl shadow-slate-900/10">
+        {/* Header - Matching dashboard header style */}
+        <div className="bg-white/80 backdrop-blur-sm border-b border-slate-200/60 p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg shadow-md">
+                <Crown className="h-5 w-5 text-blue-600" />
+              </div>
+              <div className="space-y-1">
+                <DialogTitle className="text-2xl font-bold text-slate-800">Upgrade to Pro</DialogTitle>
+                <DialogDescription className="text-sm text-slate-600">
+                  Unlock <span className="font-semibold text-blue-600">{featureName}</span> and access premium analytics
+                </DialogDescription>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              className="h-8 w-8 p-0 hover:bg-slate-100 hover:scale-110 transition-all duration-300"
+            >
+              <ChevronRight className="h-4 w-4 text-slate-600 rotate-45" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-8">
+          {/* Feature Benefits - Matching dashboard card style */}
+          <div className="space-y-4">
+            <h4 className="text-lg font-semibold text-slate-800 flex items-center space-x-2">
+              <div className="p-1.5 bg-blue-50 rounded-lg">
+                <Star className="h-4 w-4 text-blue-600" />
+              </div>
+              <span>Premium Features</span>
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 hover:shadow-lg transition-all duration-300">
+                <CardContent className="p-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-blue-50 rounded-lg">
+                      <BarChart3 className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Advanced Analytics</p>
+                      <p className="text-2xl font-bold text-slate-800">Deep Insights</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 hover:shadow-lg transition-all duration-300">
+                <CardContent className="p-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-emerald-50 rounded-lg">
+                      <Users className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">Competitor Analysis</p>
+                      <p className="text-2xl font-bold text-slate-800">Market Intel</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 hover:shadow-lg transition-all duration-300">
+                <CardContent className="p-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-purple-50 rounded-lg">
+                      <Activity className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-600">AI Insights</p>
+                      <p className="text-2xl font-bold text-slate-800">Smart Data</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          {/* Pricing - Matching dashboard card style */}
+          <Card className="bg-gradient-to-br from-slate-50 via-white to-slate-100/50 backdrop-blur-sm border-slate-200/60 shadow-sm">
+            <CardContent className="p-6">
+              <div className="text-center space-y-4">
+                <div className="flex items-center justify-center space-x-2">
+                  <span className="text-4xl font-bold text-slate-800">$29</span>
+                  <span className="text-lg text-slate-600">/month</span>
+                </div>
+                <div className="text-sm text-slate-600">Start your free trial today</div>
+                <div className="flex items-center justify-center space-x-4 text-xs text-slate-500">
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                    <span>Cancel anytime</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                    <span>No setup fees</span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Footer - Matching dashboard button style */}
+        <div className="bg-white/80 backdrop-blur-sm border-t border-slate-200/60 px-6 py-4">
+          <div className="flex flex-col space-y-3 sm:flex-row sm:space-y-0 sm:space-x-3">
+            <Button 
+              variant="outline" 
+              onClick={onClose} 
+              className="flex-1 sm:flex-none border-slate-200/60 hover:bg-slate-50 transition-all duration-300"
+            >
+              Maybe Later
+            </Button>
+            <Button 
+              className="flex-1 sm:flex-none bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-500/20 transition-all duration-300"
+            >
+              <CreditCard className="h-4 w-4 mr-2" />
+              Start Free Trial
+            </Button>
+            {onUnlockAll && (
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  onUnlockAll();
+                  onClose();
+                }} 
+                className="flex-1 sm:flex-none border-emerald-500 text-emerald-600 hover:bg-emerald-50 transition-all duration-300"
+              >
+                🔓 Test: Unlock All
+              </Button>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
 
 const DomainDashboard = () => {
   const { domain } = useParams<{ domain: string }>();
@@ -410,14 +532,17 @@ const DomainDashboard = () => {
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [competitors, setCompetitors] = useState<string[]>([]);
   const [newCompetitor, setNewCompetitor] = useState('');
-  const [versions, setVersions] = useState<DomainVersion[]>([]);
-  const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
-  const [versionLoading, setVersionLoading] = useState(false);
   const [showingFallbackData, setShowingFallbackData] = useState(false);
   const [activeSection, setActiveSection] = useState('overview');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [paymentPopupOpen, setPaymentPopupOpen] = useState(false);
+  const [lockedFeature, setLockedFeature] = useState('');
+  const [allUnlocked, setAllUnlocked] = useState(false);
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+
+  // Debug state
+  console.log('Current state:', { paymentPopupOpen, lockedFeature, allUnlocked });
 
   // Extract domain ID from URL - handle different URL patterns
   const getDomainId = () => {
@@ -451,49 +576,7 @@ const DomainDashboard = () => {
     return 1;
   };
 
-  // Get versionId from URL query parameters
-  const getVersionIdFromUrl = () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const versionId = urlParams.get('versionId');
-    console.log('URL search params:', window.location.search);
-    console.log('Extracted versionId from URL:', versionId);
-    return versionId ? parseInt(versionId) : null;
-  };
-
   const domainId = getDomainId();
-
-  // Fetch all versions for the domain
-  const fetchVersions = async () => {
-    try {
-      setVersionLoading(true);
-      // Use the endpoint that includes calculated metrics
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/domain/${domainId}/versions`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (!response.ok) throw new Error('Failed to fetch versions');
-      const data = await response.json();
-      setVersions(data.versions || []);
-      
-      // Check for versionId in URL first, then auto-select latest version
-      const urlVersionId = getVersionIdFromUrl();
-      if (urlVersionId && data.versions.some(v => v.id === urlVersionId)) {
-        setSelectedVersionId(urlVersionId);
-        console.log('Using versionId from URL:', urlVersionId);
-      } else if (data.versions && data.versions.length > 0) {
-        // Always select the latest version by default
-        const latestVersion = data.versions[0]; // Versions are ordered by desc
-        setSelectedVersionId(latestVersion.id);
-        console.log('Auto-selecting latest version:', latestVersion.id, 'for domain');
-      }
-    } catch (err) {
-      console.error('Error fetching versions:', err);
-    } finally {
-      setVersionLoading(false);
-    }
-  };
 
   // All useEffect hooks must be called before any conditional returns
   useEffect(() => {
@@ -503,35 +586,10 @@ const DomainDashboard = () => {
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
-    fetchVersions();
+    if (domainId) {
+      fetchDomainData(domainId);
+    }
   }, [domainId]);
-
-  useEffect(() => {
-    if (!versionLoading && versions.length > 0) {
-      // Always work with versions - no main domain concept
-      const urlVersionId = getVersionIdFromUrl();
-      const targetVersionId = urlVersionId || selectedVersionId;
-      
-      if (targetVersionId) {
-        console.log('Fetching data for target versionId:', targetVersionId);
-        fetchDomainData(targetVersionId);
-      } else {
-        // If no version specified, use the latest version (first in the array since it's ordered desc)
-        const latestVersion = versions[0];
-        console.log('No versionId specified, using latest version:', latestVersion.id);
-        setSelectedVersionId(latestVersion.id);
-        fetchDomainData(latestVersion.id);
-      }
-    }
-  }, [versionLoading, versions, domainId]); // Removed selectedVersionId from dependencies to prevent loops
-
-  // Separate effect to handle selectedVersionId changes
-  useEffect(() => {
-    if (selectedVersionId && !versionLoading && versions.length > 0) {
-      console.log('Selected version changed, fetching data for versionId:', selectedVersionId);
-      fetchDomainData(selectedVersionId);
-    }
-  }, [selectedVersionId]);
 
   // Fetch competitor analysis from DB on initial load
   useEffect(() => {
@@ -553,33 +611,33 @@ const DomainDashboard = () => {
     );
   }
 
-  const fetchDomainData = async (versionId: number) => {
+  const fetchDomainData = async (domainId: number) => {
     try {
       setLoading(true);
       setError(null);
       setDomainData(null); // Clear previous data to prevent showing stale data
       
-      console.log('Fetching domain data for ID:', domainId, 'Version ID:', versionId);
+      console.log('Fetching domain data for ID:', domainId);
       
-      // Always fetch version-specific data
-      const versionUrl = `${import.meta.env.VITE_API_URL}/api/dashboard/${domainId}?versionId=${versionId}`;
-      console.log('Making request to:', versionUrl);
+      // Fetch domain data directly without version
+      const url = `${import.meta.env.VITE_API_URL}/api/dashboard/${domainId}`;
+      console.log('Making request to:', url);
       
-      const versionResponse = await fetch(versionUrl, {
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           'Content-Type': 'application/json',
         },
       });
       
-      if (!versionResponse.ok) {
-        const errorText = await versionResponse.text();
-        console.error('Version fetch failed:', errorText);
-        throw new Error(`Version fetch failed: ${errorText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Domain fetch failed:', errorText);
+        throw new Error(`Domain fetch failed: ${errorText}`);
       }
       
-      const data = await versionResponse.json();
-      console.log('Version-specific data received:', data);
+      const data = await response.json();
+      console.log('Domain data received:', data);
       console.log('Data keys:', Object.keys(data));
       console.log('Metrics keys:', Object.keys(data.metrics || {}));
       setShowingFallbackData(false);
@@ -809,83 +867,121 @@ const DomainDashboard = () => {
     return 'text-rose-600';
   };
 
+  const getDifficultyColor = (difficulty: string) => {
+    switch (difficulty.toLowerCase()) {
+      case 'low':
+        return 'bg-green-100 text-green-800';
+      case 'medium':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'high':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   // Navigation items for sidebar
   const navigationItems = [
     {
       id: 'overview',
       label: 'Overview',
       icon: LayoutDashboard,
-      description: 'Key metrics and insights'
+      description: 'Key metrics and insights',
+      locked: false
     },
     {
       id: 'seo',
       label: 'SEO Metrics',
       icon: Search,
-      description: 'Search engine optimization'
+      description: 'Search engine optimization',
+      locked: false
     },
     {
       id: 'performance',
       label: 'Performance',
       icon: TrendingUpIcon,
-      description: 'Performance analytics'
+      description: 'Performance analytics',
+      locked: false
     },
     {
       id: 'keywords',
       label: 'Keywords',
       icon: TargetIcon,
-      description: 'Keyword analysis'
+      description: 'Keyword analysis',
+      locked: !allUnlocked
     },
     {
       id: 'technical',
       label: 'Technical',
       icon: Cpu,
-      description: 'Technical SEO'
+      description: 'Technical SEO',
+      locked: !allUnlocked
     },
     {
       id: 'content',
       label: 'Content',
       icon: FileTextIcon,
-      description: 'Content performance'
+      description: 'Content performance',
+      locked: !allUnlocked
     },
     {
       id: 'models',
       label: 'AI Models',
       icon: ActivityIcon,
-      description: 'AI model performance'
+      description: 'AI model performance',
+      locked: !allUnlocked
     },
     {
       id: 'phrases',
       label: 'Top Phrases',
       icon: MessageSquareIcon,
-      description: 'Best performing phrases'
+      description: 'Best performing phrases',
+      locked: !allUnlocked
     },
     {
       id: 'airesults',
       label: 'AI Results',
       icon: GlobeIcon,
-      description: 'Raw AI query results'
+      description: 'Raw AI query results',
+      locked: !allUnlocked
     },
     {
       id: 'competitors',
       label: 'Competitors',
       icon: UsersIcon,
-      description: 'Competitive analysis'
+      description: 'Competitive analysis',
+      locked: !allUnlocked
     },
     {
       id: 'insights',
       label: 'Insights',
       icon: Lightbulb,
-      description: 'AI-generated insights'
+      description: 'AI-generated insights',
+      locked: !allUnlocked
     },
     {
       id: 'history',
       label: 'Version History',
       icon: History,
-      description: 'Version comparison'
+      description: 'Version comparison',
+      locked: !allUnlocked
     }
   ];
 
-  if (loading || versionLoading) {
+  // Handle navigation item click
+  const handleNavigationClick = (item: typeof navigationItems[0]) => {
+    console.log('Navigation clicked:', item.label, 'Locked:', item.locked);
+    if (item.locked) {
+      console.log('Opening payment popup for:', item.label);
+      setLockedFeature(item.label);
+      setPaymentPopupOpen(true);
+    } else {
+      console.log('Setting active section to:', item.id);
+      setActiveSection(item.id);
+    }
+  };
+
+  if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center">
         <div className="text-center space-y-6">
@@ -896,11 +992,11 @@ const DomainDashboard = () => {
           <div className="space-y-2">
             <h3 className="text-xl font-semibold text-slate-800">Loading Dashboard</h3>
             <p className="text-slate-600">
-              {versionLoading ? 'Loading version data...' : 'Analyzing domain performance data...'}
+              Analyzing domain performance data...
             </p>
             <p className="text-sm text-slate-500 font-mono bg-slate-100 px-3 py-1 rounded-full inline-block">
               Domain ID: {domainId}
-              {selectedVersionId && ` | Version: ${selectedVersionId}`}
+              
             </p>
           </div>
         </div>
@@ -922,7 +1018,7 @@ const DomainDashboard = () => {
               Domain ID: {domainId}
             </p>
           </div>
-          <Button onClick={() => fetchDomainData(selectedVersionId)} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">
+                          <Button onClick={() => fetchDomainData(domainId)} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">
             <RefreshCw className="h-4 w-4 mr-2" />
             Retry
           </Button>
@@ -961,10 +1057,18 @@ const DomainDashboard = () => {
   ];
 
   return (
-    <div className="h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex overflow-hidden">
+    <TooltipProvider>
+      <div className="h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex overflow-hidden">
+        {/* Payment Popup */}
+        <PaymentPopup 
+          isOpen={paymentPopupOpen} 
+          onClose={() => setPaymentPopupOpen(false)} 
+          featureName={lockedFeature}
+          onUnlockAll={() => setAllUnlocked(true)}
+        />
       {/* Sidebar Navigation */}
       <div className={cn(
-        "bg-white/95 backdrop-blur-xl border-r border-white/20 shadow-xl shadow-slate-900/10 transition-all duration-300 ease-in-out flex flex-col h-full",
+        "bg-white/95 backdrop-blur-xl border-r border-white/20 shadow-xl shadow-slate-900/10 transition-all duration-300 ease-in-out flex flex-col h-full z-50 relative",
         sidebarCollapsed ? "w-16" : "w-64"
       )}>
         <div className="p-4 border-b border-slate-200/60">
@@ -1004,6 +1108,12 @@ const DomainDashboard = () => {
                   <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-lg shadow-emerald-500/50"></div>
                   <span className="text-xs text-slate-600 font-medium">Active Analysis</span>
                 </div>
+                {allUnlocked && (
+                  <div className="flex items-center space-x-3 px-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-lg shadow-green-500/50"></div>
+                    <span className="text-xs text-green-600 font-medium">🔓 Test Mode: All Unlocked</span>
+                  </div>
+                )}
               </>
             )}
             {sidebarCollapsed && (
@@ -1014,49 +1124,6 @@ const DomainDashboard = () => {
           </div>
         </div>
 
-        {/* Version Selector */}
-        {versions.length > 0 && (
-          <div className="p-4 border-b border-slate-200/60">
-            {!sidebarCollapsed ? (
-              <Select value={selectedVersionId?.toString()} onValueChange={v => {
-                const newVersionId = Number(v);
-                setSelectedVersionId(newVersionId);
-                
-                // Update URL with versionId
-                const url = new URL(window.location.href);
-                if (newVersionId) {
-                  url.searchParams.set('versionId', newVersionId.toString());
-                } else {
-                  url.searchParams.delete('versionId');
-                }
-                window.history.replaceState({}, '', url.toString());
-              }}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select Version" />
-                </SelectTrigger>
-                <SelectContent>
-                  {versions.map((v, index) => {
-                    const hasData = v.metrics?.visibilityScore && v.metrics.visibilityScore > 0;
-                    const isLatest = index === 0;
-                    
-                    return (
-                      <SelectItem key={v.id} value={v.id.toString()}>
-                        {`v${v.version} - ${v.name || v.createdAt?.slice(0,10)}`}
-                        {isLatest && <span className="text-blue-600 ml-2">(Latest)</span>}
-                        {!hasData && <span className="text-slate-400 ml-2">(no data)</span>}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            ) : (
-              <div className="flex justify-center">
-                <Layers className="h-5 w-5 text-slate-600" />
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Navigation Menu */}
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navigationItems.map((item) => {
@@ -1064,34 +1131,79 @@ const DomainDashboard = () => {
             const isActive = activeSection === item.id;
             
             return (
-              <button
-                key={item.id}
-                onClick={() => setActiveSection(item.id)}
-                className={cn(
-                  "w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-left transition-all duration-300 group",
-                  isActive 
-                    ? "bg-gradient-to-r from-blue-50 to-blue-50/80 text-blue-700 border border-blue-200/50 shadow-lg shadow-blue-500/20 ring-1 ring-blue-200/30" 
-                    : "text-slate-600 hover:bg-gradient-to-r hover:from-slate-50 hover:to-slate-50/80 hover:text-slate-800 hover:shadow-md transition-all duration-300"
-                )}
-              >
-                <div className={cn(
-                  "p-1.5 rounded-lg transition-all duration-300 transform",
-                  isActive 
-                    ? "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-600 scale-110 shadow-md" 
-                    : "bg-slate-100 text-slate-500 group-hover:bg-gradient-to-br group-hover:from-slate-200 group-hover:to-slate-300 group-hover:text-slate-600 group-hover:scale-105"
-                )}>
-                  <Icon className="h-4 w-4" />
-                </div>
-                {!sidebarCollapsed && (
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm">{item.label}</div>
-                    <div className="text-xs text-slate-500 truncate">{item.description}</div>
-                  </div>
-                )}
-                {isActive && !sidebarCollapsed && (
-                  <div className="w-1 h-6 bg-blue-500 rounded-full"></div>
-                )}
-              </button>
+              <UITooltip key={item.id} delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => handleNavigationClick(item)}
+                    className={cn(
+                      "w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-left transition-all duration-300 group relative",
+                      isActive 
+                        ? "bg-gradient-to-r from-blue-50 to-blue-50/80 text-blue-700 border border-blue-200/50 shadow-lg shadow-blue-500/20 ring-1 ring-blue-200/30" 
+                        : item.locked
+                        ? "text-slate-400 hover:bg-gradient-to-r hover:from-slate-50/50 hover:to-slate-50/30 hover:text-slate-500 cursor-pointer"
+                        : "text-slate-600 hover:bg-gradient-to-r hover:from-slate-50 hover:to-slate-50/80 hover:text-slate-800 hover:shadow-md transition-all duration-300"
+                    )}
+                  >
+                    <div className={cn(
+                      "p-1.5 rounded-lg transition-all duration-300 transform relative",
+                      isActive 
+                        ? "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-600 scale-110 shadow-md" 
+                        : item.locked
+                        ? "bg-slate-100/50 text-slate-400"
+                        : "bg-slate-100 text-slate-500 group-hover:bg-gradient-to-br group-hover:from-slate-200 group-hover:to-slate-300 group-hover:text-slate-600 group-hover:scale-105"
+                    )}>
+                      <Icon className="h-4 w-4" />
+                      {item.locked && sidebarCollapsed && (
+                        <Lock className="h-3 w-3 absolute -top-1 -right-1 text-slate-400" />
+                      )}
+                    </div>
+                    {!sidebarCollapsed && (
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm flex items-center space-x-2">
+                          <span>{item.label}</span>
+                          {item.locked && (
+                            <Crown className="h-3 w-3 text-purple-400" />
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-500 truncate">{item.description}</div>
+                      </div>
+                    )}
+                    {isActive && !sidebarCollapsed && (
+                      <div className="w-1 h-6 bg-blue-500 rounded-full"></div>
+                    )}
+                  </button>
+                </TooltipTrigger>
+                                  {item.locked && (
+                    <TooltipContent 
+                      side="right" 
+                      className="bg-white/95 backdrop-blur-xl border border-white/20 shadow-xl shadow-slate-900/10 p-4"
+                      sideOffset={8}
+                      align="center"
+                      style={{ zIndex: 999999 }}
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-center space-x-2">
+                          <div className="p-1 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg">
+                            <Crown className="h-3 w-3 text-blue-600" />
+                          </div>
+                          <span className="text-slate-800 font-semibold text-sm">Pro Feature</span>
+                        </div>
+                        <p className="text-slate-600 text-xs">Unlock {item.label} and access premium analytics</p>
+                        <Button 
+                          size="sm" 
+                          className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-500/20 transition-all duration-300"
+                          onClick={() => {
+                            setLockedFeature(item.label);
+                            setPaymentPopupOpen(true);
+                          }}
+                        >
+                          <Crown className="h-3 w-3 mr-2" />
+                          Upgrade Now
+                        </Button>
+                      </div>
+                    </TooltipContent>
+                  )}
+              </UITooltip>
             );
           })}
         </nav>
@@ -1142,7 +1254,7 @@ const DomainDashboard = () => {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200/60 z-40 flex-shrink-0">
+        <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200/60 z-30 flex-shrink-0">
           <div className="px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
@@ -1160,7 +1272,7 @@ const DomainDashboard = () => {
                     Showing main data
                   </Badge>
                 )}
-                {selectedVersionId && !showingFallbackData && domainData?.metrics?.visibilityScore === 0 && (
+                {!showingFallbackData && domainData?.metrics?.visibilityScore === 0 && (
                   <Badge className="bg-red-50 text-red-700 border-red-200">
                     <AlertTriangle className="h-3 w-3 mr-1" />
                     No analysis data
@@ -3193,40 +3305,9 @@ const DomainDashboard = () => {
           <div>
             {/* Version History Overview */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
-                <CardContent className="p-6">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-blue-50 rounded-lg">
-                      <Layers className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-600">Total Versions</p>
-                      <p className="text-2xl font-bold text-slate-800">{versions.length}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              {/* Version card removed */}
 
-              <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
-                <CardContent className="p-6">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-emerald-50 rounded-lg">
-                      <TrendingUp className="h-5 w-5 text-emerald-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-600">Best Score</p>
-                      <p className="text-2xl font-bold text-slate-800">
-                        {(() => {
-                          const validScores = versions
-                            .map(v => v.metrics?.visibilityScore)
-                            .filter(score => typeof score === 'number' && !isNaN(score));
-                          return validScores.length > 0 ? Math.max(...validScores) : 0;
-                        })()}%
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              {/* Best score card removed */}
 
               <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
                 <CardContent className="p-6">
@@ -3235,14 +3316,9 @@ const DomainDashboard = () => {
                       <Activity className="h-5 w-5 text-amber-600" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-600">Avg Score</p>
+                      <p className="text-sm font-medium text-slate-600">Visibility Score</p>
                       <p className="text-2xl font-bold text-slate-800">
-                        {(() => {
-                          const validScores = versions
-                            .map(v => v.metrics?.visibilityScore)
-                            .filter(score => typeof score === 'number' && !isNaN(score));
-                          return validScores.length > 0 ? Math.round(validScores.reduce((sum, score) => sum + score, 0) / validScores.length) : 0;
-                        })()}%
+                        {domainData?.metrics?.visibilityScore || 0}%
                       </p>
                     </div>
                   </div>
@@ -3256,9 +3332,9 @@ const DomainDashboard = () => {
                       <Calendar className="h-5 w-5 text-purple-600" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-600">Latest Version</p>
+                      <p className="text-sm font-medium text-slate-600">Total Queries</p>
                       <p className="text-lg font-bold text-slate-800">
-                        {versions.length > 0 ? `v${versions[0].version}` : '—'}
+                        {domainData?.metrics?.totalQueries || 0}
                       </p>
                     </div>
                   </div>
@@ -3266,41 +3342,24 @@ const DomainDashboard = () => {
               </Card>
             </div>
 
-            {/* Version History Graph */}
+            {/* Model Performance Chart */}
             <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm mb-8">
               <CardHeader>
                 <CardTitle className="text-slate-800 flex items-center space-x-2">
-                  <History className="h-5 w-5 text-blue-600" />
-                  <span>Version History Comparison</span>
+                  <Activity className="h-5 w-5 text-blue-600" />
+                  <span>AI Model Performance</span>
                 </CardTitle>
-                <CardDescription className="text-slate-600">Visibility score progression across all versions</CardDescription>
+                <CardDescription className="text-slate-600">Performance comparison across different AI models</CardDescription>
               </CardHeader>
               <CardContent>
-                {versions.length > 0 ? (
+                {domainData?.metrics?.modelPerformance && domainData.metrics.modelPerformance.length > 0 ? (
                   <ResponsiveContainer width="100%" height={400}>
-                    <LineChart data={versions
-                      .filter(v => v.metrics && typeof v.metrics.visibilityScore === 'number' && !isNaN(v.metrics.visibilityScore))
-                      .map(v => ({
-                        version: `v${v.version}`,
-                        visibilityScore: Number(v.metrics?.visibilityScore) || 0,
-                        mentionRate: Number(v.metrics?.mentionRate) || 0,
-                        avgRelevance: Number(v.metrics?.avgRelevance) || 0,
-                        avgOverall: Number(v.metrics?.avgOverall) || 0,
-                        date: v.createdAt ? new Date(v.createdAt).toLocaleDateString() : 'Unknown'
-                      }))
-                      .filter(item => 
-                        !isNaN(item.visibilityScore) && 
-                        !isNaN(item.mentionRate) && 
-                        !isNaN(item.avgRelevance) && 
-                        !isNaN(item.avgOverall)
-                      )
-                    }>
+                    <BarChart data={domainData.metrics.modelPerformance}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                       <XAxis 
-                        dataKey="version" 
+                        dataKey="model" 
                         stroke="#64748b" 
                         fontSize={12}
-                        label={{ value: 'Version', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
                       />
                       <YAxis 
                         stroke="#64748b" 
@@ -3310,7 +3369,6 @@ const DomainDashboard = () => {
                       />
                       <Tooltip 
                         formatter={(value, name) => [`${value}%`, name]}
-                        labelFormatter={(label) => `Version: ${label}`}
                         contentStyle={{ 
                           backgroundColor: 'white', 
                           border: '1px solid #e2e8f0', 
@@ -3319,106 +3377,66 @@ const DomainDashboard = () => {
                         }} 
                       />
                       <Legend />
-                      <Line 
-                        type="monotone" 
-                        dataKey="visibilityScore" 
-                        stroke="#3b82f6" 
-                        strokeWidth={3} 
-                        dot={{ fill: '#3b82f6', strokeWidth: 2, r: 5 }}
-                        name="Visibility Score"
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="mentionRate" 
-                        stroke="#10b981" 
-                        strokeWidth={2} 
-                        dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }}
-                        name="Mention Rate"
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="avgOverall" 
-                        stroke="#8b5cf6" 
-                        strokeWidth={2} 
-                        dot={{ fill: '#8b5cf6', strokeWidth: 2, r: 4 }}
-                        name="Overall Score"
-                      />
-                    </LineChart>
+                      <Bar dataKey="score" fill="#3b82f6" name="Performance Score" />
+                      <Bar dataKey="mentions" fill="#10b981" name="Mentions" />
+                    </BarChart>
                   </ResponsiveContainer>
                 ) : (
                   <div className="text-center text-slate-500 py-12">
-                    <History className="h-12 w-12 mx-auto text-slate-300 mb-4" />
-                    <p className="font-medium">No version history available</p>
-                    <p className="text-sm text-slate-400">Version data will appear here once multiple versions are created</p>
+                    <Activity className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+                    <p className="font-medium">No model performance data</p>
+                    <p className="text-sm text-slate-400">Data will appear here once AI analysis is complete</p>
                   </div>
                 )}
               </CardContent>
             </Card>
 
-            {/* Version Details Table */}
+            {/* Keyword Performance Table */}
             <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
               <CardHeader>
-                <CardTitle className="text-slate-800">Version Details</CardTitle>
-                <CardDescription className="text-slate-600">Detailed metrics for each version</CardDescription>
+                <CardTitle className="text-slate-800">Keyword Performance</CardTitle>
+                <CardDescription className="text-slate-600">Performance metrics for each keyword</CardDescription>
               </CardHeader>
               <CardContent>
-                {versions.length > 0 ? (
+                {domainData?.metrics?.keywordPerformance && domainData.metrics.keywordPerformance.length > 0 ? (
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Version</TableHead>
-                          <TableHead>Created</TableHead>
-                          <TableHead>Visibility Score</TableHead>
-                          <TableHead>Mention Rate</TableHead>
-                          <TableHead>Avg Relevance</TableHead>
-                          <TableHead>Avg Overall</TableHead>
-                          <TableHead>Status</TableHead>
+                          <TableHead>Keyword</TableHead>
+                          <TableHead>Visibility</TableHead>
+                          <TableHead>Mentions</TableHead>
+                          <TableHead>Sentiment</TableHead>
+                          <TableHead>Volume</TableHead>
+                          <TableHead>Difficulty</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {versions.map((version, index) => {
-                          const isLatest = index === 0;
-                          const isCurrent = version.id === selectedVersionId;
-                          const hasData = version.metrics?.visibilityScore && version.metrics.visibilityScore > 0;
-                          
-                          return (
-                            <TableRow key={version.id} className={isCurrent ? "bg-blue-50" : ""}>
-                              <TableCell className="font-medium">
-                                <div className="flex items-center space-x-2">
-                                  <span>v{version.version}</span>
-                                  {isLatest && <Badge className="bg-blue-50 text-blue-700 border-blue-200">Latest</Badge>}
-                                  {isCurrent && <Badge className="bg-green-50 text-green-700 border-green-200">Current</Badge>}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                {version.createdAt ? new Date(version.createdAt).toLocaleDateString() : 'Unknown'}
-                              </TableCell>
-                              <TableCell>
-                                <span className={`font-bold ${getVisibilityScoreColor(version.metrics?.visibilityScore || 0)}`}>
-                                  {version.metrics?.visibilityScore || 0}%
-                                </span>
-                              </TableCell>
-                              <TableCell>{version.metrics?.mentionRate || 0}%</TableCell>
-                              <TableCell>{version.metrics?.avgRelevance || 0}/5</TableCell>
-                              <TableCell>{version.metrics?.avgOverall || 0}/5</TableCell>
-                              <TableCell>
-                                {hasData ? (
-                                  <Badge className="bg-green-50 text-green-700 border-green-200">Complete</Badge>
-                                ) : (
-                                  <Badge className="bg-slate-50 text-slate-700 border-slate-200">No Data</Badge>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
+                        {domainData.metrics.keywordPerformance.map((keyword, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="font-medium">{keyword.keyword}</TableCell>
+                            <TableCell>
+                              <span className={`font-bold ${getVisibilityScoreColor(keyword.visibility || 0)}`}>
+                                {keyword.visibility || 0}%
+                              </span>
+                            </TableCell>
+                            <TableCell>{keyword.mentions || 0}</TableCell>
+                            <TableCell>{keyword.sentiment || 0}/5</TableCell>
+                            <TableCell>{keyword.volume?.toLocaleString() || 0}</TableCell>
+                            <TableCell>
+                              <Badge className={`${getDifficultyColor(keyword.difficulty || 'Low')}`}>
+                                {keyword.difficulty || 'Low'}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
                       </TableBody>
                     </Table>
                   </div>
                 ) : (
                   <div className="text-center text-slate-500 py-8">
-                    <Layers className="h-12 w-12 mx-auto text-slate-300 mb-4" />
-                    <p>No versions found</p>
+                    <Target className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+                    <p>No keyword performance data</p>
                   </div>
                 )}
               </CardContent>
@@ -3429,6 +3447,7 @@ const DomainDashboard = () => {
         </div>
       </div>
     </div>
+    </TooltipProvider>
   );
 };
 

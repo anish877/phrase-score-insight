@@ -2,12 +2,14 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import 'dotenv/config';
 import domainRouter from './routes/domain';
+import domainValidationRouter from './routes/domainValidation';
 import keywordsRouter from './routes/keywords';
-import phrasesRouter from './routes/phrases';
+import intentPhrasesRouter from './routes/intentPhrases';
+import enhancedPhrasesRouter from './routes/enhancedPhrasesUnified';
 import aiQueriesRouter from './routes/ai-queries';
 import competitorRouter from './routes/competitor';
 import dashboardRouter from './routes/dashboard';
-import onboardingRouter from './routes/onboarding';
+// Onboarding router removed
 import authRouter from './routes/auth';
 import { PrismaClient } from '../generated/prisma';
 
@@ -25,8 +27,7 @@ const allowedOrigins = [
   'http://localhost:4173',
   'https://aichecker.blueoceanglobaltech.com',
   'https://phrase-score-insight-lxkj.vercel.app',
-  'https://domainanalyzer-rosy.vercel.app',
-  'https://phrase-score-insight.vercel.app'
+  'https://domainanalyzer-rosy.vercel.app'
 ];
 
 const corsOptions: cors.CorsOptions = {
@@ -88,12 +89,14 @@ app.get('/api/debug/domains', async (req: Request, res: Response) => {
 // Routes
 app.use('/api/auth', authRouter);
 app.use('/api/domain', domainRouter);
+app.use('/api/domain-validation', domainValidationRouter);
 app.use('/api/keywords', keywordsRouter);
-app.use('/api/phrases', phrasesRouter);
+app.use('/api/intent-phrases', intentPhrasesRouter);
+app.use('/api/enhanced-phrases', enhancedPhrasesRouter);
 app.use('/api/ai-queries', aiQueriesRouter);
 app.use('/api/competitor', competitorRouter);
 app.use('/api/dashboard', dashboardRouter);
-app.use('/api/onboarding', onboardingRouter);
+// Onboarding routes removed
 
 // Health check endpoint
 app.get('/api/health', (req: Request, res: Response) => {

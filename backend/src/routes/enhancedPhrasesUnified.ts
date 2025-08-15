@@ -29,71 +29,152 @@ const SERP_API_KEY = process.env.SERP_API_KEY;
 if (!SERP_API_KEY) throw new Error('SERP_API_KEY not set in environment variables');
 
 // SERP API helper functions
-const searchSerpApi = async (query: string, engine: 'reddit' | 'quora') => {
+const searchSerpApi = async (query: string, engine: 'reddit' | 'quora', retries = 2) => {
   const baseUrl = 'https://serpapi.com/search';
   
-  // Use Google search with site restriction for Reddit and Quora
-  const siteRestriction = engine === 'reddit' ? 'site:reddit.com' : 'site:quora.com';
-  const searchQuery = `${query} ${siteRestriction}`;
-  
-  const params = new URLSearchParams({
-    api_key: SERP_API_KEY,
-    engine: 'google',
-    q: searchQuery,
-    gl: 'us',
-    hl: 'en',
-    num: '10'
-  });
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const params = new URLSearchParams({
+        api_key: SERP_API_KEY,
+        engine: 'google',
+        q: `${query} site:${engine}.com`,
+        gl: 'us',
+        hl: 'en',
+        num: '20', // Increased for better data
+        safe: 'off'
+      });
 
-  try {
-    const response = await fetch(`${baseUrl}?${params}`);
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`SERP API error ${response.status}:`, errorText);
-      throw new Error(`SERP API error: ${response.status} - ${errorText}`);
+      console.log(`SERP API attempt ${attempt + 1}/${retries + 1} for ${engine}: ${query}`);
+      
+      const response = await fetch(`${baseUrl}?${params}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; Bot/1.0)',
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Validate response structure
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid response structure from SERP API');
+      }
+      
+      // Check for SERP API specific errors
+      if (data.error) {
+        throw new Error(`SERP API Error: ${data.error}`);
+      }
+      
+      console.log(`SERP API success for ${engine}: Found ${data.organic_results?.length || 0} results`);
+      return data;
+      
+    } catch (error) {
+      console.error(`SERP API attempt ${attempt + 1} failed for ${engine}:`, error);
+      
+      if (attempt === retries) {
+        console.error(`All SERP API attempts failed for ${engine}`);
+        return {
+          organic_results: [],
+          error: error instanceof Error ? error.message : 'Unknown error'
+        };
+      }
+      
+      // Wait before retry with exponential backoff
+      await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 2000));
     }
-    return await response.json();
-  } catch (error) {
-    console.error(`SERP API search error for ${engine}:`, error);
-    return null;
   }
 };
 
 const extractRedditData = (serpData: any) => {
-  if (!serpData || !serpData.organic_results) return [];
+  if (!serpData || !serpData.organic_results || !Array.isArray(serpData.organic_results)) {
+    console.warn('Invalid SERP data structure for Reddit extraction');
+    return [];
+  }
   
   return serpData.organic_results
-    .filter((result: any) => result.link && result.link.includes('reddit.com'))
+    .filter((result: any) => {
+      return result && 
+             result.link && 
+             typeof result.link === 'string' && 
+             result.link.includes('reddit.com') &&
+             result.title &&
+             result.snippet;
+    })
     .map((result: any) => ({
-      title: result.title || '',
-      content: result.snippet || '',
-      subreddit: extractSubredditFromUrl(result.link) || '',
+      title: (result.title || '').trim(),
+      content: (result.snippet || '').trim(),
+      subreddit: extractSubredditFromUrl(result.link) || 'unknown',
       url: result.link || '',
-      score: 0,
+      score: result.rating || 0,
       comments: 0,
-      author: '',
-      created: ''
-    }));
+      author: 'reddit_user',
+      created: new Date().toISOString()
+    }))
+    .filter((item: any) => item.title.length > 0 && item.content.length > 0);
 };
 
 const extractQuoraData = (serpData: any) => {
-  if (!serpData || !serpData.organic_results) return [];
+  if (!serpData || !serpData.organic_results || !Array.isArray(serpData.organic_results)) {
+    console.warn('Invalid SERP data structure for Quora extraction');
+    return [];
+  }
   
   return serpData.organic_results
-    .filter((result: any) => result.link && result.link.includes('quora.com'))
+    .filter((result: any) => {
+      return result && 
+             result.link && 
+             typeof result.link === 'string' && 
+             result.link.includes('quora.com') &&
+             result.title &&
+             result.snippet;
+    })
     .map((result: any) => ({
-      title: result.title || '',
-      content: result.snippet || '',
+      title: (result.title || '').trim(),
+      content: (result.snippet || '').trim(),
       url: result.link || '',
-      author: '',
+      author: 'quora_user',
       answers: 0,
       views: 0
-    }));
+    }))
+    .filter((item: any) => item.title.length > 0 && item.content.length > 0);
 };
 
 const extractSubredditFromUrl = (url: string): string => {
   const match = url.match(/reddit\.com\/r\/([^\/]+)/);
   return match ? match[1] : '';
+};
+
+// Add this helper function for relevance scoring
+const calculateRelevanceScore = (text: string, businessContext: string): number => {
+  const lowerText = text.toLowerCase();
+  const lowerContext = businessContext.toLowerCase();
+  const contextWords = lowerContext.split(/\s+/);
+  
+  let score = 0;
+  
+  // Exact context match
+  if (lowerText.includes(lowerContext)) score += 10;
+  
+  // Individual word matches
+  contextWords.forEach(word => {
+    if (word.length > 2 && lowerText.includes(word)) {
+      score += 2;
+    }
+  });
+  
+  // Quality indicators
+  if (lowerText.includes('problem') || lowerText.includes('issue')) score += 3;
+  if (lowerText.includes('solution') || lowerText.includes('help')) score += 3;
+  if (lowerText.includes('how to') || lowerText.includes('best')) score += 2;
+  
+  // Length bonus for substantial content
+  if (text.length > 100) score += 1;
+  if (text.length > 300) score += 2;
+  
+  return Math.min(score, 20); // Cap at 20
 };
 
 const router = Router();
@@ -116,89 +197,120 @@ const retryOperation = async (operation: () => Promise<any>, maxRetries = 3, del
 
 // Helper function to clean and parse JSON responses from AI
 const parseAIResponse = (response: string, fallbackData: any = null) => {
+  if (!response || response.trim() === '') {
+    console.warn('Empty AI response received, using fallback data');
+    return fallbackData;
+  }
+
   try {
-    // Clean the response to remove markdown formatting
     let cleanResponse = response.trim();
     
-    // Remove markdown code blocks
-    if (cleanResponse.includes('```json')) {
-      const jsonMatch = cleanResponse.match(/```json\s*([\s\S]*?)\s*```/);
-      if (jsonMatch) {
-        cleanResponse = jsonMatch[1].trim();
-      }
-    } else if (cleanResponse.includes('```')) {
-      const codeMatch = cleanResponse.match(/```\s*([\s\S]*?)\s*```/);
-      if (codeMatch) {
-        cleanResponse = codeMatch[1].trim();
-      }
+    // Remove markdown code blocks more aggressively
+    const jsonBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/g;
+    const match = jsonBlockRegex.exec(cleanResponse);
+    if (match) {
+      cleanResponse = match[1].trim();
     }
     
-    // Try to fix common JSON issues
-    cleanResponse = cleanResponse.replace(/,\s*}/g, '}'); // Remove trailing commas
-    cleanResponse = cleanResponse.replace(/,\s*]/g, ']'); // Remove trailing commas in arrays
+    // Remove any text before the first { or [
+    const firstBrace = cleanResponse.indexOf('{');
+    const firstBracket = cleanResponse.indexOf('[');
+    const startIndex = Math.min(
+      firstBrace >= 0 ? firstBrace : Infinity,
+      firstBracket >= 0 ? firstBracket : Infinity
+    );
     
-    // More robust JSON parsing for incomplete responses
-    let parsed = false;
-    let attempts = 0;
-    const maxAttempts = 5;
+    if (startIndex !== Infinity) {
+      cleanResponse = cleanResponse.substring(startIndex);
+    }
     
-    while (!parsed && attempts < maxAttempts) {
-      try {
-        const result = JSON.parse(cleanResponse);
-        parsed = true;
-        return result;
-      } catch (parseError) {
-        attempts++;
-        
-        // If JSON is incomplete, try to find the last complete object
-        if (cleanResponse.includes('"') && !cleanResponse.endsWith('}') && !cleanResponse.endsWith(']')) {
-          // Find the last complete object by looking for balanced braces
-          let braceCount = 0;
-          let bracketCount = 0;
-          let lastValidPosition = -1;
-          
-          for (let i = 0; i < cleanResponse.length; i++) {
-            if (cleanResponse[i] === '{') braceCount++;
-            else if (cleanResponse[i] === '}') braceCount--;
-            else if (cleanResponse[i] === '[') bracketCount++;
-            else if (cleanResponse[i] === ']') bracketCount--;
-            
-            // If we have balanced braces/brackets, this is a valid position
-            if (braceCount === 0 && bracketCount === 0) {
-              lastValidPosition = i;
-            }
-          }
-          
-          if (lastValidPosition > 0) {
-            cleanResponse = cleanResponse.substring(0, lastValidPosition + 1);
-          } else {
-            // Try to close the JSON structure based on content
-            if (cleanResponse.includes('"sources"') && !cleanResponse.includes('"summary"')) {
-              cleanResponse = cleanResponse.replace(/,\s*$/, '') + ',"summary":{"commonQuestions":[],"painPoints":[],"popularSolutions":[],"userSentiment":{"positive":"","negative":""},"trendingTopics":[]},"communityInsights":{"engagement":"Limited data","demographics":"Not available","preferences":"Not available"}}';
-            } else if (cleanResponse.includes('"competitors"') && !cleanResponse.includes('"analysis"')) {
-              cleanResponse = cleanResponse.replace(/,\s*$/, '') + ',"analysis":"Competitor analysis completed","insights":"Competitor insights available"}';
-            } else if (cleanResponse.includes('"patterns"') && !cleanResponse.includes('"summary"')) {
-              cleanResponse = cleanResponse.replace(/,\s*$/, '') + ',"summary":"Search pattern analysis completed","communityDerivedPatterns":[],"userQuestions":[]}';
-            } else if (cleanResponse.startsWith('[') && !cleanResponse.endsWith(']')) {
-              cleanResponse = cleanResponse.replace(/,\s*$/, '') + ']';
-            } else {
-              // Last resort: try to close with minimal structure
-              cleanResponse = cleanResponse.replace(/,\s*$/, '') + '}';
-            }
-          }
-        } else {
-          // If we can't fix it, break out of the loop
-          break;
+    // Find the last complete JSON object/array
+    let braceCount = 0;
+    let bracketCount = 0;
+    let inString = false;
+    let escapeNext = false;
+    let lastValidEnd = -1;
+    
+    for (let i = 0; i < cleanResponse.length; i++) {
+      const char = cleanResponse[i];
+      
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      
+      if (char === '\\') {
+        escapeNext = true;
+        continue;
+      }
+      
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      
+      if (inString) continue;
+      
+      if (char === '{') braceCount++;
+      else if (char === '}') {
+        braceCount--;
+        if (braceCount === 0 && bracketCount === 0) {
+          lastValidEnd = i;
+        }
+      }
+      else if (char === '[') bracketCount++;
+      else if (char === ']') {
+        bracketCount--;
+        if (braceCount === 0 && bracketCount === 0) {
+          lastValidEnd = i;
         }
       }
     }
     
-    if (!parsed) {
-      throw new Error('Failed to parse JSON after multiple attempts');
+    if (lastValidEnd > 0) {
+      cleanResponse = cleanResponse.substring(0, lastValidEnd + 1);
     }
+    
+    // Clean up common JSON issues
+    cleanResponse = cleanResponse
+      .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
+      .replace(/([}\]])(\s*)([}\]])/g, '$1$2$3') // Fix bracket spacing
+      .replace(/\n\s*/g, ' ') // Remove newlines and extra spaces
+      .replace(/\s+/g, ' ') // Normalize spaces
+      .trim();
+    
+    const parsed = JSON.parse(cleanResponse);
+    console.log('Successfully parsed AI response');
+    return parsed;
+    
   } catch (parseError) {
-    console.warn('Failed to parse AI response as JSON, using fallback data');
-    return fallbackData;
+    console.warn('JSON parsing failed, attempting repair...', parseError);
+    
+    // Try to extract and parse individual objects from the response
+    try {
+      // Look for array patterns
+      if (response.includes('[') && response.includes(']')) {
+        const arrayMatches = response.match(/\[[\s\S]*?\]/g);
+        if (arrayMatches && arrayMatches.length > 0) {
+          const lastArray = arrayMatches[arrayMatches.length - 1];
+          return JSON.parse(lastArray);
+        }
+      }
+      
+      // Look for object patterns
+      if (response.includes('{') && response.includes('}')) {
+        const objectMatches = response.match(/\{[\s\S]*?\}/g);
+        if (objectMatches && objectMatches.length > 0) {
+          const lastObject = objectMatches[objectMatches.length - 1];
+          return JSON.parse(lastObject);
+        }
+      }
+    } catch (repairError) {
+      console.warn('JSON repair also failed:', repairError);
+    }
+    
+    console.warn('Using fallback data due to JSON parsing failure');
+    return fallbackData || { error: 'Failed to parse AI response', originalResponse: response.substring(0, 500) };
   }
 };
 
@@ -584,430 +696,253 @@ Ensure each insight is:
     } else {
       console.log(`Starting community mining for domain: ${domain.url}`);
       
-      try {
-      // REAL SERP API COMMUNITY MINING
-      console.log(`Starting SERP API community mining for domain: ${domain.url}`);
-      
-      // Create search queries based on domain context, semantic context, and location
+      // Create more targeted search queries
+      const businessContext = domain.context || domain.url.replace(/https?:\/\//, '').replace(/www\./, '');
       const searchQueries = [
-        `${domain.context || domain.url} problems solutions`,
-        `${domain.context || domain.url} best practices`,
-        `${domain.context || domain.url} how to implement`,
-        `${domain.context || domain.url} questions answers`,
-        `${domain.context || domain.url} ${domain.location || 'Global'}`
+        `${businessContext} problems issues reddit`,
+        `${businessContext} solutions help reddit`,
+        `${businessContext} advice tips reddit`,
+        `best ${businessContext} recommendations reddit`,
+        `${businessContext} questions answers quora`,
+        `how to ${businessContext} quora`,
+        `${businessContext} vs alternatives quora`
       ];
 
       const allRedditData = [];
       const allQuoraData = [];
 
-      // Mine Reddit data using SERP API
-      for (const query of searchQueries.slice(0, 3)) { // Limit to 3 queries to avoid rate limits
-        try {
-          const redditQuery = `${query} site:reddit.com`;
-          console.log(`Searching Reddit with query: ${redditQuery}`);
-          
-          const serpData = await searchSerpApi(redditQuery, 'reddit');
-          const redditResults = extractRedditData(serpData);
-          
-          allRedditData.push(...redditResults);
-          console.log(`Found ${redditResults.length} Reddit results for query: ${query}`);
-          
-          // Rate limiting
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        } catch (error) {
-          console.error(`Error mining Reddit for query "${query}":`, error);
+      try {
+        // IMPROVED REAL SERP API COMMUNITY MINING
+        console.log(`Starting enhanced SERP API community mining for domain: ${domain.url}`);
+
+        // Enhanced Reddit mining with better error handling
+        console.log('Mining Reddit data...');
+        for (const query of searchQueries.filter(q => q.includes('reddit'))) {
+          try {
+            console.log(`Reddit query: "${query}"`);
+            
+            const serpData = await searchSerpApi(query, 'reddit');
+            
+            if (serpData && !serpData.error) {
+              const redditResults = extractRedditData(serpData);
+              allRedditData.push(...redditResults);
+              console.log(`✓ Reddit: ${redditResults.length} results for "${query}"`);
+            } else {
+              console.warn(`✗ Reddit: No results for "${query}" - ${serpData?.error || 'Unknown error'}`);
+            }
+            
+            // Rate limiting between requests
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            
+          } catch (error) {
+            console.error(`Reddit mining error for "${query}":`, error);
+            continue; // Continue with next query
+          }
         }
-      }
 
-      // Mine Quora data using SERP API
-      for (const query of searchQueries.slice(0, 3)) { // Limit to 3 queries to avoid rate limits
-        try {
-          const quoraQuery = `${query} site:quora.com`;
-          console.log(`Searching Quora with query: ${quoraQuery}`);
-          
-          const serpData = await searchSerpApi(quoraQuery, 'quora');
-          const quoraResults = extractQuoraData(serpData);
-          
-          allQuoraData.push(...quoraResults);
-          console.log(`Found ${quoraResults.length} Quora results for query: ${query}`);
-          
-          // Rate limiting
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        } catch (error) {
-          console.error(`Error mining Quora for query "${query}":`, error);
+        // Enhanced Quora mining with better error handling
+        console.log('Mining Quora data...');
+        for (const query of searchQueries.filter(q => q.includes('quora'))) {
+          try {
+            console.log(`Quora query: "${query}"`);
+            
+            const serpData = await searchSerpApi(query, 'quora');
+            
+            if (serpData && !serpData.error) {
+              const quoraResults = extractQuoraData(serpData);
+              allQuoraData.push(...quoraResults);
+              console.log(`✓ Quora: ${quoraResults.length} results for "${query}"`);
+            } else {
+              console.warn(`✗ Quora: No results for "${query}" - ${serpData?.error || 'Unknown error'}`);
+            }
+            
+            // Rate limiting between requests
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            
+          } catch (error) {
+            console.error(`Quora mining error for "${query}":`, error);
+            continue; // Continue with next query
+          }
         }
-      }
 
-      // Combine and analyze the real community data
-      const combinedCommunityData = [
-        ...allRedditData.map(post => ({
-          platform: 'reddit',
-          title: post.title,
-          content: post.content,
-          subreddit: post.subreddit,
-          url: post.url,
-          type: 'community_post'
-        })),
-        ...allQuoraData.map(question => ({
-          platform: 'quora',
-          title: question.title,
-          content: question.content,
-          url: question.url,
-          type: 'community_question'
-        }))
-      ];
+        // Remove duplicates and validate data
+        const uniqueRedditData = allRedditData.filter((item, index, arr) => 
+          index === arr.findIndex(t => t.url === item.url || t.title === item.title)
+        );
+        
+        const uniqueQuoraData = allQuoraData.filter((item, index, arr) => 
+          index === arr.findIndex(t => t.url === item.url || t.title === item.title)
+        );
 
-      // Use AI to analyze the real community data
-      const communityAnalysisPrompt = `
-# Expert Community Data Analysis Framework
+        console.log(`Final community data: ${uniqueRedditData.length} Reddit posts, ${uniqueQuoraData.length} Quora questions`);
 
-## Core Intelligence Mission
-Analyze authentic community discussions from Reddit and Quora to extract actionable insights about user behaviors, pain points, solutions, and market intelligence for strategic decision-making.
+        // Prepare community data for analysis
+        const combinedCommunityData = [
+          ...uniqueRedditData.map(post => ({
+            platform: 'reddit',
+            title: post.title,
+            content: post.content,
+            subreddit: post.subreddit,
+            url: post.url,
+            type: 'community_post',
+            relevance: calculateRelevanceScore(post.title + ' ' + post.content, businessContext)
+          })),
+          ...uniqueQuoraData.map(question => ({
+            platform: 'quora',
+            title: question.title,
+            content: question.content,
+            url: question.url,
+            type: 'community_question',
+            relevance: calculateRelevanceScore(question.title + ' ' + question.content, businessContext)
+          }))
+        ];
 
-## Input Parameters
-**Target Domain:** ${domain.url}  
-**Business Context:** ${domain.context || 'General business services'}  
-**Semantic Context:** ${semanticContext}  
-**Geographic Focus:** ${domain.location || 'Global'}  
-**Community Data Sources:** ${combinedCommunityData.length} posts/questions  
-**Data Volume:** ${combinedCommunityData.length} total posts
+        // Sort by relevance and take top results
+        combinedCommunityData.sort((a, b) => b.relevance - a.relevance);
+        const topCommunityData = combinedCommunityData.slice(0, 50); // Top 50 most relevant
 
-## Advanced Community Intelligence Framework
+        console.log(`Using ${topCommunityData.length} top community insights for analysis`);
 
-### 1. Multi-Platform Data Analysis
+        // Only proceed with AI analysis if we have meaningful data
+        if (topCommunityData.length === 0) {
+          throw new Error('No community data retrieved from SERP API');
+        }
 
-#### Reddit Intelligence Extraction:
-- **Subreddit Context Analysis:** Which communities are discussing related topics
-- **Discussion Thread Patterns:** Problem-solution conversation flows
-- **User Expertise Levels:** Identifying novice vs expert contributors
-- **Sentiment Evolution:** How opinions develop through comment threads
-- **Viral Content Indicators:** Posts that generate high engagement
+        // Enhanced community analysis prompt with better structure
+        const communityAnalysisPrompt = `
+Analyze real community discussions to extract actionable business intelligence.
 
-#### Quora Intelligence Extraction:
-- **Question Quality Assessment:** Depth and specificity of user inquiries
-- **Answer Authority Analysis:** Credibility and expertise signals
-- **Knowledge Gap Identification:** Frequently asked but poorly answered questions
-- **Solution Effectiveness Patterns:** Which answers get most upvotes/views
-- **Expert Contributor Insights:** Professional perspectives and recommendations
+BUSINESS CONTEXT:
+Domain: ${domain.url}
+Context: ${domain.context || 'General business services'}
+Location: ${domain.location || 'Global'}
 
-### 2. Strategic Pain Point Intelligence
+COMMUNITY DATA (${topCommunityData.length} posts):
+${topCommunityData.slice(0, 20).map((item, idx) => 
+  `${idx + 1}. [${item.platform.toUpperCase()}] ${item.title}\n   Content: ${item.content.substring(0, 200)}...`
+).join('\n\n')}
 
-#### Problem Categorization Framework:
-- **Functional Pain Points:** Features, performance, usability issues
-- **Emotional Pain Points:** Frustration, anxiety, confidence concerns
-- **Economic Pain Points:** Cost, ROI, budget constraint discussions
-- **Social Pain Points:** Status, peer pressure, community acceptance issues
-- **Process Pain Points:** Workflow, integration, implementation challenges
+ANALYSIS REQUIREMENTS:
+Extract specific, actionable insights about user pain points, solutions, and market opportunities.
 
-#### Pain Point Prioritization Matrix:
-- **Frequency Score:** How often the pain point is mentioned
-- **Intensity Score:** Emotional weight and urgency in discussions
-- **Solution Gap Score:** How poorly current solutions address the pain
-- **Market Impact Score:** Potential business opportunity size
-
-### 3. Solution Intelligence Mining
-
-#### Solution Effectiveness Analysis:
-- **Recommended Solutions:** What community members actually suggest
-- **Success Story Patterns:** Solutions that worked for users
-- **Implementation Challenges:** Obstacles users face when adopting solutions
-- **Alternative Approach Discovery:** Creative workarounds and hacks
-- **Tool and Service Mentions:** Specific products/services recommended
-
-#### Community Wisdom Extraction:
-- **Best Practices:** Consistently recommended approaches
-- **Anti-Patterns:** Solutions users warn against
-- **Implementation Tips:** Practical advice for successful execution
-- **Resource Recommendations:** Books, courses, tools, experts mentioned
-- **Success Metrics:** How users measure solution effectiveness
-
-### 4. Market Intelligence & Trends
-
-#### Trend Pattern Recognition:
-- **Emerging Topics:** New discussions gaining momentum
-- **Declining Interests:** Topics losing community attention
-- **Seasonal Patterns:** Time-based discussion volume changes
-- **Technology Adoption Curves:** How users discuss new vs established solutions
-- **Market Maturity Indicators:** Sophistication level of community discussions
-
-#### Competitive Intelligence from Community:
-- **Brand Mentions:** Companies/services discussed positively/negatively
-- **Feature Comparisons:** Head-to-head capability discussions
-- **Migration Stories:** Why users switched between solutions
-- **Pricing Discussions:** Cost-related community conversations
-- **Support Experience Sharing:** Customer service quality insights
-
-## Output Specification
-
-Generate comprehensive analysis in this exact JSON structure:
-
+OUTPUT AS VALID JSON:
 {
   "sources": {
-    "redditSources": [
-      {
-        "url": "[Reddit URL]",
-        "subreddit": "[Subreddit name]",
-        "title": "[Post title]",
-        "relevanceScore": "[1-10]",
-        "keyInsights": ["[insight 1]", "[insight 2]"]
-      }
-    ],
-    "quoraSources": [
-      {
-        "url": "[Quora URL]",
-        "title": "[Question title]",
-        "answerQuality": "[High/Medium/Low]",
-        "relevanceScore": "[1-10]",
-        "keyInsights": ["[insight 1]", "[insight 2]"]
-      }
-    ],
-    "totalAnalyzed": "${combinedCommunityData.length}",
-    "dataQuality": "[High/Medium/Low with explanation]"
+    "reddit": ${uniqueRedditData.length},
+    "quora": ${uniqueQuoraData.length},
+    "total": ${topCommunityData.length}
   },
   "summary": {
     "primaryQuestions": [
-      {
-        "question": "[User question or concern]",
-        "frequency": "[How often mentioned]",
-        "platforms": ["[reddit/quora]"],
-        "userTypes": ["[beginner/intermediate/expert]"],
-        "urgencyLevel": "[High/Medium/Low]"
-      }
+      "What are users most concerned about?",
+      "What solutions do they seek?",
+      "What problems remain unsolved?"
     ],
     "criticalPainPoints": [
-      {
-        "painPoint": "[Specific user problem]",
-        "category": "[Functional/Emotional/Economic/Social/Process]",
-        "frequency": "[How often mentioned]",
-        "intensityScore": "[1-10]",
-        "currentSolutions": ["[existing solution 1]", "[existing solution 2]"],
-        "solutionGaps": ["[gap 1]", "[gap 2]"],
-        "marketOpportunity": "[High/Medium/Low with explanation]"
-      }
+      "Specific user frustrations",
+      "Common problems mentioned",
+      "Gaps in current solutions"
     ],
     "recommendedSolutions": [
-      {
-        "solution": "[Community-recommended solution]",
-        "endorsementLevel": "[Strong/Moderate/Weak]",
-        "successStories": "[Number of positive mentions]",
-        "implementationChallenges": ["[challenge 1]", "[challenge 2]"],
-        "userTypes": ["[who recommends this solution]"],
-        "alternatives": ["[alternative solution 1]", "[alternative solution 2]"]
-      }
+      "Community-endorsed approaches",
+      "Popular tools/services mentioned",
+      "Best practices shared"
     ],
-    "sentimentAnalysis": {
-      "overallSentiment": "[Positive/Neutral/Negative with score 1-10]",
-      "sentimentByTopic": {
-        "[Topic/Category]": {
-          "sentiment": "[Positive/Neutral/Negative]",
-          "confidence": "[High/Medium/Low]",
-          "keyThemes": ["[theme 1]", "[theme 2]"]
-        }
-      },
-      "emotionalTriggers": ["[trigger 1]", "[trigger 2]", "..."],
-      "satisfactionGaps": ["[gap 1]", "[gap 2]", "..."]
-    },
-    "emergingTrends": [
-      {
-        "trend": "[Trend description]",
-        "momentum": "[Growing/Stable/Declining]",
-        "timeframe": "[When this trend is happening]",
-        "implications": ["[implication 1]", "[implication 2]"],
-        "opportunities": ["[opportunity 1]", "[opportunity 2]"]
-      }
+    "marketOpportunities": [
+      "Underserved needs identified",
+      "Competitive gaps found",
+      "Emerging trends spotted"
     ]
   },
   "communityInsights": {
-    "userPersonas": [
-      {
-        "persona": "[User type/persona name]",
-        "characteristics": ["[characteristic 1]", "[characteristic 2]"],
-        "primaryNeeds": ["[need 1]", "[need 2]"],
-        "painPoints": ["[pain point 1]", "[pain point 2]"],
-        "preferredSolutions": ["[solution 1]", "[solution 2]"],
-        "decisionFactors": ["[factor 1]", "[factor 2]"],
-        "communityBehavior": "[How they engage in discussions]"
-      }
-    ],
-    "knowledgeGaps": [
-      {
-        "topic": "[Knowledge gap topic]",
-        "gapDescription": "[What users don't understand]",
-        "questionFrequency": "[How often asked]",
-        "answerQuality": "[Quality of current answers]",
-        "contentOpportunity": "[Type of content needed]",
-        "expertiseLevel": "[Level of expertise needed to address]"
-      }
-    ],
-    "communityLanguage": {
-      "commonTerminology": ["[term 1]", "[term 2]", "..."],
-      "jargonPatterns": ["[jargon 1]", "[jargon 2]", "..."],
-      "emotionalLanguage": ["[emotional phrase 1]", "[emotional phrase 2]", "..."],
-      "authoritySignals": ["[authority indicator 1]", "[authority indicator 2]", "..."],
-      "trustIndicators": ["[trust signal 1]", "[trust signal 2]", "..."]
-    },
-    "engagementPatterns": {
-      "highEngagementTriggers": ["[trigger 1]", "[trigger 2]", "..."],
-      "discussionStarters": ["[starter 1]", "[starter 2]", "..."],
-      "controversialTopics": ["[topic 1]", "[topic 2]", "..."],
-      "consensusAreas": ["[area 1]", "[area 2]", "..."],
-      "expertiseIndicators": ["[indicator 1]", "[indicator 2]", "..."]
-    },
-    "actionableIntelligence": [
-      {
-        "insight": "[Key actionable insight]",
-        "evidence": "[Supporting evidence from community data]",
-        "businessImplication": "[What this means for business strategy]",
-        "recommendedAction": "[Specific action to take]",
-        "priority": "[High/Medium/Low]",
-        "implementation": "[How to implement this insight]"
-      }
-    ]
+    "userPersonas": ["Primary user types identified"],
+    "commonLanguage": ["Terms and phrases users employ"],
+    "sentimentPatterns": ["Overall community sentiment"],
+    "actionableIntel": ["Specific business opportunities"]
   }
-}
+}`;
 
-## Advanced Analysis Methodologies
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [{ role: 'user', content: communityAnalysisPrompt }],
+          temperature: 0.2, // Lower temperature for more consistent JSON
+          max_tokens: 2000,
+          response_format: { type: "json_object" } // Force JSON response
+        });
 
-### 1. Sentiment Layering Analysis
-- **Surface Sentiment:** Explicit positive/negative expressions
-- **Deep Sentiment:** Underlying frustration, satisfaction, anxiety patterns
-- **Contextual Sentiment:** How sentiment varies by topic, platform, user type
-- **Temporal Sentiment:** How opinions evolve over time and discussion threads
-
-### 2. Authority and Credibility Mapping
-- **Expertise Indicators:** How to identify knowledgeable community members
-- **Trust Signals:** What makes community members believe recommendations
-- **Influence Patterns:** Who shapes community opinions and how
-- **Verification Methods:** How community validates information and claims
-
-### 3. Problem-Solution Network Analysis
-- **Problem Clustering:** Related issues that appear together
-- **Solution Pathway Mapping:** Common paths from problem to resolution
-- **Success Factor Analysis:** What makes solutions work or fail
-- **Alternative Discovery:** Unconventional approaches that work
-
-### 4. Market Intelligence Synthesis
-- **Competitive Landscape:** Real user perception of market players
-- **Price Sensitivity Analysis:** How cost factors into community decisions
-- **Feature Priority Mapping:** Which capabilities matter most to users
-- **Innovation Gap Identification:** Unmet needs ripe for new solutions
-
-## Quality Assurance Framework
-
-Ensure analysis meets these standards:
-- [ ] All insights supported by specific community evidence
-- [ ] User quotes accurately represent community voice
-- [ ] Pain points prioritized by actual frequency and intensity
-- [ ] Solutions validated by community success stories
-- [ ] Trends backed by observable pattern changes
-- [ ] Market opportunities grounded in unmet community needs
-- [ ] Actionable intelligence specific and implementable
-
-## Strategic Implementation Guidelines
-
-**For Product Development:** Use pain point analysis to prioritize feature development
-**For Content Strategy:** Leverage knowledge gaps to create high-value educational content
-**For Market Positioning:** Apply community language and trust signals to messaging
-**For Customer Acquisition:** Target user personas with their specific needs and preferences
-**For Competitive Strategy:** Exploit solution gaps and market opportunities identified
-
-## Data Quality Considerations
-
-When analyzing community data:
-- **Recency Bias:** Weight recent discussions more heavily for trends
-- **Platform Differences:** Account for different user behaviors on Reddit vs Quora
-- **Sample Representativeness:** Consider if community sample reflects broader market
-- **Confirmation Bias:** Look for contradictory evidence and minority opinions
-- **Context Preservation:** Maintain nuance and avoid oversimplification
-
-Remember: Community intelligence should reveal authentic user needs, behaviors, and market dynamics that can't be captured through traditional market research. Focus on extracting actionable insights that can inform strategic decisions and competitive advantages.
-
-## COMMUNITY DATA SAMPLES (${combinedCommunityData.length} total posts):
-${combinedCommunityData.slice(0, 20).map(item => 
-  `${item.platform}: ${item.title}`
-).join('\n')}${combinedCommunityData.length > 20 ? `\n... and ${combinedCommunityData.length - 20} more posts` : ''}
-`;
-
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [{ role: 'user', content: communityAnalysisPrompt }],
-        temperature: 0.3,
-        max_tokens: 3000
-      });
-
-      const response = completion.choices[0]?.message?.content;
-      if (response && response.trim()) {
-        // Check if response was truncated
-        if (completion.usage?.completion_tokens === 3000) {
-          console.warn(`Response may be truncated for domain - used ${completion.usage.completion_tokens} tokens`);
+        const response = completion.choices[0]?.message?.content;
+        
+        if (!response || response.trim() === '') {
+          throw new Error('Empty response from OpenAI API');
         }
+
+        console.log('Raw AI response length:', response.length);
+        
         const communityData = parseAIResponse(response, {
-          sources: [],
+          sources: { reddit: uniqueRedditData.length, quora: uniqueQuoraData.length, total: topCommunityData.length },
           summary: {
-            commonQuestions: [],
-            painPoints: [],
-            popularSolutions: [],
-            userSentiment: { positive: '', negative: '' },
-            trendingTopics: []
+            primaryQuestions: [`Common questions about ${businessContext}`],
+            criticalPainPoints: [`Main challenges with ${businessContext}`],
+            recommendedSolutions: [`Popular solutions for ${businessContext}`],
+            marketOpportunities: [`Opportunities in ${businessContext} market`]
           },
           communityInsights: {
-            engagement: 'Limited data available',
-            demographics: 'Not available',
-            preferences: 'Not available'
+            userPersonas: [`${businessContext} users`],
+            commonLanguage: [`${businessContext} terminology`],
+            sentimentPatterns: ['Mixed sentiment observed'],
+            actionableIntel: [`Market intelligence for ${businessContext}`]
           }
         });
-        
-        // Add real data count if parsing was successful
-        if (communityData && !communityData.error) {
-          communityData.realDataCount = {
-            reddit: allRedditData.length,
-            quora: allQuoraData.length,
-            total: combinedCommunityData.length
-          };
+
+        // Validate the parsed data structure
+        if (!communityData || typeof communityData !== 'object') {
+          throw new Error('Invalid community data structure received');
         }
 
-        // Store community insight data for domain
+        // Store community insight data with validation
         communityInsightData = {
           domainId: domain.id,
           sources: {
-            reddit: allRedditData.length,
-            quora: allQuoraData.length,
-            total: combinedCommunityData.length,
-            data: combinedCommunityData
+            reddit: uniqueRedditData.length,
+            quora: uniqueQuoraData.length,
+            total: topCommunityData.length,
+            quality: topCommunityData.length > 10 ? 'High' : topCommunityData.length > 5 ? 'Medium' : 'Low',
+            searchQueries: searchQueries,
+            dataPoints: topCommunityData
           },
-          summary: typeof communityData.summary === 'string' ? communityData.summary : JSON.stringify(communityData.summary || 'Community analysis completed'),
+          summary: JSON.stringify(communityData.summary || 'Community analysis completed'),
           tokenUsage: completion.usage?.total_tokens || 0
         };
 
         totalTokenUsage += completion.usage?.total_tokens || 0;
+        console.log(`✓ Community mining completed: ${topCommunityData.length} insights analyzed`);
+
+      } catch (error) {
+        console.error(`Community mining failed for domain ${domain.url}:`, error);
         
-        console.log(`Successfully mined ${combinedCommunityData.length} real community insights for domain: ${domain.url}`);
-      } else {
-        console.warn(`Empty or null response for domain, using fallback data`);
-        // Use fallback data when AI returns empty response
+        // Enhanced fallback with partial data if available
+        const fallbackSummary = {
+          primaryQuestions: [`How to improve ${businessContext}?`],
+          criticalPainPoints: [`Common ${businessContext} challenges`],
+          recommendedSolutions: [`Best practices for ${businessContext}`],
+          marketOpportunities: [`${businessContext} market gaps`]
+        };
+        
         communityInsightData = {
           domainId: domain.id,
           sources: { 
-            reddit: allRedditData.length, 
-            quora: allQuoraData.length, 
-            total: combinedCommunityData.length,
-            data: combinedCommunityData,
+            reddit: allRedditData?.length || 0, 
+            quora: allQuoraData?.length || 0, 
+            total: (allRedditData?.length || 0) + (allQuoraData?.length || 0),
+            error: error instanceof Error ? error.message : 'Community mining failed',
             fallback: true
           },
-          summary: `Community data analysis for domain ${domain.url} based on ${combinedCommunityData.length} real community posts from Reddit and Quora`,
+          summary: JSON.stringify(fallbackSummary),
           tokenUsage: 0
         };
+        
+        console.log('Using fallback community data');
       }
-    } catch (error) {
-      console.error(`Error mining community data for domain: ${domain.url}:`, error);
-      // Create fallback community insight data
-      communityInsightData = {
-        domainId: domain.id,
-        sources: { error: 'Failed to mine community data', reddit: 0, quora: 0, total: 0 },
-        summary: `No community data available for domain ${domain.url} due to error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        tokenUsage: 0
-      };
-    }
 
       // Store community insight for domain
       try {

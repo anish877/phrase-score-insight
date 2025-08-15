@@ -728,19 +728,19 @@ router.get('/:domainId/competitors', authenticateToken, async (req: any, res: an
     let competitiveAnalysis = {};
 
     try {
-      if (analysis.competitors) competitors = JSON.parse(analysis.competitors);
+      if (analysis.competitors && typeof analysis.competitors === 'string') competitors = JSON.parse(analysis.competitors);
     } catch (e) { console.log('Failed to parse competitors JSON'); }
 
     try {
-      if (analysis.marketInsights) marketInsights = JSON.parse(analysis.marketInsights);
+      if (analysis.marketInsights && typeof analysis.marketInsights === 'string') marketInsights = JSON.parse(analysis.marketInsights);
     } catch (e) { console.log('Failed to parse marketInsights JSON'); }
 
     try {
-      if (analysis.strategicRecommendations) strategicRecommendations = JSON.parse(analysis.strategicRecommendations);
+      if (analysis.strategicRecommendations && typeof analysis.strategicRecommendations === 'string') strategicRecommendations = JSON.parse(analysis.strategicRecommendations);
     } catch (e) { console.log('Failed to parse strategicRecommendations JSON'); }
 
     try {
-      if (analysis.competitiveAnalysis) competitiveAnalysis = JSON.parse(analysis.competitiveAnalysis);
+      if (analysis.competitiveAnalysis && typeof analysis.competitiveAnalysis === 'string') competitiveAnalysis = JSON.parse(analysis.competitiveAnalysis);
     } catch (e) { console.log('Failed to parse competitiveAnalysis JSON'); }
 
     res.json({
@@ -788,7 +788,7 @@ router.post('/:domainId/competitors', authenticateToken, async (req: any, res: a
       domain.url,
       domain.context || 'No context provided',
       competitors,
-      domain.location
+      domain.location || undefined
     );
 
     console.log(`AI analysis completed with ${analysisResult.tokenUsage} tokens used`);
@@ -872,7 +872,7 @@ router.get('/:domainId/suggested-competitors', authenticateToken, async (req: an
       domain.url,
       domain.context || 'No context provided',
       keywords,
-      domain.location
+      domain.location || undefined
     );
 
     console.log(`AI competitor suggestions generated with ${suggestionResult.tokenUsage} tokens used`);
@@ -955,7 +955,7 @@ router.post('/:domainId/report', authenticateToken, asyncHandler(async (req: Aut
     console.log('Report Generation - Total keywords:', domain.keywords.length);
     console.log('Report Generation - Keywords with selected phrases:', keywordsWithSelectedPhrases.length);
     console.log('Report Generation - Selected phrases:', selectedPhrases.length);
-    console.log('Report Generation - Selected phrases details:', selectedPhrases.map(p => ({ id: p.id, text: p.text, keyword: domain.keywords.find(kw => kw.phrases.some(ph => ph.id === p.id))?.term })));
+    console.log('Report Generation - Selected phrases details:', selectedPhrases.map(p => ({ id: p.id, phrase: p.phrase, keyword: domain.keywords.find(kw => kw.generatedIntentPhrases.some(ph => ph.id === p.id))?.term })));
 
     // Calculate overall score based on various metrics
     const calculateOverallScore = () => {
@@ -1006,13 +1006,13 @@ router.post('/:domainId/report', authenticateToken, asyncHandler(async (req: Aut
 
       // Count responses per model from selected phrases only
       let totalResponses = 0;
-      domain.keywords.forEach(keyword => {
-        keyword.phrases.filter(phrase => phrase.isSelected).forEach(phrase => {
-          phrase.aiQueryResults.forEach(result => {
+      domain.keywords.forEach((keyword: any) => {
+        keyword.generatedIntentPhrases.filter((phrase: any) => phrase.isSelected).forEach((phrase: any) => {
+          phrase.aiQueryResults.forEach((result: any) => {
             const modelName = result.model;
-            if (modelStats[modelName]) {
-              modelStats[modelName].responses++;
-              modelStats[modelName].avgConfidence = Math.round((modelStats[modelName].avgConfidence + (result.overall * 20)) / 2);
+            if (modelStats[modelName as keyof typeof modelStats]) {
+              modelStats[modelName as keyof typeof modelStats].responses++;
+              modelStats[modelName as keyof typeof modelStats].avgConfidence = Math.round((modelStats[modelName as keyof typeof modelStats].avgConfidence + (result.overall * 20)) / 2);
               totalResponses++;
             }
           });
@@ -1098,9 +1098,9 @@ router.post('/:domainId/report', authenticateToken, asyncHandler(async (req: Aut
         context: domain.crawlResults[0]?.extractedContext || '',
         location: domain.location || 'Global'
       },
-      selectedKeywords: domain.keywords.filter(kw => 
-        kw.phrases.some(phrase => phrase.isSelected)
-      ).map(kw => ({
+      selectedKeywords: domain.keywords.filter((kw: any) => 
+        kw.generatedIntentPhrases.some((phrase: any) => phrase.isSelected)
+      ).map((kw: any) => ({
         id: kw.id,
         keyword: kw.term,
         volume: kw.volume,
@@ -1108,8 +1108,8 @@ router.post('/:domainId/report', authenticateToken, asyncHandler(async (req: Aut
         cpc: kw.cpc,
         isSelected: kw.isSelected
       })),
-      intentPhrases: domain.keywords.flatMap(kw => 
-        kw.phrases.filter(phrase => phrase.isSelected).map(phrase => {
+      intentPhrases: domain.keywords.flatMap((kw: any) => 
+        kw.generatedIntentPhrases.filter((phrase: any) => phrase.isSelected).map((phrase: any) => {
           // Safely parse sources JSON with fallback
           let sources = ['Community Discussions', 'Industry Reports'];
           if (phrase.sources) {
@@ -1127,7 +1127,7 @@ router.post('/:domainId/report', authenticateToken, asyncHandler(async (req: Aut
           
           return {
             id: phrase.id.toString(),
-            phrase: phrase.text,
+            phrase: phrase.phrase,
             relevance: phrase.relevanceScore || 0,
             trend: phrase.trend || 'Rising',
             sources: sources,

@@ -58,6 +58,8 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isBackLoading, setIsBackLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [phrasesLoading, setPhrasesLoading] = useState(false);
+  const [isPhraseGenerationActive, setIsPhraseGenerationActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [step3Data, setStep3Data] = useState<Step3Data | null>(null);
   
@@ -79,6 +81,7 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
   const [isContinuing, setIsContinuing] = useState(false);
   const phrasesReceivedRef = useRef(0);
+  const receivedPhrasesRef = useRef<IntentPhrase[]>([]);
 
   // Load existing Step3Results data
   useEffect(() => {
@@ -169,14 +172,18 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
         if (existingPhrasesResponse.ok) {
           const existingData = await existingPhrasesResponse.json();
           
-          // Update the ref with existing phrases count
-          phrasesReceivedRef.current = existingData.existingPhrases?.length || 0;
           if (existingData.existingPhrases && existingData.existingPhrases.length > 0) {
             console.log('Found existing phrases:', existingData.existingPhrases.length);
             
-            // Always load existing phrases first
-            console.log('Loading existing phrases:', existingData.existingPhrases);
-            setIntentPhrases(existingData.existingPhrases);
+            // Set existing phrases immediately (only if not currently generating)
+            if (!isPhraseGenerationActive) {
+              console.log('Setting existing phrases from loadStep3Data:', existingData.existingPhrases.length);
+              setIntentPhrases(existingData.existingPhrases);
+              phrasesReceivedRef.current = existingData.existingPhrases.length;
+              receivedPhrasesRef.current = existingData.existingPhrases;
+            } else {
+              console.log('Skipping setIntentPhrases - phrase generation is active');
+            }
             
             // Check if we have phrases for ALL selected keywords
             const selectedKeywordIds = data.selectedKeywords.map(kw => kw.id);
@@ -230,16 +237,34 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
     return () => clearInterval(interval);
   }, [generatingSteps]);
 
+  // Debug: Monitor intentPhrases state changes
+  useEffect(() => {
+    console.log('intentPhrases state updated:', intentPhrases.length, 'phrases');
+    if (intentPhrases.length > 0) {
+      console.log('Current phrases in state:', intentPhrases.map(p => `${p.id}: ${p.phrase}`));
+    }
+  }, [intentPhrases]);
+
   const generateNewPhrases = async (data?: Step3Data) => {
     setIsGenerating(true);
+    setPhrasesLoading(true);
+    setIsPhraseGenerationActive(true);
     setError(null);
     
-    // Reset the phrases counter
-    phrasesReceivedRef.current = 0;
+    // Initialize the phrases counter with existing phrases
+    phrasesReceivedRef.current = intentPhrases.length;
     
     // Preserve existing phrases before starting generation
     const currentPhrases = intentPhrases;
     console.log('Preserving current phrases before generation:', currentPhrases.length);
+    console.log('Current phrases:', currentPhrases.map(p => `${p.id}: ${p.phrase}`));
+    
+    // Don't reset the state if we already have phrases
+    if (currentPhrases.length > 0) {
+      console.log('Already have phrases, not resetting state');
+    }
+    
+    // No need to store phrases before generation since we'll fetch from DB
     
     // Add timeout to prevent phases from getting stuck
     const phaseTimeout = setTimeout(() => {
@@ -436,101 +461,69 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
                 // Log progress for debugging
                 console.log('Progress update:', { phase, progress, message });
                 console.log('Current steps state:', generatingSteps);
-              } else if (eventType === 'phrase' || eventType === 'phrase-generated') {
-                // Add new phrase (handle both old and new event types)
-                const phrase = data;
-                
-                console.log('Received phrase event:', eventType, phrase);
-                console.log('Current phrases count before adding:', intentPhrases.length);
-                
-                // Ensure all required properties are present
-                const validatedPhrase: IntentPhrase = {
-                  id: phrase.id || `phrase-${Date.now()}`,
-                  phrase: phrase.phrase || 'Generated phrase',
-                  relevanceScore: phrase.relevanceScore || 80,
-                  intent: phrase.intent || 'Informational',
-                  intentConfidence: phrase.intentConfidence || 75,
-                  sources: Array.isArray(phrase.sources) ? phrase.sources : ['AI Generated'],
-                  trend: phrase.trend || 'Rising',
-                  editable: true,
-                  selected: false,
-                  parentKeyword: phrase.parentKeyword || 'Unknown',
-                  keywordId: phrase.keywordId,
-                  wordCount: phrase.wordCount || (phrase.phrase ? phrase.phrase.trim().split(/\s+/).length : 0)
-                };
-                
-                setIntentPhrases(prev => {
-                  // Check if phrase already exists by ID or by phrase text + keyword combination
-                  const existingPhrase = prev.find(p => 
-                    p.id === validatedPhrase.id || 
-                    (p.phrase === validatedPhrase.phrase && p.parentKeyword === validatedPhrase.parentKeyword)
-                  );
-                  
-                  if (existingPhrase) {
-                    console.log('Phrase already exists, skipping:', validatedPhrase.phrase);
-                    return prev;
-                  }
-                  
-                  console.log('Adding new phrase:', validatedPhrase.phrase, 'for keyword:', validatedPhrase.parentKeyword);
-                  console.log('Total phrases after adding:', prev.length + 1);
-                  console.log('All phrases after adding:', [...prev, validatedPhrase].map(p => p.phrase));
-                  
-                  // Update the ref to track actual phrases received
-                  phrasesReceivedRef.current = prev.length + 1;
-                  
-                  return [...prev, validatedPhrase];
-                });
-              } else if (eventType === 'phrase-updated') {
-                // Update phrase ID from temporary to database ID
-                const { oldId, newId } = data;
-                setIntentPhrases(prev => 
-                  prev.map(p => p.id === oldId ? { ...p, id: newId } : p)
-                );
-                setSelectedPhrases(prev => 
-                  prev.map(id => id === oldId ? newId : id)
-                );
+                            } else if (eventType === 'phrase' || eventType === 'phrase-generated') {
+                // Just log that we received a phrase event (for debugging)
+                console.log('Received phrase event:', eventType, 'Phrase ID:', data.id, 'Phrase:', data.phrase);
+                // Don't update state here - we'll fetch everything from DB after completion
+
               } else if (eventType === 'complete') {
                 // Generation complete
                 console.log('Generation complete:', data);
-                console.log('Final phrases count (state):', intentPhrases.length);
-                console.log('Final phrases count (ref):', phrasesReceivedRef.current);
-                console.log('Expected total phrases:', data.totalPhrases);
-                console.log('Expected total keywords:', data.totalKeywords);
-                console.log('All final phrases:', intentPhrases.map(p => `${p.phrase} (${p.parentKeyword})`));
+                console.log('=== PHRASE COUNT SUMMARY ===');
+                console.log('Expected total phrases:', data.totalPhrases || 0);
+                console.log('Expected total keywords:', data.totalKeywords || 0);
+                console.log('============================');
                 
-                // Use the ref count for comparison since it's more accurate
-                const actualPhrasesReceived = phrasesReceivedRef.current;
+                // Mark all steps as completed
+                setGeneratingSteps(prev => 
+                  prev.map(step => ({ 
+                    ...step, 
+                    status: 'completed' as const, 
+                    progress: 100 
+                  }))
+                );
                 
-                // Check if we received all expected phrases
-                if (actualPhrasesReceived !== data.totalPhrases) {
-                  console.warn(`MISMATCH: Expected ${data.totalPhrases} phrases but received ${actualPhrasesReceived} phrases`);
+                // Fetch all phrases from database after generation completes
+                setTimeout(async () => {
+                  console.log('Fetching all phrases from database after generation...');
                   
-                  // Wait a bit more for phrases to be processed
-                  setTimeout(() => {
-                    console.log('Final phrases count after delay (state):', intentPhrases.length);
-                    console.log('Final phrases count after delay (ref):', phrasesReceivedRef.current);
-                    console.log('All final phrases after delay:', intentPhrases.map(p => `${p.phrase} (${p.parentKeyword})`));
-                    
-                    if (phrasesReceivedRef.current === data.totalPhrases) {
-                      console.log('SUCCESS: Received all expected phrases after delay');
+                  try {
+                    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/enhanced-phrases/${domainId}/step3`, {
+                      headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+                        'Content-Type': 'application/json',
+                      },
+                    });
+
+                    if (response.ok) {
+                      const existingData = await response.json();
+                      if (existingData.existingPhrases && existingData.existingPhrases.length > 0) {
+                        console.log('Successfully fetched', existingData.existingPhrases.length, 'phrases from database');
+                        setIntentPhrases(existingData.existingPhrases);
+                        phrasesReceivedRef.current = existingData.existingPhrases.length;
+                        receivedPhrasesRef.current = existingData.existingPhrases;
+                      } else {
+                        console.warn('No phrases found in database after generation');
+                      }
                     } else {
-                      console.warn(`Still missing phrases: Expected ${data.totalPhrases}, got ${phrasesReceivedRef.current}`);
+                      console.error('Failed to fetch phrases from database after generation');
                     }
-                    
-                    clearTimeout(phaseTimeout);
-                    setIsGenerating(false);
-                  }, 1000);
-                } else {
-                  console.log('SUCCESS: Received all expected phrases');
+                  } catch (error) {
+                    console.error('Error fetching phrases from database after generation:', error);
+                  }
+                  
                   clearTimeout(phaseTimeout);
                   setIsGenerating(false);
-                }
+                  setPhrasesLoading(false);
+                  setIsPhraseGenerationActive(false);
+                }, 1000); // Reduced timeout since we're fetching from DB
                 return;
               } else if (eventType === 'error') {
                 // Error occurred
                 setError(data.error || 'An error occurred during generation');
                 clearTimeout(phaseTimeout);
                 setIsGenerating(false);
+                setPhrasesLoading(false);
                 return;
               }
             }
@@ -542,25 +535,8 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
       setError('Failed to generate phrases. Please try again.');
       clearTimeout(phaseTimeout);
       setIsGenerating(false);
-      
-      // Add fallback mock phrases for testing
-      console.log('Adding fallback mock phrases for testing');
-      const selectedKeywordsForMock = currentData?.selectedKeywords.filter(kw => kw.isSelected) || [];
-      const mockPhrases: IntentPhrase[] = keywordTerms.map((keyword, index) => ({
-        id: `mock-${index}`,
-        phrase: `How to implement ${keyword} for business growth and success`,
-        relevanceScore: 85 + Math.floor(Math.random() * 15),
-        sources: ['Community Discussions', 'Industry Reports'],
-        trend: 'Rising',
-        editable: true,
-        selected: false,
-        parentKeyword: keyword,
-        keywordId: selectedKeywordsForMock[index]?.id,
-        wordCount: 8
-      }));
-      
-      setIntentPhrases(mockPhrases);
-      setIsGenerating(false);
+      setPhrasesLoading(false);
+      setIsPhraseGenerationActive(false);
     }
   };
 
@@ -571,12 +547,6 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
   };
 
   const handlePhraseSelect = (phraseId: string) => {
-    // Don't allow selection of temporary phrases
-    if (phraseId.toString().startsWith('temp-')) {
-      alert('This phrase is still being processed and cannot be selected yet. Please wait for it to complete saving.');
-      return;
-    }
-    
     if (selectedPhrases.includes(phraseId)) {
       setSelectedPhrases(prev => prev.filter(id => id !== phraseId));
     } else if (selectedPhrases.length < 3) {
@@ -593,11 +563,8 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
     try {
       setIsContinuing(true);
       
-      // Filter out temporary IDs (those starting with 'temp-')
-      const validSelectedPhrases = selectedPhrases.filter(id => !id.toString().startsWith('temp-'));
-      
-      if (validSelectedPhrases.length === 0) {
-        alert('No valid phrases selected. Please select phrases that have been successfully saved to the database.');
+      if (selectedPhrases.length === 0) {
+        alert('No phrases selected. Please select at least one phrase.');
         setIsContinuing(false);
         return;
       }
@@ -610,7 +577,7 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          selectedPhrases: validSelectedPhrases
+          selectedPhrases: selectedPhrases
         }),
       });
 
@@ -1346,6 +1313,7 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
               <h3 className="text-lg font-medium text-gray-900 mb-1">Select Intent Phrases</h3>
               <p className="text-sm text-gray-600">
                 Choose up to 3 phrases for detailed analysis • {selectedPhrases.length}/3 selected
+                {phrasesLoading && ' • Loading phrases...'}
               </p>
             </div>
             
@@ -1356,9 +1324,49 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
             )}
           </div>
 
+          {/* Phrase Generation Summary */}
+          {intentPhrases.length > 0 && !phrasesLoading && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <h4 className="font-medium text-blue-800 mb-3">Phrase Generation Summary</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div className="text-center">
+                  <div className="text-lg font-medium text-blue-600">{intentPhrases.length}</div>
+                  <div className="text-blue-700">Total Phrases</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-medium text-blue-600">
+                    {Math.round(intentPhrases.reduce((sum, p) => sum + (p.relevanceScore || 0), 0) / intentPhrases.length)}
+                  </div>
+                  <div className="text-blue-700">Avg Score</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-medium text-blue-600">
+                    {intentPhrases.filter(p => p.intent === 'Informational').length}
+                  </div>
+                  <div className="text-blue-700">Informational</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-medium text-blue-600">
+                    {intentPhrases.filter(p => p.intent === 'Transactional').length}
+                  </div>
+                  <div className="text-blue-700">Transactional</div>
+                </div>
+              </div>
+              <div className="mt-3 text-xs text-blue-600">
+                Generated using community insights, competitor analysis, and search pattern optimization
+              </div>
+            </div>
+          )}
+
           {/* Simplified Phrase Cards */}
           <div className="space-y-6">
-            {groupedPhrases.map((group, groupIdx) => (
+            {phrasesLoading && (
+              <div className="text-center py-8">
+                <div className="w-8 h-8 border-2 border-gray-300 rounded-full animate-spin border-t-gray-800 mx-auto mb-4"></div>
+                <p className="text-gray-600">Loading phrases...</p>
+              </div>
+            )}
+            {!phrasesLoading && groupedPhrases.map((group, groupIdx) => (
               <div key={`group-${groupIdx}`} className="space-y-3">
                 {/* Minimal Keyword Label */}
                 <div className="flex items-center space-x-2">
@@ -1382,8 +1390,7 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
                           checked={selectedPhrases.includes(phrase.id)}
                           onChange={() => handlePhraseSelect(phrase.id)}
                           disabled={
-                            !selectedPhrases.includes(phrase.id) && selectedPhrases.length >= 3 ||
-                            phrase.id.toString().startsWith('temp-')
+                            !selectedPhrases.includes(phrase.id) && selectedPhrases.length >= 3
                           }
                           className="w-4 h-4 text-gray-900 border-gray-300 rounded focus:ring-1 focus:ring-gray-900"
                         />
@@ -1438,10 +1445,26 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
                                   {phrase.wordCount || phrase.phrase.trim().split(/\s+/).length}
                                 </span>
                               </span>
-                              
-                              {phrase.id.toString().startsWith('temp-') && (
-                                <span className="text-amber-600 font-medium">Processing...</span>
-                              )}
+
+                              <span className="flex items-center space-x-1">
+                                <span>Sources:</span>
+                                <span className="font-medium text-gray-700">
+                                  {phrase.sources && phrase.sources.length > 0 
+                                    ? phrase.sources.slice(0, 2).join(', ') + (phrase.sources.length > 2 ? '...' : '')
+                                    : 'AI Generated'
+                                  }
+                                </span>
+                              </span>
+
+                              <span className="flex items-center space-x-1">
+                                <span>Trend:</span>
+                                <span className={`font-medium ${
+                                  phrase.trend === 'Rising' ? 'text-green-600' : 
+                                  phrase.trend === 'Stable' ? 'text-blue-600' : 'text-gray-600'
+                                }`}>
+                                  {phrase.trend || 'Rising'}
+                                </span>
+                              </span>
                             </div>
                           </div>
                         )}
@@ -1484,7 +1507,7 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
             
             <button
               onClick={handleNext}
-              disabled={selectedPhrases.length === 0 || isContinuing}
+              disabled={selectedPhrases.length === 0 || isContinuing || phrasesLoading}
               className="px-8 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
             >
               {isContinuing ? (

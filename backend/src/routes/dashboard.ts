@@ -70,7 +70,7 @@ router.get('/all', authenticateToken, asyncHandler(async (req: AuthenticatedRequ
 // Lightweight function to calculate basic metrics from existing data (no AI calls)
 function calculateBasicMetrics(domain: any) {
   const aiQueryResults = domain.keywords.flatMap((keyword: any) => 
-    keyword.phrases.flatMap((phrase: any) => phrase.aiQueryResults)
+    keyword.generatedIntentPhrases.flatMap((phrase: any) => phrase.aiQueryResults)
   );
 
   // Handle crawl data properly
@@ -100,7 +100,7 @@ function calculateBasicMetrics(domain: any) {
       avgOverall: 0,
       totalQueries: 0,
       keywordCount: domain.keywords.length,
-      phraseCount: domain.keywords.reduce((sum: number, keyword: any) => sum + keyword.phrases.length, 0),
+      phraseCount: domain.keywords.reduce((sum: number, keyword: any) => sum + keyword.generatedIntentPhrases.length, 0),
       modelPerformance: [],
       keywordPerformance: [],
       topPhrases: [],
@@ -171,8 +171,8 @@ function calculateBasicMetrics(domain: any) {
   // Top performing phrases (from existing data)
   const phraseStats = new Map();
   domain.keywords.forEach((keyword: any) => {
-    keyword.phrases.forEach((phrase: any) => {
-      const phraseText = phrase.text || 'Unknown';
+    keyword.generatedIntentPhrases.forEach((phrase: any) => {
+      const phraseText = phrase.phrase || 'Unknown';
       const phraseResults = phrase.aiQueryResults || [];
       if (phraseResults.length > 0) {
         if (!phraseStats.has(phraseText)) {
@@ -197,7 +197,7 @@ function calculateBasicMetrics(domain: any) {
   // Keyword performance (from existing data)
   const keywordStats = new Map();
   domain.keywords.forEach((keyword: any) => {
-    const keywordResults = keyword.phrases.flatMap((phrase: any) => phrase.aiQueryResults);
+    const keywordResults = keyword.generatedIntentPhrases.flatMap((phrase: any) => phrase.aiQueryResults);
     if (keywordResults.length > 0) {
       const mentions = keywordResults.filter((result: any) => result.presence === 1).length;
       const avgSentiment = keywordResults.reduce((sum: number, result: any) => sum + result.sentiment, 0) / keywordResults.length;
@@ -407,10 +407,10 @@ router.get('/:domainId', authenticateToken, asyncHandler(async (req: Authenticat
       crawlResults: domain.crawlResults || [],
       keywords: domain.keywords || [],
       phrases: domain.keywords.flatMap((keyword: any) => 
-        keyword.phrases.map((phrase: any) => ({
+        keyword.generatedIntentPhrases.map((phrase: any) => ({
           id: phrase.id,
-          text: phrase.text,
-          keywordId: phrase.keywordId
+          text: phrase.phrase,
+          keywordId: keyword.id
         }))
       ),
       aiQueryResults: flatAIQueryResults,

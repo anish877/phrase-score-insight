@@ -27,10 +27,58 @@ interface DomainData {
     pagesScanned: number;
     analyzedUrls: string[];
     extractedContext: string;
+    tokenUsage?: number;
   }>;
-  keywords: Keyword[];
+  keywords: Array<{
+    id: number;
+    term: string;
+    volume: number;
+    difficulty: string;
+    cpc: number;
+    intent?: string;
+    isSelected: boolean;
+    generatedIntentPhrases: Array<{
+      id: number;
+      phrase: string;
+      relevanceScore?: number;
+      intent?: string;
+      intentConfidence?: number;
+      sources?: Record<string, unknown>;
+      trend?: string;
+      isSelected: boolean;
+      aiQueryResults: Array<{
+        id: number;
+        model: string;
+        response: string;
+        latency: number;
+        cost: number;
+        presence: number;
+        relevance: number;
+        accuracy: number;
+        sentiment: number;
+        overall: number;
+        phraseId: number;
+        keyword?: string;
+        phraseText?: string;
+      }>;
+    }>;
+  }>;
   phrases: Array<{ id: number; text: string; keywordId: number }>;
-  aiQueryResults: AIQueryResult[];
+  aiQueryResults: Array<{
+    id: number;
+    model: string;
+    response: string;
+    latency: number;
+    cost: number;
+    presence: number;
+    relevance: number;
+    accuracy: number;
+    sentiment: number;
+    overall: number;
+    phraseId: number;
+    keyword?: string;
+    phraseText?: string;
+  }>;
   metrics: {
     visibilityScore: number;
     mentionRate: string;
@@ -215,9 +263,10 @@ interface FlatAIQueryResult {
   overall: number;
   phraseId: number;
   keyword?: string;
+  phraseText?: string;
 }
 
-const AIResultsTable: React.FC<{ results: FlatAIQueryResult[], phrases: Phrase[] }> = ({ results, phrases }) => {
+const AIResultsTable: React.FC<{ results: FlatAIQueryResult[] }> = ({ results }) => {
   // Debug: log the first result to inspect fields
   if (results && results.length > 0) {
     // eslint-disable-next-line no-console
@@ -258,11 +307,11 @@ const AIResultsTable: React.FC<{ results: FlatAIQueryResult[], phrases: Phrase[]
     );
   }
 
-  // Helper to get phrase text from phraseId
-  function getPhraseText(phraseId: number | undefined) {
-    if (!phraseId) return '-';
-    const phraseObj = phrases.find(p => p.id === phraseId);
-    return phraseObj ? phraseObj.text : '-';
+  // Helper to get phrase text from phraseId or use phraseText if available
+  function getPhraseText(result: FlatAIQueryResult) {
+    if (result.phraseText) return result.phraseText;
+    if (!result.phraseId) return '-';
+    return `Phrase ID: ${result.phraseId}`;
   }
 
   return (
@@ -300,12 +349,12 @@ const AIResultsTable: React.FC<{ results: FlatAIQueryResult[], phrases: Phrase[]
                       <TooltipProvider>
                         <UITooltip>
                           <TooltipTrigger asChild>
-                            <div className="truncate text-slate-900 cursor-pointer" title={getPhraseText(r.phraseId)}>
-                              {getPhraseText(r.phraseId)}
+                            <div className="truncate text-slate-900 cursor-pointer" title={getPhraseText(r)}>
+                              {getPhraseText(r)}
                             </div>
                           </TooltipTrigger>
                           <TooltipContent className="max-w-lg whitespace-pre-line">
-                            {getPhraseText(r.phraseId)}
+                            {getPhraseText(r)}
                           </TooltipContent>
                         </UITooltip>
                       </TooltipProvider>
@@ -649,6 +698,28 @@ const DomainDashboard = () => {
         console.log('Medium volume keywords:', data.metrics.keywordAnalytics.mediumVolume);
         console.log('Low volume keywords:', data.metrics.keywordAnalytics.lowVolume);
       }
+
+      // Calculate keyword analytics if not provided
+      if (!data.metrics.keywordAnalytics && data.keywords) {
+        const highVolume = data.keywords.filter(k => k.volume >= 10000).length;
+        const mediumVolume = data.keywords.filter(k => k.volume >= 1000 && k.volume < 10000).length;
+        const lowVolume = data.keywords.filter(k => k.volume < 1000).length;
+        const highDifficulty = data.keywords.filter(k => parseInt(k.difficulty) >= 70).length;
+        const mediumDifficulty = data.keywords.filter(k => parseInt(k.difficulty) >= 30 && parseInt(k.difficulty) < 70).length;
+        const lowDifficulty = data.keywords.filter(k => parseInt(k.difficulty) < 30).length;
+
+        data.metrics.keywordAnalytics = {
+          highVolume,
+          mediumVolume,
+          lowVolume,
+          highDifficulty,
+          mediumDifficulty,
+          lowDifficulty,
+          longTail: lowVolume,
+          branded: 0, // Would need to be calculated based on domain name
+          nonBranded: data.keywords.length
+        };
+      }
       
       // Ensure all metrics are properly formatted
       if (data.metrics) {
@@ -705,6 +776,19 @@ const DomainDashboard = () => {
       console.log('Domain data set successfully');
       // Debug: log token usage after setting domain data
       console.log('Token usage from API:', data.extraction?.tokenUsage);
+      
+      // Transform the data to match the expected structure
+      // The backend already provides flattened AI query results
+      // but we need to ensure the phrases array is properly populated
+      if (data.keywords && !data.phrases) {
+        data.phrases = data.keywords.flatMap((keyword: Record<string, unknown>) => 
+          (keyword.generatedIntentPhrases as Array<Record<string, unknown>>)?.map((phrase: Record<string, unknown>) => ({
+            id: phrase.id as number,
+            text: phrase.phrase as string,
+            keywordId: keyword.id as number
+          })) || []
+        );
+      }
     } catch (err) {
       console.error('Error fetching domain data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load domain data');
@@ -2880,7 +2964,7 @@ const DomainDashboard = () => {
               </CardHeader>
               <CardContent>
                 {domainData.aiQueryResults && domainData.aiQueryResults.length > 0 ? (
-                  <AIResultsTable results={domainData.aiQueryResults as unknown as FlatAIQueryResult[]} phrases={domainData.phrases || []} />
+                  <AIResultsTable results={domainData.aiQueryResults as unknown as FlatAIQueryResult[]} />
                 ) : (
                   <div className="text-center text-slate-500 py-12">
                     <p>No AI query results available for this domain.</p>

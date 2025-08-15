@@ -59,6 +59,14 @@ interface ReportData {
     searchVolumeClassification: Record<string, unknown>;
     intentClassification: Record<string, unknown>;
   };
+  additionalInsights?: {
+    topCompetitors: Array<{ domain: string; frequency: number }>;
+    modelInsights: Array<{ model: string; insight: string; avgScore: number; presenceRate: number }>;
+    totalQueries: number;
+    avgResponseTime: number;
+    totalCost: number;
+    sourceDistribution: Record<string, number>;
+  };
 }
 
 interface AIQueryResult {
@@ -268,6 +276,8 @@ export default function Step4Report({ domainId, onBack, onComplete }: Step4Props
       const avgOverall = totalResults > 0 ? aiResults.reduce((sum, r) => sum + r.scores.overall, 0) / totalResults : 0;
       const avgPresence = totalResults > 0 ? aiResults.reduce((sum, r) => sum + r.scores.presence, 0) / totalResults : 0;
       const avgRelevance = totalResults > 0 ? aiResults.reduce((sum, r) => sum + r.scores.relevance, 0) / totalResults : 0;
+      const avgAccuracy = totalResults > 0 ? aiResults.reduce((sum, r) => sum + r.scores.accuracy, 0) / totalResults : 0;
+      const avgSentiment = totalResults > 0 ? aiResults.reduce((sum, r) => sum + r.scores.sentiment, 0) / totalResults : 0;
       
       // Group results by model
       const modelResults = aiResults.reduce((acc, result) => {
@@ -287,42 +297,139 @@ export default function Step4Report({ domainId, onBack, onComplete }: Step4Props
         topSource: data.results[0]?.scores.sources[0] || 'AI Analysis'
       }));
 
-      // Generate recommendations based on AI results
+      // Analyze competitor data
+      const allCompetitorUrls = aiResults.flatMap(r => r.scores.competitorUrls || []);
+      const competitorDomains = allCompetitorUrls.map(url => {
+        try {
+          return new URL(url).hostname;
+        } catch {
+          return '';
+        }
+      }).filter(domain => domain.length > 0);
+      
+      const competitorFrequency = competitorDomains.reduce((acc, domain) => {
+        acc[domain] = (acc[domain] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      
+      const topCompetitors = Object.entries(competitorFrequency)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 5)
+        .map(([domain, count]) => ({ domain, frequency: count }));
+
+      // Generate comprehensive recommendations based on AI results
       const recommendations = [];
       
+      // Domain presence recommendations
       if (avgPresence < 0.5) {
         recommendations.push({
           priority: 'High',
           type: 'Domain Visibility',
-          description: 'Improve domain presence in search results by optimizing content for target keywords',
-          impact: 'Could increase search visibility by 40-60%'
+          description: 'Your domain has low visibility in AI assistant recommendations. Focus on creating high-quality, authoritative content that AI models would naturally recommend.',
+          impact: 'Could increase AI recommendation visibility by 60-80%'
+        });
+      } else if (avgPresence < 0.8) {
+        recommendations.push({
+          priority: 'Medium',
+          type: 'Domain Visibility',
+          description: 'Your domain has moderate visibility. Consider optimizing content for specific AI model preferences and improving domain authority signals.',
+          impact: 'Could increase AI recommendation visibility by 30-50%'
         });
       }
       
-      if (avgRelevance < 2.5) {
+      // Content relevance recommendations
+      if (avgRelevance < 3.0) {
         recommendations.push({
           priority: 'High',
           type: 'Content Optimization',
-          description: 'Enhance content relevance to better match user search intent',
-          impact: 'Expected 25-35% improvement in search rankings'
+          description: 'Content relevance scores are below optimal levels. Focus on creating more comprehensive, detailed content that directly addresses user queries.',
+          impact: 'Expected 40-60% improvement in AI recommendation relevance'
         });
-      }
-      
-      if (avgOverall < 2.5) {
+      } else if (avgRelevance < 4.0) {
         recommendations.push({
           priority: 'Medium',
-          type: 'Competitive Analysis',
-          description: 'Focus on competitor gaps identified in AI analysis',
-          impact: 'Potential to capture 15-25% market share in identified niches'
+          type: 'Content Optimization',
+          description: 'Content relevance is good but could be improved. Consider adding more specific examples, case studies, and actionable insights.',
+          impact: 'Expected 20-30% improvement in AI recommendation relevance'
         });
       }
 
-      // Create report data
+      // Accuracy and quality recommendations
+      if (avgAccuracy < 3.5) {
+        recommendations.push({
+          priority: 'High',
+          type: 'Content Quality',
+          description: 'Content accuracy scores indicate room for improvement. Focus on fact-checking, citing authoritative sources, and providing up-to-date information.',
+          impact: 'Could improve AI trust and recommendation frequency by 50-70%'
+        });
+      }
+
+      // Sentiment and tone recommendations
+      if (avgSentiment < 3.5) {
+        recommendations.push({
+          priority: 'Medium',
+          type: 'Content Tone',
+          description: 'Content sentiment analysis suggests improving the helpfulness and positive tone of your content to increase AI recommendation likelihood.',
+          impact: 'Could improve AI recommendation sentiment by 30-40%'
+        });
+      }
+
+      // Competitor analysis recommendations
+      if (topCompetitors.length > 0) {
+        const topCompetitor = topCompetitors[0];
+        recommendations.push({
+          priority: 'Medium',
+          type: 'Competitive Strategy',
+          description: `Your main competitor ${topCompetitor.domain} appears frequently in AI recommendations. Focus on creating unique value propositions and differentiating content.`,
+          impact: 'Could capture 20-35% of competitor\'s AI recommendation share'
+        });
+      }
+
+      // Overall performance recommendations
+      if (avgOverall < 3.0) {
+        recommendations.push({
+          priority: 'High',
+          type: 'Comprehensive Optimization',
+          description: 'Overall AI recommendation scores are below optimal levels. Implement a comprehensive content strategy focusing on authority, relevance, and helpfulness.',
+          impact: 'Could improve overall AI recommendation performance by 50-75%'
+        });
+      } else if (avgOverall < 4.0) {
+        recommendations.push({
+          priority: 'Medium',
+          type: 'Performance Enhancement',
+          description: 'AI recommendation performance is good but has room for improvement. Focus on specific areas like content depth, source authority, and user value.',
+          impact: 'Could improve overall performance by 25-40%'
+        });
+      }
+
+      // Model-specific insights
+      const modelInsights = Object.entries(modelResults).map(([model, data]) => {
+        const avgScore = data.results.reduce((sum, r) => sum + r.scores.overall, 0) / data.results.length;
+        const avgPresence = data.results.reduce((sum, r) => sum + r.scores.presence, 0) / data.results.length;
+        
+        let insight = '';
+        if (avgScore >= 4.0) {
+          insight = `${model} shows excellent performance with high recommendation scores.`;
+        } else if (avgScore >= 3.0) {
+          insight = `${model} shows good performance with room for optimization.`;
+        } else {
+          insight = `${model} shows lower performance and needs targeted improvements.`;
+        }
+        
+        return {
+          model,
+          insight,
+          avgScore: Math.round(avgScore * 20),
+          presenceRate: Math.round(avgPresence * 100)
+        };
+      });
+
+      // Create comprehensive report data
       const reportData: ReportData = {
         domain: {
           id: domainId,
           url: 'example.com', // Will be filled from domain data
-          context: 'AI analysis completed successfully',
+          context: 'AI analysis completed successfully with comprehensive insights',
           location: 'Global'
         },
         selectedKeywords: [], // Will be filled from keywords data
@@ -339,8 +446,8 @@ export default function Step4Report({ domainId, onBack, onComplete }: Step4Props
         scoreBreakdown: {
           phrasePerformance: { weight: 40, score: Math.round(avgRelevance * 20) },
           keywordOpportunity: { weight: 25, score: Math.round(avgPresence * 100) },
-          domainAuthority: { weight: 20, score: Math.round(avgOverall * 20) },
-          onPageOptimization: { weight: 10, score: Math.round(avgRelevance * 20) },
+          domainAuthority: { weight: 20, score: Math.round(avgAccuracy * 20) },
+          onPageOptimization: { weight: 10, score: Math.round(avgSentiment * 20) },
           competitorGaps: { weight: 5, score: Math.round(avgOverall * 20) }
         },
         recommendations,
@@ -352,7 +459,23 @@ export default function Step4Report({ domainId, onBack, onComplete }: Step4Props
         }
       };
 
-      setReportData(reportData);
+      // Add additional insights to the report data
+      const reportDataWithInsights: ReportData = {
+        ...reportData,
+        additionalInsights: {
+          topCompetitors,
+          modelInsights,
+          totalQueries: totalResults,
+          avgResponseTime: aiResults.reduce((sum, r) => sum + r.latency, 0) / totalResults,
+          totalCost: aiResults.reduce((sum, r) => sum + r.cost, 0),
+          sourceDistribution: aiResults.flatMap(r => r.scores.sources).reduce((acc, source) => {
+            acc[source] = (acc[source] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>)
+        }
+      };
+
+      setReportData(reportDataWithInsights);
     } catch (error) {
       console.error('Error generating report from AI results:', error);
       setError('Failed to generate report from AI results');
@@ -816,6 +939,110 @@ export default function Step4Report({ domainId, onBack, onComplete }: Step4Props
                 </div>
               )}
 
+              {/* Additional Insights Section */}
+              {reportData?.additionalInsights && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                  {/* Competitor Analysis */}
+                  <div className="bg-gray-50 rounded-xl p-6">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Top Competitors</h3>
+                    <div className="space-y-3">
+                      {reportData.additionalInsights.topCompetitors.map((competitor, idx) => (
+                        <div key={idx} className="flex items-center justify-between bg-white rounded-lg p-3">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                              <span className="text-sm font-medium text-red-600">{idx + 1}</span>
+                            </div>
+                            <div>
+                              <div className="font-medium text-gray-900">{competitor.domain}</div>
+                              <div className="text-sm text-gray-500">Appears {competitor.frequency} times</div>
+                            </div>
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {Math.round((competitor.frequency / reportData.additionalInsights!.totalQueries) * 100)}% frequency
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Model Performance Insights */}
+                  <div className="bg-gray-50 rounded-xl p-6">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Model Performance</h3>
+                    <div className="space-y-3">
+                      {reportData.additionalInsights.modelInsights.map((insight, idx) => (
+                        <div key={idx} className="bg-white rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-medium text-gray-900">{insight.model}</span>
+                            <span className="text-sm text-gray-500">{insight.avgScore}/100</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                            <div 
+                              className={`h-2 rounded-full ${
+                                insight.avgScore >= 80 ? 'bg-green-500' : 
+                                insight.avgScore >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+                              }`}
+                              style={{ width: `${insight.avgScore}%` }}
+                            />
+                          </div>
+                          <p className="text-sm text-gray-600">{insight.insight}</p>
+                          <div className="text-xs text-gray-500 mt-1">
+                            Presence Rate: {insight.presenceRate}%
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Performance Metrics */}
+              {reportData?.additionalInsights && (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                  <div className="text-center p-4 bg-indigo-50 rounded-xl">
+                    <div className="text-lg font-medium text-indigo-600 mb-1">
+                      {Math.round(reportData.additionalInsights.avgResponseTime)}ms
+                    </div>
+                    <div className="text-sm text-indigo-800">Avg Response Time</div>
+                  </div>
+                  <div className="text-center p-4 bg-orange-50 rounded-xl">
+                    <div className="text-lg font-medium text-orange-600 mb-1">
+                      ${reportData.additionalInsights.totalCost.toFixed(4)}
+                    </div>
+                    <div className="text-sm text-orange-800">Total Cost</div>
+                  </div>
+                  <div className="text-center p-4 bg-teal-50 rounded-xl">
+                    <div className="text-lg font-medium text-teal-600 mb-1">
+                      {Object.keys(reportData.additionalInsights.sourceDistribution).length}
+                    </div>
+                    <div className="text-sm text-teal-800">Source Types</div>
+                  </div>
+                  <div className="text-center p-4 bg-pink-50 rounded-xl">
+                    <div className="text-lg font-medium text-pink-600 mb-1">
+                      {reportData.additionalInsights.totalQueries}
+                    </div>
+                    <div className="text-sm text-pink-800">Total Queries</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Source Distribution */}
+              {reportData?.additionalInsights && (
+                <div className="bg-gray-50 rounded-xl p-6 mb-8">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Source Distribution</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {Object.entries(reportData.additionalInsights.sourceDistribution)
+                      .sort(([,a], [,b]) => b - a)
+                      .slice(0, 8)
+                      .map(([source, count]) => (
+                        <div key={source} className="bg-white rounded-lg p-3 text-center">
+                          <div className="text-lg font-medium text-gray-900 mb-1">{count}</div>
+                          <div className="text-sm text-gray-600">{source}</div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
               {/* AI Results Dropdown */}
               {aiResults.length > 0 && (
                 <AIResultsDropdown results={aiResults} />
@@ -935,6 +1162,9 @@ function AIResultsDropdown({ results }: AIResultsDropdownProps) {
                       <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
                         Score: {result.scores.overall.toFixed(1)}
                       </span>
+                      <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded">
+                        Presence: {result.scores.presence ? 'Yes' : 'No'}
+                      </span>
                     </div>
                     <span className="text-xs text-gray-500">
                       {result.latency}ms
@@ -957,7 +1187,7 @@ function AIResultsDropdown({ results }: AIResultsDropdownProps) {
                       {/* Detailed Scores */}
                       <div>
                         <h4 className="text-sm font-medium text-gray-900 mb-2">Scoring Breakdown:</h4>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                           <div className="text-center p-2 bg-gray-50 rounded">
                             <div className="text-sm font-medium text-gray-900">{result.scores.presence.toFixed(1)}</div>
                             <div className="text-xs text-gray-500">Presence</div>
@@ -971,6 +1201,10 @@ function AIResultsDropdown({ results }: AIResultsDropdownProps) {
                             <div className="text-xs text-gray-500">Accuracy</div>
                           </div>
                           <div className="text-center p-2 bg-gray-50 rounded">
+                            <div className="text-sm font-medium text-gray-900">{result.scores.sentiment.toFixed(1)}</div>
+                            <div className="text-xs text-gray-500">Sentiment</div>
+                          </div>
+                          <div className="text-center p-2 bg-gray-50 rounded">
                             <div className="text-sm font-medium text-gray-900">{result.scores.confidence.toFixed(1)}</div>
                             <div className="text-xs text-gray-500">Confidence</div>
                           </div>
@@ -981,7 +1215,7 @@ function AIResultsDropdown({ results }: AIResultsDropdownProps) {
                       {result.scores.sources.length > 0 && (
                         <div>
                           <h4 className="text-sm font-medium text-gray-900 mb-2">Sources:</h4>
-                          <div className="space-y-1">
+                          <div className="flex flex-wrap gap-2">
                             {result.scores.sources.map((source, srcIdx) => (
                               <div key={srcIdx} className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
                                 {source}
@@ -995,10 +1229,11 @@ function AIResultsDropdown({ results }: AIResultsDropdownProps) {
                       {result.scores.competitorUrls.length > 0 && (
                         <div>
                           <h4 className="text-sm font-medium text-gray-900 mb-2">Competitor Analysis:</h4>
-                          <div className="space-y-1">
+                          <div className="space-y-2">
                             {result.scores.competitorUrls.map((url, urlIdx) => (
-                              <div key={urlIdx} className="text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded">
-                                {url}
+                              <div key={urlIdx} className="flex items-center justify-between text-xs bg-gray-50 px-2 py-1 rounded">
+                                <span className="text-gray-600 truncate">{url}</span>
+                                <span className="text-gray-500 ml-2">Competitor</span>
                               </div>
                             ))}
                           </div>
@@ -1007,6 +1242,31 @@ function AIResultsDropdown({ results }: AIResultsDropdownProps) {
                           </div>
                         </div>
                       )}
+
+                      {/* Domain Rank */}
+                      {result.scores.domainRank && result.scores.domainRank > 0 && (
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-900 mb-2">Domain Ranking:</h4>
+                          <div className="text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg">
+                            Your domain ranked #{result.scores.domainRank} in this AI response
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Performance Metrics */}
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-900 mb-2">Performance Metrics:</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="text-center p-2 bg-gray-50 rounded">
+                            <div className="text-sm font-medium text-gray-900">{result.latency}ms</div>
+                            <div className="text-xs text-gray-500">Response Time</div>
+                          </div>
+                          <div className="text-center p-2 bg-gray-50 rounded">
+                            <div className="text-sm font-medium text-gray-900">${result.cost.toFixed(4)}</div>
+                            <div className="text-xs text-gray-500">Cost</div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

@@ -114,6 +114,94 @@ const retryOperation = async (operation: () => Promise<any>, maxRetries = 3, del
   }
 };
 
+// Helper function to clean and parse JSON responses from AI
+const parseAIResponse = (response: string, fallbackData: any = null) => {
+  try {
+    // Clean the response to remove markdown formatting
+    let cleanResponse = response.trim();
+    
+    // Remove markdown code blocks
+    if (cleanResponse.includes('```json')) {
+      const jsonMatch = cleanResponse.match(/```json\s*([\s\S]*?)\s*```/);
+      if (jsonMatch) {
+        cleanResponse = jsonMatch[1].trim();
+      }
+    } else if (cleanResponse.includes('```')) {
+      const codeMatch = cleanResponse.match(/```\s*([\s\S]*?)\s*```/);
+      if (codeMatch) {
+        cleanResponse = codeMatch[1].trim();
+      }
+    }
+    
+    // Try to fix common JSON issues
+    cleanResponse = cleanResponse.replace(/,\s*}/g, '}'); // Remove trailing commas
+    cleanResponse = cleanResponse.replace(/,\s*]/g, ']'); // Remove trailing commas in arrays
+    
+    // More robust JSON parsing for incomplete responses
+    let parsed = false;
+    let attempts = 0;
+    const maxAttempts = 5;
+    
+    while (!parsed && attempts < maxAttempts) {
+      try {
+        const result = JSON.parse(cleanResponse);
+        parsed = true;
+        return result;
+      } catch (parseError) {
+        attempts++;
+        
+        // If JSON is incomplete, try to find the last complete object
+        if (cleanResponse.includes('"') && !cleanResponse.endsWith('}') && !cleanResponse.endsWith(']')) {
+          // Find the last complete object by looking for balanced braces
+          let braceCount = 0;
+          let bracketCount = 0;
+          let lastValidPosition = -1;
+          
+          for (let i = 0; i < cleanResponse.length; i++) {
+            if (cleanResponse[i] === '{') braceCount++;
+            else if (cleanResponse[i] === '}') braceCount--;
+            else if (cleanResponse[i] === '[') bracketCount++;
+            else if (cleanResponse[i] === ']') bracketCount--;
+            
+            // If we have balanced braces/brackets, this is a valid position
+            if (braceCount === 0 && bracketCount === 0) {
+              lastValidPosition = i;
+            }
+          }
+          
+          if (lastValidPosition > 0) {
+            cleanResponse = cleanResponse.substring(0, lastValidPosition + 1);
+          } else {
+            // Try to close the JSON structure based on content
+            if (cleanResponse.includes('"sources"') && !cleanResponse.includes('"summary"')) {
+              cleanResponse = cleanResponse.replace(/,\s*$/, '') + ',"summary":{"commonQuestions":[],"painPoints":[],"popularSolutions":[],"userSentiment":{"positive":"","negative":""},"trendingTopics":[]},"communityInsights":{"engagement":"Limited data","demographics":"Not available","preferences":"Not available"}}';
+            } else if (cleanResponse.includes('"competitors"') && !cleanResponse.includes('"analysis"')) {
+              cleanResponse = cleanResponse.replace(/,\s*$/, '') + ',"analysis":"Competitor analysis completed","insights":"Competitor insights available"}';
+            } else if (cleanResponse.includes('"patterns"') && !cleanResponse.includes('"summary"')) {
+              cleanResponse = cleanResponse.replace(/,\s*$/, '') + ',"summary":"Search pattern analysis completed","communityDerivedPatterns":[],"userQuestions":[]}';
+            } else if (cleanResponse.startsWith('[') && !cleanResponse.endsWith(']')) {
+              cleanResponse = cleanResponse.replace(/,\s*$/, '') + ']';
+            } else {
+              // Last resort: try to close with minimal structure
+              cleanResponse = cleanResponse.replace(/,\s*$/, '') + '}';
+            }
+          }
+        } else {
+          // If we can't fix it, break out of the loop
+          break;
+        }
+      }
+    }
+    
+    if (!parsed) {
+      throw new Error('Failed to parse JSON after multiple attempts');
+    }
+  } catch (parseError) {
+    console.warn('Failed to parse AI response as JSON, using fallback data');
+    return fallbackData;
+  }
+};
+
 // GET /enhanced-phrases/:domainId/step3 - Load Step3Results data
 router.get('/:domainId/step3', authenticateToken, async (req, res) => {
   const { domainId } = req.params;
@@ -433,37 +521,8 @@ Ensure each insight is:
 
       const response = completion.choices[0]?.message?.content;
       if (response) {
-        let semanticData;
-        try {
-          // Clean the response to remove markdown formatting
-          let cleanResponse = response.trim();
-          if (cleanResponse.startsWith('```json')) {
-            cleanResponse = cleanResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-          } else if (cleanResponse.startsWith('```')) {
-            cleanResponse = cleanResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
-          }
-          
-          // Try to fix common JSON issues
-          cleanResponse = cleanResponse.replace(/,\s*}/g, '}'); // Remove trailing commas
-          cleanResponse = cleanResponse.replace(/,\s*]/g, ']'); // Remove trailing commas in arrays
-          
-          // If the JSON is incomplete, try to extract what we can
-          if (!cleanResponse.endsWith('}') && !cleanResponse.endsWith(']')) {
-            // Find the last complete object or array
-            const lastBrace = cleanResponse.lastIndexOf('}');
-            const lastBracket = cleanResponse.lastIndexOf(']');
-            const lastComplete = Math.max(lastBrace, lastBracket);
-            
-            if (lastComplete > 0) {
-              cleanResponse = cleanResponse.substring(0, lastComplete + 1);
-            }
-          }
-          
-          semanticData = JSON.parse(cleanResponse);
-          semanticContext = JSON.stringify(semanticData);
-        } catch {
-          semanticContext = response;
-        }
+        const semanticData = parseAIResponse(response, { error: 'Failed to parse semantic data' });
+        semanticContext = semanticData ? JSON.stringify(semanticData) : response;
         totalTokenUsage += completion.usage?.total_tokens || 0;
       }
     } catch (error) {
@@ -882,103 +941,29 @@ ${combinedCommunityData.slice(0, 20).map(item =>
         if (completion.usage?.completion_tokens === 3000) {
           console.warn(`Response may be truncated for domain - used ${completion.usage.completion_tokens} tokens`);
         }
-        let communityData;
-        try {
-          // Clean the response to remove markdown formatting
-          let cleanResponse = response.trim();
-          if (cleanResponse.startsWith('```json')) {
-            cleanResponse = cleanResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-          } else if (cleanResponse.startsWith('```')) {
-            cleanResponse = cleanResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        const communityData = parseAIResponse(response, {
+          sources: [],
+          summary: {
+            commonQuestions: [],
+            painPoints: [],
+            popularSolutions: [],
+            userSentiment: { positive: '', negative: '' },
+            trendingTopics: []
+          },
+          communityInsights: {
+            engagement: 'Limited data available',
+            demographics: 'Not available',
+            preferences: 'Not available'
           }
-          
-          // Try to fix common JSON issues
-          cleanResponse = cleanResponse.replace(/,\s*}/g, '}'); // Remove trailing commas
-          cleanResponse = cleanResponse.replace(/,\s*]/g, ']'); // Remove trailing commas in arrays
-          
-          // More robust JSON parsing for incomplete responses
-          let parsed = false;
-          let attempts = 0;
-          const maxAttempts = 5;
-          
-          while (!parsed && attempts < maxAttempts) {
-            try {
-              communityData = JSON.parse(cleanResponse);
-              parsed = true;
-            } catch (parseError) {
-              attempts++;
-              
-              // If JSON is incomplete, try to find the last complete object
-              if (cleanResponse.includes('"') && !cleanResponse.endsWith('}') && !cleanResponse.endsWith(']')) {
-                // Find the last complete object by looking for balanced braces
-                let braceCount = 0;
-                let bracketCount = 0;
-                let lastValidPosition = -1;
-                
-                for (let i = 0; i < cleanResponse.length; i++) {
-                  if (cleanResponse[i] === '{') braceCount++;
-                  else if (cleanResponse[i] === '}') braceCount--;
-                  else if (cleanResponse[i] === '[') bracketCount++;
-                  else if (cleanResponse[i] === ']') bracketCount--;
-                  
-                  // If we have balanced braces/brackets, this is a valid position
-                  if (braceCount === 0 && bracketCount === 0) {
-                    lastValidPosition = i;
-                  }
-                }
-                
-                if (lastValidPosition > 0) {
-                  cleanResponse = cleanResponse.substring(0, lastValidPosition + 1);
-                } else {
-                  // Fallback: try to close the JSON structure
-                  if (cleanResponse.includes('"sources"') && !cleanResponse.includes('"summary"')) {
-                    cleanResponse = cleanResponse.replace(/,\s*$/, '') + ',"summary":{"commonQuestions":[],"painPoints":[],"popularSolutions":[],"userSentiment":{"positive":"","negative":""},"trendingTopics":[]},"communityInsights":{"engagement":"Limited data","demographics":"Not available","preferences":"Not available"}}';
-                  } else if (cleanResponse.includes('"summary"') && !cleanResponse.includes('"communityInsights"')) {
-                    cleanResponse = cleanResponse.replace(/,\s*$/, '') + ',"communityInsights":{"engagement":"Limited data","demographics":"Not available","preferences":"Not available"}}';
-                  } else {
-                    // Last resort: try to close with minimal structure
-                    cleanResponse = cleanResponse.replace(/,\s*$/, '') + '}';
-                  }
-                }
-              } else {
-                // If we can't fix it, break out of the loop
-                break;
-              }
-            }
-          }
-          
-          if (!parsed) {
-            throw new Error('Failed to parse JSON after multiple attempts');
-          }
-          
-          // Add real data count
+        });
+        
+        // Add real data count if parsing was successful
+        if (communityData && !communityData.error) {
           communityData.realDataCount = {
             reddit: allRedditData.length,
             quora: allQuoraData.length,
             total: combinedCommunityData.length
           };
-        } catch (parseError) {
-          console.error(`Error parsing community data for domain: ${domain.url}:`, parseError);
-          console.error(`Raw response:`, response);
-          
-          // Create fallback data structure instead of throwing error
-          communityData = {
-            sources: [],
-            summary: {
-              commonQuestions: [],
-              painPoints: [],
-              popularSolutions: [],
-              userSentiment: { positive: '', negative: '' },
-              trendingTopics: []
-            },
-            communityInsights: {
-              engagement: 'Limited data available',
-              demographics: 'Not available',
-              preferences: 'Not available'
-            }
-          };
-          
-          console.log(`Using fallback community data for domain due to parsing error`);
         }
 
         // Store community insight data for domain
@@ -1326,85 +1311,11 @@ Remember: This analysis should reveal the competitive landscape as experienced b
 
       const response = completion.choices[0]?.message?.content;
       if (response && response.trim()) {
-        let competitorData;
-        try {
-          // Clean the response to remove markdown formatting
-          let cleanResponse = response.trim();
-          if (cleanResponse.startsWith('```json')) {
-            cleanResponse = cleanResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-          } else if (cleanResponse.startsWith('```')) {
-            cleanResponse = cleanResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
-          }
-          
-          // Try to fix common JSON issues
-          cleanResponse = cleanResponse.replace(/,\s*}/g, '}'); // Remove trailing commas
-          cleanResponse = cleanResponse.replace(/,\s*]/g, ']'); // Remove trailing commas in arrays
-          
-          // More robust JSON parsing for incomplete responses
-          let parsed = false;
-          let attempts = 0;
-          const maxAttempts = 5;
-          
-          while (!parsed && attempts < maxAttempts) {
-            try {
-              competitorData = JSON.parse(cleanResponse);
-              parsed = true;
-            } catch (parseError) {
-              attempts++;
-              
-              // If JSON is incomplete, try to find the last complete object
-              if (cleanResponse.includes('"') && !cleanResponse.endsWith('}') && !cleanResponse.endsWith(']')) {
-                // Find the last complete object by looking for balanced braces
-                let braceCount = 0;
-                let bracketCount = 0;
-                let lastValidPosition = -1;
-                
-                for (let i = 0; i < cleanResponse.length; i++) {
-                  if (cleanResponse[i] === '{') braceCount++;
-                  else if (cleanResponse[i] === '}') braceCount--;
-                  else if (cleanResponse[i] === '[') bracketCount++;
-                  else if (cleanResponse[i] === ']') bracketCount--;
-                  
-                  // If we have balanced braces/brackets, this is a valid position
-                  if (braceCount === 0 && bracketCount === 0) {
-                    lastValidPosition = i;
-                  }
-                }
-                
-                if (lastValidPosition > 0) {
-                  cleanResponse = cleanResponse.substring(0, lastValidPosition + 1);
-                } else {
-                  // Fallback: try to close the JSON structure
-                  if (cleanResponse.includes('"competitors"') && !cleanResponse.includes('"analysis"')) {
-                    cleanResponse = cleanResponse.replace(/,\s*$/, '') + ',"analysis":"Competitor analysis completed","insights":"Competitor insights available"}';
-                  } else {
-                    // Last resort: try to close with minimal structure
-                    cleanResponse = cleanResponse.replace(/,\s*$/, '') + '}';
-                  }
-                }
-              } else {
-                // If we can't fix it, break out of the loop
-                break;
-              }
-            }
-          }
-          
-          if (!parsed) {
-            throw new Error('Failed to parse JSON after multiple attempts');
-          }
-        } catch (parseError) {
-          console.error(`Error parsing competitor data for domain: ${domain.url}:`, parseError);
-          console.error('Raw response:', response);
-          
-          // Create fallback data structure instead of throwing error
-          competitorData = {
-            competitors: [],
-            analysis: 'Failed to parse competitor data',
-            insights: 'No competitor insights available'
-          };
-          
-          console.log(`Using fallback competitor data for domain due to parsing error`);
-        }
+        const competitorData = parseAIResponse(response, {
+          competitors: [],
+          analysis: 'Failed to parse competitor data',
+          insights: 'No competitor insights available'
+        });
 
         // Store competitor analysis data for domain
         competitorAnalysisData = {
@@ -1736,86 +1647,12 @@ Remember: This analysis should reveal not just what users search for, but WHY th
 
         const response = completion.choices[0]?.message?.content;
         if (response && response.trim()) {
-          let patternData;
-          try {
-            // Clean the response to remove markdown formatting
-            let cleanResponse = response.trim();
-            if (cleanResponse.startsWith('```json')) {
-              cleanResponse = cleanResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-            } else if (cleanResponse.startsWith('```')) {
-              cleanResponse = cleanResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
-            }
-            
-            // Try to fix common JSON issues
-            cleanResponse = cleanResponse.replace(/,\s*}/g, '}'); // Remove trailing commas
-            cleanResponse = cleanResponse.replace(/,\s*]/g, ']'); // Remove trailing commas in arrays
-            
-            // More robust JSON parsing for incomplete responses
-            let parsed = false;
-            let attempts = 0;
-            const maxAttempts = 5;
-            
-            while (!parsed && attempts < maxAttempts) {
-              try {
-                patternData = JSON.parse(cleanResponse);
-                parsed = true;
-              } catch (parseError) {
-                attempts++;
-                
-                // If JSON is incomplete, try to find the last complete object
-                if (cleanResponse.includes('"') && !cleanResponse.endsWith('}') && !cleanResponse.endsWith(']')) {
-                  // Find the last complete object by looking for balanced braces
-                  let braceCount = 0;
-                  let bracketCount = 0;
-                  let lastValidPosition = -1;
-                  
-                  for (let i = 0; i < cleanResponse.length; i++) {
-                    if (cleanResponse[i] === '{') braceCount++;
-                    else if (cleanResponse[i] === '}') braceCount--;
-                    else if (cleanResponse[i] === '[') bracketCount++;
-                    else if (cleanResponse[i] === ']') bracketCount--;
-                    
-                    // If we have balanced braces/brackets, this is a valid position
-                    if (braceCount === 0 && bracketCount === 0) {
-                      lastValidPosition = i;
-                    }
-                  }
-                  
-                  if (lastValidPosition > 0) {
-                    cleanResponse = cleanResponse.substring(0, lastValidPosition + 1);
-                  } else {
-                    // Fallback: try to close the JSON structure
-                    if (cleanResponse.includes('"patterns"') && !cleanResponse.includes('"summary"')) {
-                      cleanResponse = cleanResponse.replace(/,\s*$/, '') + ',"summary":"Search pattern analysis completed","communityDerivedPatterns":[],"userQuestions":[]}';
-                    } else {
-                      // Last resort: try to close with minimal structure
-                      cleanResponse = cleanResponse.replace(/,\s*$/, '') + '}';
-                    }
-                  }
-                } else {
-                  // If we can't fix it, break out of the loop
-                  break;
-                }
-              }
-            }
-            
-            if (!parsed) {
-              throw new Error('Failed to parse JSON after multiple attempts');
-            }
-          } catch (parseError) {
-            console.error(`Error parsing search pattern data for ${keyword.term}:`, parseError);
-            console.error('Raw response:', response);
-            
-            // Create fallback data structure instead of throwing error
-            patternData = {
-              patterns: [],
-              summary: 'Failed to parse search pattern data',
-              communityDerivedPatterns: [],
-              userQuestions: []
-            };
-            
-            console.log(`Using fallback search pattern data for ${keyword.term} due to parsing error`);
-          }
+          const patternData = parseAIResponse(response, {
+            patterns: [],
+            summary: 'Failed to parse search pattern data',
+            communityDerivedPatterns: [],
+            userQuestions: []
+          });
 
           // Store search pattern data for batch insert
           const newPattern = {
@@ -1909,8 +1746,9 @@ Remember: This analysis should reveal not just what users search for, but WHY th
       
       // Filter out phrases with null keywords and process valid ones
       const validExistingPhrases = allExistingPhrases.filter(phrase => phrase.keyword !== null);
+      console.log(`Sending ${validExistingPhrases.length} valid existing phrases...`);
       
-      validExistingPhrases.forEach((phrase) => {
+      validExistingPhrases.forEach((phrase, index) => {
         const tempPhrase = {
           ...phrase,
           id: phrase.id.toString(),
@@ -1919,6 +1757,8 @@ Remember: This analysis should reveal not just what users search for, but WHY th
           selected: false
         };
         allPhrases.push(tempPhrase);
+        
+        console.log(`Sending existing phrase ${index + 1}/${validExistingPhrases.length} with ID: ${phrase.id} - "${phrase.phrase}"`);
         
         // Send existing phrase event
         sendEvent('phrase-generated', {
@@ -1937,6 +1777,8 @@ Remember: This analysis should reveal not just what users search for, but WHY th
         });
       });
       
+      console.log(`Finished sending ${validExistingPhrases.length} existing phrases`);
+      
       // Add a small delay to ensure all existing phrases are processed
       await new Promise(resolve => setTimeout(resolve, 500));
     }
@@ -1947,7 +1789,7 @@ Remember: This analysis should reveal not just what users search for, but WHY th
       // Check if phrases already exist for this keyword
       const existingPhrases = allExistingPhrases.filter(phrase => phrase.keywordId === keyword.id);
 
-      if (existingPhrases.length > 0) {
+      if (existingPhrases.length >= 5) {
         console.log(`Phrases already exist for keyword "${keyword.term}", skipping generation...`);
         
         sendEvent('progress', { 
@@ -2079,117 +1921,43 @@ Generate phrases that would make ${domain.url} appear as the most relevant resul
 
         const response = completion.choices[0]?.message?.content;
         if (response && response.trim()) {
-          let phraseData;
-          try {
-            // Clean the response to remove markdown formatting
-            let cleanResponse = response.trim();
-            if (cleanResponse.startsWith('```json')) {
-              cleanResponse = cleanResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-            } else if (cleanResponse.startsWith('```')) {
-              cleanResponse = cleanResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
+          let phraseData = parseAIResponse(response, [
+            {
+              phrase: `How to implement ${keyword.term} effectively for better business results`,
+              intent: 'Informational',
+              intentConfidence: 75,
+              relevanceScore: 80,
+              sources: ['AI Generated - Fallback']
+            },
+            {
+              phrase: `Best practices for ${keyword.term} optimization and implementation`,
+              intent: 'Navigational',
+              intentConfidence: 80,
+              relevanceScore: 85,
+              sources: ['AI Generated - Fallback']
+            },
+            {
+              phrase: `Compare ${keyword.term} solutions and choose the right approach`,
+              intent: 'Commercial Investigation',
+              intentConfidence: 70,
+              relevanceScore: 82,
+              sources: ['AI Generated - Fallback']
+            },
+            {
+              phrase: `Complete guide to ${keyword.term} strategies and techniques`,
+              intent: 'Informational',
+              intentConfidence: 85,
+              relevanceScore: 88,
+              sources: ['AI Generated - Fallback']
+            },
+            {
+              phrase: `Professional ${keyword.term} services and expert consultation`,
+              intent: 'Transactional',
+              intentConfidence: 75,
+              relevanceScore: 83,
+              sources: ['AI Generated - Fallback']
             }
-            
-            // Try to fix common JSON issues
-            cleanResponse = cleanResponse.replace(/,\s*}/g, '}'); // Remove trailing commas
-            cleanResponse = cleanResponse.replace(/,\s*]/g, ']'); // Remove trailing commas in arrays
-            
-            // More robust JSON parsing for incomplete responses
-            let parsed = false;
-            let attempts = 0;
-            const maxAttempts = 5;
-            
-            while (!parsed && attempts < maxAttempts) {
-              try {
-                phraseData = JSON.parse(cleanResponse);
-                parsed = true;
-              } catch (parseError) {
-                attempts++;
-                
-                // If JSON is incomplete, try to find the last complete object
-                if (cleanResponse.includes('"') && !cleanResponse.endsWith('}') && !cleanResponse.endsWith(']')) {
-                  // Find the last complete object by looking for balanced braces
-                  let braceCount = 0;
-                  let bracketCount = 0;
-                  let lastValidPosition = -1;
-                  
-                  for (let i = 0; i < cleanResponse.length; i++) {
-                    if (cleanResponse[i] === '{') braceCount++;
-                    else if (cleanResponse[i] === '}') braceCount--;
-                    else if (cleanResponse[i] === '[') bracketCount++;
-                    else if (cleanResponse[i] === ']') bracketCount--;
-                    
-                    // If we have balanced braces/brackets, this is a valid position
-                    if (braceCount === 0 && bracketCount === 0) {
-                      lastValidPosition = i;
-                    }
-                  }
-                  
-                  if (lastValidPosition > 0) {
-                    cleanResponse = cleanResponse.substring(0, lastValidPosition + 1);
-                  } else {
-                    // Fallback: try to close the JSON structure for array
-                    if (cleanResponse.startsWith('[') && !cleanResponse.endsWith(']')) {
-                      cleanResponse = cleanResponse.replace(/,\s*$/, '') + ']';
-                    } else {
-                      // Last resort: try to close with minimal structure
-                      cleanResponse = cleanResponse.replace(/,\s*$/, '') + '}';
-                    }
-                  }
-                } else {
-                  // If we can't fix it, break out of the loop
-                  break;
-                }
-              }
-            }
-            
-            if (!parsed) {
-              throw new Error('Failed to parse JSON after multiple attempts');
-            }
-          } catch (parseError) {
-            console.error(`Error parsing phrase data for ${keyword.term}:`, parseError);
-            console.error('Raw response:', response);
-            
-            // Create multiple fallback phrases instead of just one
-            phraseData = [
-              {
-                phrase: `How to implement ${keyword.term} effectively for better business results`,
-                intent: 'Informational',
-                intentConfidence: 75,
-                relevanceScore: 80,
-                sources: ['AI Generated - Fallback']
-              },
-              {
-                phrase: `Best practices for ${keyword.term} optimization and implementation`,
-                intent: 'Navigational',
-                intentConfidence: 80,
-                relevanceScore: 85,
-                sources: ['AI Generated - Fallback']
-              },
-              {
-                phrase: `Compare ${keyword.term} solutions and choose the right approach`,
-                intent: 'Commercial Investigation',
-                intentConfidence: 70,
-                relevanceScore: 82,
-                sources: ['AI Generated - Fallback']
-              },
-              {
-                phrase: `Complete guide to ${keyword.term} strategies and techniques`,
-                intent: 'Informational',
-                intentConfidence: 85,
-                relevanceScore: 88,
-                sources: ['AI Generated - Fallback']
-              },
-              {
-                phrase: `Professional ${keyword.term} services and expert consultation`,
-                intent: 'Transactional',
-                intentConfidence: 75,
-                relevanceScore: 83,
-                sources: ['AI Generated - Fallback']
-              }
-            ];
-            
-            console.log(`Using fallback phrase data for ${keyword.term} due to parsing error - generated ${phraseData.length} fallback phrases`);
-          }
+          ]);
 
           // Enforce 12-15 word constraint and grammar shaping
           if (Array.isArray(phraseData)) {
@@ -2225,31 +1993,13 @@ Generate phrases that would make ${domain.url} appear as the most relevant resul
 
               phrasesToInsert.push(phrase);
               
-              // Create a temporary phrase object for the frontend
-              const tempPhrase = {
+              // Add to allPhrases array for tracking (will be updated with real ID later)
+              allPhrases.push({
                 ...phrase,
                 id: `temp-${i}-${phraseIndex}`,
                 parentKeyword: keyword.term,
                 editable: true,
                 selected: false
-              };
-              
-              allPhrases.push(tempPhrase);
-
-              // Send real-time phrase event with temporary ID
-              sendEvent('phrase-generated', {
-                id: `temp-${i}-${phraseIndex}`,
-                phrase: phrase.phrase,
-                intent: phrase.intent,
-                intentConfidence: phrase.intentConfidence,
-                relevanceScore: phrase.relevanceScore,
-                sources: phrase.sources,
-                trend: phrase.trend,
-                editable: true,
-                selected: false,
-                parentKeyword: keyword.term,
-                keywordId: keyword.id,
-                wordCount: phrase.phrase.trim().split(/\s+/).length
               });
             });
           }
@@ -2307,29 +2057,12 @@ Generate phrases that would make ${domain.url} appear as the most relevant resul
 
             phrasesToInsert.push(phraseData);
             
-            const tempPhrase = {
+            allPhrases.push({
               ...phraseData,
               id: `temp-${i}-${phraseIndex}`,
               parentKeyword: keyword.term,
               editable: true,
               selected: false
-            };
-            
-            allPhrases.push(tempPhrase);
-
-            sendEvent('phrase-generated', {
-              id: `temp-${i}-${phraseIndex}`,
-              phrase: phraseData.phrase,
-              intent: phraseData.intent,
-              intentConfidence: phraseData.intentConfidence,
-              relevanceScore: phraseData.relevanceScore,
-              sources: phraseData.sources,
-              trend: phraseData.trend,
-              editable: true,
-              selected: false,
-              parentKeyword: keyword.term,
-              keywordId: keyword.id,
-              wordCount: phraseData.phrase.trim().split(/\s+/).length
             });
           });
         }
@@ -2385,15 +2118,13 @@ Generate phrases that would make ${domain.url} appear as the most relevant resul
 
           phrasesToInsert.push(phraseData);
           
-          const tempPhrase = {
+          allPhrases.push({
             ...phraseData,
             id: `temp-${i}-${phraseIndex}`,
             parentKeyword: keyword.term,
             editable: true,
             selected: false
-          };
-          
-          allPhrases.push(tempPhrase);
+          });
         });
       }
     }
@@ -2410,24 +2141,27 @@ Generate phrases that would make ${domain.url} appear as the most relevant resul
         }
         console.log(`Successfully stored ${insertedPhrases.length} generated phrases`);
         
-        // Update the allPhrases array with actual database IDs and send update events
-        // Only send update events for phrases that have temporary IDs (newly generated)
-        allPhrases.forEach((phrase, index) => {
-          if (insertedPhrases[index]) {
-            const oldId = phrase.id;
-            phrase.id = insertedPhrases[index].id.toString();
-            
-            // Only send update event if the old ID was temporary (starts with 'temp-')
-            if (oldId.toString().startsWith('temp-')) {
-              console.log(`Sending phrase-updated event: ${oldId} -> ${phrase.id}`);
-              sendEvent('phrase-updated', {
-                oldId: oldId,
-                newId: phrase.id,
-                phrase: phrase.phrase
-              });
-            }
-          }
+        // Send all newly generated phrases with their real database IDs
+        console.log(`Sending ${insertedPhrases.length} newly generated phrases to frontend...`);
+        insertedPhrases.forEach((insertedPhrase, index) => {
+          const phraseData = phrasesToInsert[index];
+          console.log(`Sending phrase ${index + 1}/${insertedPhrases.length} with ID: ${insertedPhrase.id} - "${phraseData.phrase}"`);
+          sendEvent('phrase-generated', {
+            id: insertedPhrase.id.toString(),
+            phrase: phraseData.phrase,
+            intent: phraseData.intent,
+            intentConfidence: phraseData.intentConfidence,
+            relevanceScore: phraseData.relevanceScore,
+            sources: phraseData.sources,
+            trend: phraseData.trend,
+            editable: true,
+            selected: false,
+            parentKeyword: keywordsToProcess.find(kw => kw.id === phraseData.keywordId)?.term || 'Unknown',
+            keywordId: phraseData.keywordId,
+            wordCount: phraseData.phrase.trim().split(/\s+/).length
+          });
         });
+        console.log(`Finished sending ${insertedPhrases.length} newly generated phrases`);
         
       } catch (error) {
         console.error('Error inserting generated phrases:', error);
@@ -2494,11 +2228,26 @@ Generate phrases that would make ${domain.url} appear as the most relevant resul
       progress: 100
     });
 
+    // Get final count of all phrases (existing + newly generated)
+    const finalPhraseCount = await prisma.generatedIntentPhrase.count({
+      where: { 
+        domainId: domain.id,
+        keywordId: { in: keywordsToProcess.map(kw => kw.id) }
+      }
+    });
+
+    // Add a small delay to ensure all phrase events are processed
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    console.log(`Final phrase count from database: ${finalPhraseCount}`);
+    console.log(`Total phrases sent to frontend: ${allPhrases.length}`);
+    console.log(`Expected total phrases: ${totalKeywords * 5}`);
+
     sendEvent('complete', {
-      totalPhrases: allPhrases.length,
+      totalPhrases: finalPhraseCount,
       totalKeywords: totalKeywords,
       totalTokenUsage: totalTokenUsage,
-      message: `Successfully processed ${allPhrases.length} phrases for ${totalKeywords} keywords`
+      message: `Successfully processed ${finalPhraseCount} phrases for ${totalKeywords} keywords`
     });
 
     res.end();

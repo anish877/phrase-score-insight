@@ -14,6 +14,38 @@ function asyncHandler(fn: (req: any, res: any, next: any) => Promise<any>) {
   };
 }
 
+// GET /api/dashboard/debug - Debug endpoint to check user's domains
+router.get('/debug', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    console.log(`Debug: Checking domains for user ${req.user.userId}`);
+    
+    // Test database connection
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      console.log('Database connection successful');
+    } catch (dbError) {
+      console.error('Database connection failed:', dbError);
+      return res.status(500).json({ error: 'Database connection failed', details: dbError });
+    }
+    
+    const domains = await prisma.domain.findMany({
+      where: { userId: req.user.userId },
+      select: { id: true, url: true, userId: true, createdAt: true }
+    });
+
+    res.json({
+      success: true,
+      user: { userId: req.user.userId },
+      domains: domains,
+      totalDomains: domains.length,
+      databaseStatus: 'Connected'
+    });
+  } catch (error) {
+    console.error('Debug endpoint error:', error);
+    res.status(500).json({ error: 'Debug failed', details: error instanceof Error ? error.message : 'Unknown error' });
+  }
+}));
+
 // GET /api/dashboard/all - Get all domains for the authenticated user
 router.get('/all', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -69,9 +101,39 @@ router.get('/all', authenticateToken, asyncHandler(async (req: AuthenticatedRequ
 
 // Lightweight function to calculate basic metrics from existing data (no AI calls)
 function calculateBasicMetrics(domain: any) {
-  const aiQueryResults = domain.keywords.flatMap((keyword: any) => 
-    keyword.generatedIntentPhrases.flatMap((phrase: any) => phrase.aiQueryResults)
-  );
+  // Add safety checks for domain structure
+  if (!domain || !domain.keywords) {
+    console.log('Domain or keywords not found, returning empty metrics');
+    return {
+      visibilityScore: 0,
+      mentionRate: 0,
+      avgRelevance: 0,
+      avgAccuracy: 0,
+      avgSentiment: 0,
+      avgOverall: 0,
+      totalQueries: 0,
+      keywordCount: 0,
+      phraseCount: 0,
+      modelPerformance: [],
+      keywordPerformance: [],
+      topPhrases: [],
+      performanceData: []
+    };
+  }
+
+  const aiQueryResults = domain.keywords.flatMap((keyword: any) => {
+    if (!keyword || !keyword.generatedIntentPhrases) {
+      console.log(`Keyword ${keyword?.id || 'unknown'} has no generatedIntentPhrases`);
+      return [];
+    }
+    return keyword.generatedIntentPhrases.flatMap((phrase: any) => {
+      if (!phrase || !phrase.aiQueryResults) {
+        console.log(`Phrase ${phrase?.id || 'unknown'} has no aiQueryResults`);
+        return [];
+      }
+      return phrase.aiQueryResults;
+    });
+  });
 
   // Handle crawl data properly
   const crawlData = domain.crawlResults?.[0];
@@ -91,6 +153,7 @@ function calculateBasicMetrics(domain: any) {
   }
 
   if (aiQueryResults.length === 0) {
+    console.log('No AI query results found, returning basic metrics');
     return {
       visibilityScore: 0,
       mentionRate: 0,
@@ -99,8 +162,8 @@ function calculateBasicMetrics(domain: any) {
       avgSentiment: 0,
       avgOverall: 0,
       totalQueries: 0,
-      keywordCount: domain.keywords.length,
-      phraseCount: domain.keywords.reduce((sum: number, keyword: any) => sum + keyword.generatedIntentPhrases.length, 0),
+      keywordCount: domain.keywords?.length || 0,
+      phraseCount: domain.keywords?.reduce((sum: number, keyword: any) => sum + (keyword.generatedIntentPhrases?.length || 0), 0) || 0,
       modelPerformance: [],
       keywordPerformance: [],
       topPhrases: [],
@@ -132,6 +195,11 @@ function calculateBasicMetrics(domain: any) {
   // Model performance breakdown (from existing data)
   const modelStats = new Map();
   aiQueryResults.forEach((result: any) => {
+    if (!result || !result.model) {
+      console.log('Skipping result without model:', result);
+      return;
+    }
+    
     if (!modelStats.has(result.model)) {
       modelStats.set(result.model, {
         total: 0,
@@ -147,12 +215,12 @@ function calculateBasicMetrics(domain: any) {
     const stats = modelStats.get(result.model);
     stats.total++;
     if (result.presence === 1) stats.mentions++;
-    stats.totalRelevance += result.relevance;
-    stats.totalAccuracy += result.accuracy;
-    stats.totalSentiment += result.sentiment;
-    stats.totalOverall += result.overall;
-    stats.totalLatency += result.latency;
-    stats.totalCost += result.cost;
+    stats.totalRelevance += result.relevance || 0;
+    stats.totalAccuracy += result.accuracy || 0;
+    stats.totalSentiment += result.sentiment || 0;
+    stats.totalOverall += result.overall || 0;
+    stats.totalLatency += result.latency || 0;
+    stats.totalCost += result.cost || 0;
   });
 
   const modelPerformance = Array.from(modelStats.entries()).map(([model, stats]: [string, any]) => ({
@@ -171,7 +239,17 @@ function calculateBasicMetrics(domain: any) {
   // Top performing phrases (from existing data)
   const phraseStats = new Map();
   domain.keywords.forEach((keyword: any) => {
+    if (!keyword || !keyword.generatedIntentPhrases) {
+      console.log(`Keyword ${keyword?.id || 'unknown'} has no generatedIntentPhrases`);
+      return;
+    }
+    
     keyword.generatedIntentPhrases.forEach((phrase: any) => {
+      if (!phrase) {
+        console.log('Skipping null phrase');
+        return;
+      }
+      
       const phraseText = phrase.phrase || 'Unknown';
       const phraseResults = phrase.aiQueryResults || [];
       if (phraseResults.length > 0) {
@@ -180,7 +258,7 @@ function calculateBasicMetrics(domain: any) {
         }
         const stats = phraseStats.get(phraseText);
         stats.count += phraseResults.length;
-        stats.totalScore += phraseResults.reduce((sum: number, result: any) => sum + result.overall, 0);
+        stats.totalScore += phraseResults.reduce((sum: number, result: any) => sum + (result.overall || 0), 0);
       }
     });
   });
@@ -197,10 +275,15 @@ function calculateBasicMetrics(domain: any) {
   // Keyword performance (from existing data)
   const keywordStats = new Map();
   domain.keywords.forEach((keyword: any) => {
-    const keywordResults = keyword.generatedIntentPhrases.flatMap((phrase: any) => phrase.aiQueryResults);
+    if (!keyword || !keyword.generatedIntentPhrases) {
+      console.log(`Keyword ${keyword?.id || 'unknown'} has no generatedIntentPhrases for performance calculation`);
+      return;
+    }
+    
+    const keywordResults = keyword.generatedIntentPhrases.flatMap((phrase: any) => phrase.aiQueryResults || []);
     if (keywordResults.length > 0) {
       const mentions = keywordResults.filter((result: any) => result.presence === 1).length;
-      const avgSentiment = keywordResults.reduce((sum: number, result: any) => sum + result.sentiment, 0) / keywordResults.length;
+      const avgSentiment = keywordResults.reduce((sum: number, result: any) => sum + (result.sentiment || 0), 0) / keywordResults.length;
       keywordStats.set(keyword.term, {
         visibility: (mentions / keywordResults.length) * 100,
         mentions,
@@ -278,8 +361,8 @@ function calculateBasicMetrics(domain: any) {
     avgSentiment: Math.round(avgSentiment * 10) / 10,
     avgOverall: Math.round(avgOverall * 10) / 10,
     totalQueries,
-    keywordCount: domain.keywords.length,
-    phraseCount: domain.keywords.reduce((sum: number, keyword: any) => sum + keyword.phrases.length, 0),
+    keywordCount: domain.keywords?.length || 0,
+    phraseCount: domain.keywords?.reduce((sum: number, keyword: any) => sum + (keyword.generatedIntentPhrases?.length || 0), 0) || 0,
     modelPerformance,
     keywordPerformance,
     topPhrases,
@@ -288,6 +371,81 @@ function calculateBasicMetrics(domain: any) {
     contentPerformance
   };
 }
+
+// GET /api/dashboard/:domainId/test - Test endpoint to check domain existence
+router.get('/:domainId/test', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const domainId = Number(req.params.domainId);
+  
+  if (!domainId || isNaN(domainId)) {
+    return res.status(400).json({ error: 'Invalid domain ID' });
+  }
+
+  try {
+    console.log(`Testing domain existence for ID: ${domainId}`);
+    
+    // Test database connection first
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      console.log('Database connection successful');
+    } catch (dbError) {
+      console.error('Database connection failed:', dbError);
+      return res.status(500).json({ error: 'Database connection failed', details: dbError });
+    }
+    
+    // Simple domain check
+    const domain = await prisma.domain.findUnique({
+      where: { id: domainId },
+      select: { id: true, url: true, userId: true }
+    });
+
+    if (!domain) {
+      return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    if (domain.userId !== req.user.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Test if we can access related data
+    try {
+      const keywordCount = await prisma.keyword.count({
+        where: { domainId: domainId }
+      });
+      
+      const phraseCount = await prisma.generatedIntentPhrase.count({
+        where: { domainId: domainId }
+      });
+      
+      const crawlCount = await prisma.crawlResult.count({
+        where: { domainId: domainId }
+      });
+
+      res.json({ 
+        success: true, 
+        domain: { id: domain.id, url: domain.url, userId: domain.userId },
+        user: { userId: req.user.userId },
+        relatedData: {
+          keywords: keywordCount,
+          phrases: phraseCount,
+          crawlResults: crawlCount
+        },
+        databaseStatus: 'Connected'
+      });
+    } catch (relatedDataError) {
+      console.error('Error accessing related data:', relatedDataError);
+      res.json({ 
+        success: true, 
+        domain: { id: domain.id, url: domain.url, userId: domain.userId },
+        user: { userId: req.user.userId },
+        relatedDataError: relatedDataError instanceof Error ? relatedDataError.message : 'Unknown error',
+        databaseStatus: 'Connected'
+      });
+    }
+  } catch (error) {
+    console.error('Test endpoint error:', error);
+    res.status(500).json({ error: 'Test failed', details: error instanceof Error ? error.message : 'Unknown error' });
+  }
+}));
 
 // GET /api/dashboard/:domainId - Get comprehensive dashboard data
 router.get('/:domainId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
@@ -299,41 +457,96 @@ router.get('/:domainId', authenticateToken, asyncHandler(async (req: Authenticat
 
   try {
     console.log(`Fetching comprehensive dashboard data for domain ${domainId}`);
+    console.log(`User ID: ${req.user.userId}`);
+
+    // Test database connection first
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      console.log('Database connection successful');
+    } catch (dbError) {
+      console.error('Database connection failed:', dbError);
+      return res.status(500).json({ error: 'Database connection failed' });
+    }
 
     // Get domain with all related data
-    const domain = await prisma.domain.findUnique({
-      where: { id: domainId },
-      include: {
-        keywords: {
-          include: {
-            generatedIntentPhrases: {
-              include: {
-                aiQueryResults: true
+    let domain;
+    try {
+      domain = await prisma.domain.findUnique({
+        where: { id: domainId },
+        include: {
+          keywords: {
+            include: {
+              generatedIntentPhrases: {
+                include: {
+                  aiQueryResults: true
+                }
               }
             }
+          },
+          crawlResults: {
+            orderBy: { createdAt: 'desc' },
+            take: 1
+          },
+          dashboardAnalyses: {
+            orderBy: { createdAt: 'desc' },
+            take: 1
           }
-        },
-        crawlResults: {
-          orderBy: { createdAt: 'desc' },
-          take: 1
-        },
-        dashboardAnalyses: {
-          orderBy: { createdAt: 'desc' },
-          take: 1
         }
-      }
-    });
+      });
+      console.log('Domain query completed successfully');
+    } catch (domainQueryError) {
+      console.error('Error in domain query:', domainQueryError);
+      return res.status(500).json({ 
+        error: 'Failed to fetch domain data',
+        details: process.env.NODE_ENV === 'development' ? domainQueryError instanceof Error ? domainQueryError.message : 'Unknown query error' : undefined
+      });
+    }
+
+    console.log(`Domain found: ${!!domain}`);
+    if (domain) {
+      console.log(`Domain URL: ${domain.url}`);
+      console.log(`Domain User ID: ${domain.userId}`);
+      console.log(`Keywords count: ${domain.keywords?.length || 0}`);
+      console.log(`Crawl results count: ${domain.crawlResults?.length || 0}`);
+    }
 
     if (!domain) {
+      console.log(`Domain ${domainId} not found in database`);
       return res.status(404).json({ error: 'Domain not found' });
     }
 
     if (domain.userId !== req.user.userId) {
+      console.log(`Access denied: Domain user ID (${domain.userId}) != Request user ID (${req.user.userId})`);
       return res.status(403).json({ error: 'Access denied' });
     }
 
     // Calculate metrics from existing data
-    const metrics = calculateBasicMetrics(domain);
+    console.log('Starting metrics calculation...');
+    let metrics;
+    try {
+      metrics = calculateBasicMetrics(domain);
+      console.log('Metrics calculation completed');
+    } catch (metricsError) {
+      console.error('Error calculating metrics:', metricsError);
+      // Return basic metrics if calculation fails
+      metrics = {
+        visibilityScore: 0,
+        mentionRate: 0,
+        avgRelevance: 0,
+        avgAccuracy: 0,
+        avgSentiment: 0,
+        avgOverall: 0,
+        totalQueries: 0,
+        keywordCount: domain.keywords?.length || 0,
+        phraseCount: 0,
+        modelPerformance: [],
+        keywordPerformance: [],
+        topPhrases: [],
+        performanceData: [],
+        seoMetrics: {},
+        contentPerformance: {}
+      };
+    }
     
     // Get crawl data for extraction info
     const crawlData = domain.crawlResults?.[0];
@@ -361,70 +574,111 @@ router.get('/:domainId', authenticateToken, asyncHandler(async (req: Authenticat
     };
 
     // Save or update dashboard analysis
-    const existingAnalysis = await prisma.dashboardAnalysis.findFirst({
-      where: { domainId }
-    });
+    try {
+      const existingAnalysis = await prisma.dashboardAnalysis.findFirst({
+        where: { domainId }
+      });
 
-    if (existingAnalysis) {
-      await prisma.dashboardAnalysis.update({
-        where: { id: existingAnalysis.id },
-        data: {
-          metrics,
-          insights,
-          industryAnalysis,
-          updatedAt: new Date()
-        }
-      });
-    } else {
-      await prisma.dashboardAnalysis.create({
-        data: {
-          domainId,
-          metrics,
-          insights,
-          industryAnalysis
-        }
-      });
+      if (existingAnalysis) {
+        await prisma.dashboardAnalysis.update({
+          where: { id: existingAnalysis.id },
+          data: {
+            metrics,
+            insights,
+            industryAnalysis,
+            updatedAt: new Date()
+          }
+        });
+      } else {
+        await prisma.dashboardAnalysis.create({
+          data: {
+            domainId,
+            metrics,
+            insights,
+            industryAnalysis
+          }
+        });
+      }
+    } catch (dbError) {
+      console.error('Error saving dashboard analysis:', dbError);
+      // Continue without saving - this is not critical
     }
 
     // Flatten AI query results for frontend
-    const flatAIQueryResults = domain.keywords.flatMap((keyword: any) => 
-      keyword.generatedIntentPhrases.flatMap((phrase: any) => 
-        phrase.aiQueryResults.map((result: any) => ({
-          ...result,
-          keyword: keyword.term,
-          phraseText: phrase.phrase
-        }))
-      )
-    );
+    let flatAIQueryResults = [];
+    try {
+      flatAIQueryResults = domain.keywords.flatMap((keyword: any) => 
+        keyword.generatedIntentPhrases.flatMap((phrase: any) => 
+          phrase.aiQueryResults.map((result: any) => ({
+            ...result,
+            keyword: keyword.term,
+            phraseText: phrase.phrase
+          }))
+        )
+      );
+      console.log(`Successfully flattened ${flatAIQueryResults.length} AI query results`);
+    } catch (flattenError) {
+      console.error('Error flattening AI query results:', flattenError);
+      flatAIQueryResults = [];
+    }
 
-    res.json({
-      id: domain.id,
-      url: domain.url,
-      context: domain.context,
-      lastAnalyzed: domain.updatedAt,
-      industry: 'Technology', // Default industry since it's not in the schema
-      description: domain.context || '',
-      crawlResults: domain.crawlResults || [],
-      keywords: domain.keywords || [],
-      phrases: domain.keywords.flatMap((keyword: any) => 
-        keyword.generatedIntentPhrases.map((phrase: any) => ({
-          id: phrase.id,
-          text: phrase.phrase,
-          keywordId: keyword.id
-        }))
-      ),
-      aiQueryResults: flatAIQueryResults,
-      metrics,
-      insights,
-      industryAnalysis,
-      extraction: crawlData ? {
-        tokenUsage: crawlData.tokenUsage || 0
-      } : undefined
-    });
+    // Prepare response data with error handling
+    let responseData;
+    try {
+      responseData = {
+        id: domain.id,
+        url: domain.url,
+        context: domain.context,
+        lastAnalyzed: domain.updatedAt,
+        industry: 'Technology', // Default industry since it's not in the schema
+        description: domain.context || '',
+        crawlResults: domain.crawlResults || [],
+        keywords: domain.keywords || [],
+        phrases: domain.keywords.flatMap((keyword: any) => 
+          keyword.generatedIntentPhrases.map((phrase: any) => ({
+            id: phrase.id,
+            text: phrase.phrase,
+            keywordId: keyword.id
+          }))
+        ),
+        aiQueryResults: flatAIQueryResults,
+        metrics,
+        insights,
+        industryAnalysis,
+        extraction: crawlData ? {
+          tokenUsage: crawlData.tokenUsage || 0
+        } : undefined
+      };
+      console.log('Response data prepared successfully');
+    } catch (responseError) {
+      console.error('Error preparing response data:', responseError);
+      return res.status(500).json({ 
+        error: 'Failed to prepare response data',
+        details: process.env.NODE_ENV === 'development' ? responseError instanceof Error ? responseError.message : 'Unknown response error' : undefined
+      });
+    }
+
+    console.log('Sending dashboard response...');
+    res.json(responseData);
 
   } catch (error) {
-    console.error('Error fetching dashboard data:', error);
-    res.status(500).json({ error: 'Failed to fetch dashboard data' });
+    console.error('Error fetching dashboard data for domain', domainId, ':', error);
+    
+    // Provide more specific error messages
+    if (error instanceof Error) {
+      if (error.message.includes('not found')) {
+        res.status(404).json({ error: 'Domain not found' });
+      } else if (error.message.includes('access denied')) {
+        res.status(403).json({ error: 'Access denied' });
+      } else {
+        res.status(500).json({ 
+          error: 'Failed to fetch dashboard data',
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+      }
+    } else {
+      res.status(500).json({ error: 'Failed to fetch dashboard data' });
+    }
   }
 }));
 

@@ -272,7 +272,7 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
       setGeneratingSteps(prev => {
         const newSteps = [...prev];
         const runningIndex = newSteps.findIndex(step => step.status === 'running');
-        if (runningIndex !== -1 && newSteps[runningIndex].progress > 0) {
+        if (runningIndex !== -1) {
           console.log(`Phase ${runningIndex} seems stuck, marking as completed`);
           newSteps[runningIndex] = {
             ...newSteps[runningIndex],
@@ -289,7 +289,7 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
         }
         return newSteps;
       });
-    }, 30000); // 30 second timeout
+    }, 45000); // Increased to 45 seconds for slower operations
     
     // Initialize generating steps
     setGeneratingSteps([
@@ -461,10 +461,68 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
                 // Log progress for debugging
                 console.log('Progress update:', { phase, progress, message });
                 console.log('Current steps state:', generatingSteps);
-                            } else if (eventType === 'phrase' || eventType === 'phrase-generated') {
-                // Just log that we received a phrase event (for debugging)
-                console.log('Received phrase event:', eventType, 'Phrase ID:', data.id, 'Phrase:', data.phrase);
-                // Don't update state here - we'll fetch everything from DB after completion
+                            } else if (eventType === 'phrase-generated') {
+                // Handle phrase generation events
+                console.log('Received phrase event:', eventType, data);
+                console.log('Current phrases count before adding:', intentPhrases.length);
+                
+                // Add the new phrase to the state
+                const newPhrase = {
+                  id: data.id,
+                  phrase: data.phrase,
+                  intent: data.intent,
+                  intentConfidence: data.intentConfidence,
+                  relevanceScore: data.relevanceScore,
+                  sources: data.sources,
+                  trend: data.trend,
+                  editable: data.editable,
+                  selected: data.selected,
+                  parentKeyword: data.parentKeyword,
+                  keywordId: data.keywordId,
+                  wordCount: data.wordCount
+                };
+                
+                setIntentPhrases(prev => {
+                  // Check if phrase already exists to avoid duplicates
+                  const exists = prev.some(p => p.phrase === data.phrase);
+                  if (exists) {
+                    console.log('Phrase already exists, skipping:', data.phrase);
+                    return prev;
+                  }
+                  
+                  console.log('Adding new phrase:', data.phrase, 'for keyword:', data.parentKeyword);
+                  const updated = [...prev, newPhrase];
+                  console.log('Total phrases after adding:', updated.length);
+                  return updated;
+                });
+                
+                // Update received phrases ref for tracking
+                receivedPhrasesRef.current = [...receivedPhrasesRef.current, newPhrase];
+                phrasesReceivedRef.current = receivedPhrasesRef.current.length;
+                
+                console.log('All phrases after adding:', intentPhrases);
+                
+              } else if (eventType === 'phrase-updated') {
+                // Handle phrase ID updates (temporary ID to real database ID)
+                console.log('Received phrase-updated event:', data);
+                
+                setIntentPhrases(prev => {
+                  return prev.map(phrase => {
+                    if (phrase.id === data.oldId) {
+                      console.log(`Updating phrase ID from ${data.oldId} to ${data.newId} for phrase: ${data.phrase}`);
+                      return { ...phrase, id: data.newId };
+                    }
+                    return phrase;
+                  });
+                });
+                
+                // Update received phrases ref
+                receivedPhrasesRef.current = receivedPhrasesRef.current.map(phrase => {
+                  if (phrase.id === data.oldId) {
+                    return { ...phrase, id: data.newId };
+                  }
+                  return phrase;
+                });
 
               } else if (eventType === 'complete') {
                 // Generation complete
@@ -483,40 +541,67 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
                   }))
                 );
                 
-                // Fetch all phrases from database after generation completes
-                setTimeout(async () => {
-                  console.log('Fetching all phrases from database after generation...');
+                // Use the phrases we've already received instead of fetching from DB
+                console.log('Final phrases count (state):', intentPhrases.length);
+                console.log('Final phrases count (ref):', receivedPhrasesRef.current.length);
+                console.log('Expected total phrases:', data.totalPhrases || 0);
+                console.log('Expected total keywords:', data.totalKeywords || 0);
+                console.log('All final phrases:', intentPhrases);
+                
+                // Check if we have the expected number of phrases
+                const expectedPhrases = data.totalPhrases || 0;
+                const actualPhrases = intentPhrases.length;
+                
+                if (actualPhrases < expectedPhrases) {
+                  console.log(`MISMATCH: Expected ${expectedPhrases} phrases but received ${actualPhrases} phrases`);
                   
-                  try {
-                    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/enhanced-phrases/${domainId}/step3`, {
-                      headers: {
-                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-                        'Content-Type': 'application/json',
-                      },
-                    });
+                  // Wait a bit more and then fetch from DB as fallback
+                  setTimeout(async () => {
+                    console.log('Fetching phrases from database as fallback...');
+                    
+                    try {
+                      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/enhanced-phrases/${domainId}/step3`, {
+                        headers: {
+                          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+                          'Content-Type': 'application/json',
+                        },
+                      });
 
-                    if (response.ok) {
-                      const existingData = await response.json();
-                      if (existingData.existingPhrases && existingData.existingPhrases.length > 0) {
-                        console.log('Successfully fetched', existingData.existingPhrases.length, 'phrases from database');
-                        setIntentPhrases(existingData.existingPhrases);
-                        phrasesReceivedRef.current = existingData.existingPhrases.length;
-                        receivedPhrasesRef.current = existingData.existingPhrases;
-                      } else {
-                        console.warn('No phrases found in database after generation');
+                      if (response.ok) {
+                        const existingData = await response.json();
+                        if (existingData.existingPhrases && existingData.existingPhrases.length > 0) {
+                          console.log('Successfully fetched', existingData.existingPhrases.length, 'phrases from database');
+                          setIntentPhrases(existingData.existingPhrases);
+                          phrasesReceivedRef.current = existingData.existingPhrases.length;
+                          receivedPhrasesRef.current = existingData.existingPhrases;
+                        }
                       }
-                    } else {
-                      console.error('Failed to fetch phrases from database after generation');
+                    } catch (error) {
+                      console.error('Error fetching phrases from database:', error);
                     }
-                  } catch (error) {
-                    console.error('Error fetching phrases from database after generation:', error);
-                  }
-                  
+                    
+                    clearTimeout(phaseTimeout);
+                    setIsGenerating(false);
+                    setPhrasesLoading(false);
+                    setIsPhraseGenerationActive(false);
+                  }, 2000);
+                } else {
                   clearTimeout(phaseTimeout);
                   setIsGenerating(false);
                   setPhrasesLoading(false);
                   setIsPhraseGenerationActive(false);
-                }, 1000); // Reduced timeout since we're fetching from DB
+                }
+                
+                // Add a final check after a longer delay to ensure we have all phrases
+                setTimeout(() => {
+                  console.log('Final phrases count after delay (state):', intentPhrases.length);
+                  console.log('Final phrases count after delay (ref):', receivedPhrasesRef.current.length);
+                  console.log('All final phrases after delay:', intentPhrases);
+                  
+                  if (intentPhrases.length < expectedPhrases) {
+                    console.log('Still missing phrases: Expected', expectedPhrases, 'got', intentPhrases.length);
+                  }
+                }, 5000);
                 return;
               } else if (eventType === 'error') {
                 // Error occurred

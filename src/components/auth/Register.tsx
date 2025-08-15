@@ -49,7 +49,14 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
     try {
       await register(email, password, name || undefined);
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Registration failed');
+      const errorMessage = error instanceof Error ? error.message : 'Registration failed';
+      
+      // Handle specific error cases
+      if (errorMessage.includes('already exists')) {
+        setFormError('An account with this email already exists. Please try logging in instead.');
+      } else {
+        setFormError(errorMessage);
+      }
     }
   };
 
@@ -71,7 +78,20 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
           <form onSubmit={handleSubmit} className="space-y-4">
             {displayError && (
               <Alert variant="destructive">
-                <AlertDescription>{displayError}</AlertDescription>
+                <AlertDescription>
+                  {displayError}
+                  {displayError.includes('already exists') && (
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        onClick={onSwitchToLogin}
+                        className="text-sm underline hover:no-underline"
+                      >
+                        Click here to login instead
+                      </button>
+                    </div>
+                  )}
+                </AlertDescription>
               </Alert>
             )}
             

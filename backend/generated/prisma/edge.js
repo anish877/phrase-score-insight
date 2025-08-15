@@ -518,7 +518,7 @@ const config = {
       "value": "prisma-client-js"
     },
     "output": {
-      "value": "/Users/anishsuman/Documents/Cohort Project/girlpowertalk/domainanalyzerBackend/generated/prisma",
+      "value": "/Users/anishsuman/Desktop/ookokoko/phrase-score-insight/backend/generated/prisma",
       "fromEnvVar": null
     },
     "config": {
@@ -532,7 +532,7 @@ const config = {
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "/Users/anishsuman/Documents/Cohort Project/girlpowertalk/domainanalyzerBackend/prisma/schema.prisma",
+    "sourceFilePath": "/Users/anishsuman/Desktop/ookokoko/phrase-score-insight/backend/prisma/schema.prisma",
     "isCustomOutput": true
   },
   "relativeEnvPaths": {
@@ -546,6 +546,7 @@ const config = {
     "db"
   ],
   "activeProvider": "postgresql",
+  "postinstall": false,
   "inlineDatasources": {
     "db": {
       "url": {

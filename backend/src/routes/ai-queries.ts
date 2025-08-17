@@ -730,6 +730,7 @@ async function processQueryBatch(
             aiQueryResultRecord = await prisma.aIQueryResult.create({
               data: {
                 phraseId: phraseRecord.id,
+                domainId: phraseRecord.domainId,
                 model, // This preserves the display name: 'GPT-4o', 'Claude 3', or 'Gemini 1.5'
                 response,
                 latency,
@@ -900,6 +901,7 @@ router.post('/analyze', authenticateToken, asyncHandler(async (req: Authenticate
     const aiResult = await prisma.aIQueryResult.create({
       data: {
         phraseId: phraseRecord.id,
+        domainId: phraseRecord.domainId,
         model: result.model,
         response: result.response,
         latency: result.latency,
@@ -1009,6 +1011,7 @@ router.post('/batch-analyze', authenticateToken, asyncHandler(async (req: Authen
         const aiResult = await prisma.aIQueryResult.create({
           data: {
             phraseId: phraseRecord.id,
+            domainId: phraseRecord.domainId,
             model: result.model,
             response: result.response,
             latency: result.latency,

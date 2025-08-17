@@ -3263,6 +3263,7 @@ export namespace Prisma {
     intentClassificationResults: number
     generatedIntentPhrases: number
     relevanceScoreResults: number
+    aiQueryResults: number
     analysisReports: number
     modelPerformances: number
     competitorTrackings: number
@@ -3288,6 +3289,7 @@ export namespace Prisma {
     intentClassificationResults?: boolean | DomainCountOutputTypeCountIntentClassificationResultsArgs
     generatedIntentPhrases?: boolean | DomainCountOutputTypeCountGeneratedIntentPhrasesArgs
     relevanceScoreResults?: boolean | DomainCountOutputTypeCountRelevanceScoreResultsArgs
+    aiQueryResults?: boolean | DomainCountOutputTypeCountAiQueryResultsArgs
     analysisReports?: boolean | DomainCountOutputTypeCountAnalysisReportsArgs
     modelPerformances?: boolean | DomainCountOutputTypeCountModelPerformancesArgs
     competitorTrackings?: boolean | DomainCountOutputTypeCountCompetitorTrackingsArgs
@@ -3429,6 +3431,13 @@ export namespace Prisma {
    */
   export type DomainCountOutputTypeCountRelevanceScoreResultsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     where?: RelevanceScoreResultWhereInput
+  }
+
+  /**
+   * DomainCountOutputType without action
+   */
+  export type DomainCountOutputTypeCountAiQueryResultsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: AIQueryResultWhereInput
   }
 
   /**
@@ -4950,6 +4959,7 @@ export namespace Prisma {
     intentClassificationResults?: boolean | Domain$intentClassificationResultsArgs<ExtArgs>
     generatedIntentPhrases?: boolean | Domain$generatedIntentPhrasesArgs<ExtArgs>
     relevanceScoreResults?: boolean | Domain$relevanceScoreResultsArgs<ExtArgs>
+    aiQueryResults?: boolean | Domain$aiQueryResultsArgs<ExtArgs>
     analysisReports?: boolean | Domain$analysisReportsArgs<ExtArgs>
     modelPerformances?: boolean | Domain$modelPerformancesArgs<ExtArgs>
     competitorTrackings?: boolean | Domain$competitorTrackingsArgs<ExtArgs>
@@ -5010,6 +5020,7 @@ export namespace Prisma {
     intentClassificationResults?: boolean | Domain$intentClassificationResultsArgs<ExtArgs>
     generatedIntentPhrases?: boolean | Domain$generatedIntentPhrasesArgs<ExtArgs>
     relevanceScoreResults?: boolean | Domain$relevanceScoreResultsArgs<ExtArgs>
+    aiQueryResults?: boolean | Domain$aiQueryResultsArgs<ExtArgs>
     analysisReports?: boolean | Domain$analysisReportsArgs<ExtArgs>
     modelPerformances?: boolean | Domain$modelPerformancesArgs<ExtArgs>
     competitorTrackings?: boolean | Domain$competitorTrackingsArgs<ExtArgs>
@@ -5042,6 +5053,7 @@ export namespace Prisma {
       intentClassificationResults: Prisma.$IntentClassificationResultPayload<ExtArgs>[]
       generatedIntentPhrases: Prisma.$GeneratedIntentPhrasePayload<ExtArgs>[]
       relevanceScoreResults: Prisma.$RelevanceScoreResultPayload<ExtArgs>[]
+      aiQueryResults: Prisma.$AIQueryResultPayload<ExtArgs>[]
       analysisReports: Prisma.$AnalysisReportPayload<ExtArgs>[]
       modelPerformances: Prisma.$ModelPerformancePayload<ExtArgs>[]
       competitorTrackings: Prisma.$CompetitorTrackingPayload<ExtArgs>[]
@@ -5443,6 +5455,7 @@ export namespace Prisma {
     intentClassificationResults<T extends Domain$intentClassificationResultsArgs<ExtArgs> = {}>(args?: Subset<T, Domain$intentClassificationResultsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$IntentClassificationResultPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     generatedIntentPhrases<T extends Domain$generatedIntentPhrasesArgs<ExtArgs> = {}>(args?: Subset<T, Domain$generatedIntentPhrasesArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$GeneratedIntentPhrasePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     relevanceScoreResults<T extends Domain$relevanceScoreResultsArgs<ExtArgs> = {}>(args?: Subset<T, Domain$relevanceScoreResultsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$RelevanceScoreResultPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    aiQueryResults<T extends Domain$aiQueryResultsArgs<ExtArgs> = {}>(args?: Subset<T, Domain$aiQueryResultsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$AIQueryResultPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     analysisReports<T extends Domain$analysisReportsArgs<ExtArgs> = {}>(args?: Subset<T, Domain$analysisReportsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$AnalysisReportPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     modelPerformances<T extends Domain$modelPerformancesArgs<ExtArgs> = {}>(args?: Subset<T, Domain$modelPerformancesArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ModelPerformancePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     competitorTrackings<T extends Domain$competitorTrackingsArgs<ExtArgs> = {}>(args?: Subset<T, Domain$competitorTrackingsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$CompetitorTrackingPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
@@ -6294,6 +6307,30 @@ export namespace Prisma {
     take?: number
     skip?: number
     distinct?: RelevanceScoreResultScalarFieldEnum | RelevanceScoreResultScalarFieldEnum[]
+  }
+
+  /**
+   * Domain.aiQueryResults
+   */
+  export type Domain$aiQueryResultsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the AIQueryResult
+     */
+    select?: AIQueryResultSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the AIQueryResult
+     */
+    omit?: AIQueryResultOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: AIQueryResultInclude<ExtArgs> | null
+    where?: AIQueryResultWhereInput
+    orderBy?: AIQueryResultOrderByWithRelationInput | AIQueryResultOrderByWithRelationInput[]
+    cursor?: AIQueryResultWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: AIQueryResultScalarFieldEnum | AIQueryResultScalarFieldEnum[]
   }
 
   /**
@@ -9947,6 +9984,7 @@ export namespace Prisma {
   export type AIQueryResultAvgAggregateOutputType = {
     id: number | null
     phraseId: number | null
+    domainId: number | null
     latency: number | null
     cost: number | null
     presence: number | null
@@ -9962,6 +10000,7 @@ export namespace Prisma {
   export type AIQueryResultSumAggregateOutputType = {
     id: number | null
     phraseId: number | null
+    domainId: number | null
     latency: number | null
     cost: number | null
     presence: number | null
@@ -9977,6 +10016,7 @@ export namespace Prisma {
   export type AIQueryResultMinAggregateOutputType = {
     id: number | null
     phraseId: number | null
+    domainId: number | null
     model: string | null
     response: string | null
     latency: number | null
@@ -9995,6 +10035,7 @@ export namespace Prisma {
   export type AIQueryResultMaxAggregateOutputType = {
     id: number | null
     phraseId: number | null
+    domainId: number | null
     model: string | null
     response: string | null
     latency: number | null
@@ -10013,6 +10054,7 @@ export namespace Prisma {
   export type AIQueryResultCountAggregateOutputType = {
     id: number
     phraseId: number
+    domainId: number
     model: number
     response: number
     latency: number
@@ -10036,6 +10078,7 @@ export namespace Prisma {
   export type AIQueryResultAvgAggregateInputType = {
     id?: true
     phraseId?: true
+    domainId?: true
     latency?: true
     cost?: true
     presence?: true
@@ -10051,6 +10094,7 @@ export namespace Prisma {
   export type AIQueryResultSumAggregateInputType = {
     id?: true
     phraseId?: true
+    domainId?: true
     latency?: true
     cost?: true
     presence?: true
@@ -10066,6 +10110,7 @@ export namespace Prisma {
   export type AIQueryResultMinAggregateInputType = {
     id?: true
     phraseId?: true
+    domainId?: true
     model?: true
     response?: true
     latency?: true
@@ -10084,6 +10129,7 @@ export namespace Prisma {
   export type AIQueryResultMaxAggregateInputType = {
     id?: true
     phraseId?: true
+    domainId?: true
     model?: true
     response?: true
     latency?: true
@@ -10102,6 +10148,7 @@ export namespace Prisma {
   export type AIQueryResultCountAggregateInputType = {
     id?: true
     phraseId?: true
+    domainId?: true
     model?: true
     response?: true
     latency?: true
@@ -10210,6 +10257,7 @@ export namespace Prisma {
   export type AIQueryResultGroupByOutputType = {
     id: number
     phraseId: number
+    domainId: number | null
     model: string
     response: string
     latency: number
@@ -10250,6 +10298,7 @@ export namespace Prisma {
   export type AIQueryResultSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
     phraseId?: boolean
+    domainId?: boolean
     model?: boolean
     response?: boolean
     latency?: boolean
@@ -10267,11 +10316,13 @@ export namespace Prisma {
     competitorMatchScore?: boolean
     createdAt?: boolean
     phrase?: boolean | GeneratedIntentPhraseDefaultArgs<ExtArgs>
+    domain?: boolean | AIQueryResult$domainArgs<ExtArgs>
   }, ExtArgs["result"]["aIQueryResult"]>
 
   export type AIQueryResultSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
     phraseId?: boolean
+    domainId?: boolean
     model?: boolean
     response?: boolean
     latency?: boolean
@@ -10289,12 +10340,14 @@ export namespace Prisma {
     competitorMatchScore?: boolean
     createdAt?: boolean
     phrase?: boolean | GeneratedIntentPhraseDefaultArgs<ExtArgs>
+    domain?: boolean | AIQueryResult$domainArgs<ExtArgs>
   }, ExtArgs["result"]["aIQueryResult"]>
 
 
   export type AIQueryResultSelectScalar = {
     id?: boolean
     phraseId?: boolean
+    domainId?: boolean
     model?: boolean
     response?: boolean
     latency?: boolean
@@ -10313,22 +10366,26 @@ export namespace Prisma {
     createdAt?: boolean
   }
 
-  export type AIQueryResultOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "phraseId" | "model" | "response" | "latency" | "cost" | "presence" | "relevance" | "accuracy" | "sentiment" | "overall" | "domainRank" | "foundDomains" | "confidence" | "sources" | "competitorUrls" | "competitorMatchScore" | "createdAt", ExtArgs["result"]["aIQueryResult"]>
+  export type AIQueryResultOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "phraseId" | "domainId" | "model" | "response" | "latency" | "cost" | "presence" | "relevance" | "accuracy" | "sentiment" | "overall" | "domainRank" | "foundDomains" | "confidence" | "sources" | "competitorUrls" | "competitorMatchScore" | "createdAt", ExtArgs["result"]["aIQueryResult"]>
   export type AIQueryResultInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     phrase?: boolean | GeneratedIntentPhraseDefaultArgs<ExtArgs>
+    domain?: boolean | AIQueryResult$domainArgs<ExtArgs>
   }
   export type AIQueryResultIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     phrase?: boolean | GeneratedIntentPhraseDefaultArgs<ExtArgs>
+    domain?: boolean | AIQueryResult$domainArgs<ExtArgs>
   }
 
   export type $AIQueryResultPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "AIQueryResult"
     objects: {
       phrase: Prisma.$GeneratedIntentPhrasePayload<ExtArgs>
+      domain: Prisma.$DomainPayload<ExtArgs> | null
     }
     scalars: $Extensions.GetPayloadResult<{
       id: number
       phraseId: number
+      domainId: number | null
       model: string
       response: string
       latency: number
@@ -10710,6 +10767,7 @@ export namespace Prisma {
   export interface Prisma__AIQueryResultClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise"
     phrase<T extends GeneratedIntentPhraseDefaultArgs<ExtArgs> = {}>(args?: Subset<T, GeneratedIntentPhraseDefaultArgs<ExtArgs>>): Prisma__GeneratedIntentPhraseClient<$Result.GetResult<Prisma.$GeneratedIntentPhrasePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+    domain<T extends AIQueryResult$domainArgs<ExtArgs> = {}>(args?: Subset<T, AIQueryResult$domainArgs<ExtArgs>>): Prisma__DomainClient<$Result.GetResult<Prisma.$DomainPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -10741,6 +10799,7 @@ export namespace Prisma {
   interface AIQueryResultFieldRefs {
     readonly id: FieldRef<"AIQueryResult", 'Int'>
     readonly phraseId: FieldRef<"AIQueryResult", 'Int'>
+    readonly domainId: FieldRef<"AIQueryResult", 'Int'>
     readonly model: FieldRef<"AIQueryResult", 'String'>
     readonly response: FieldRef<"AIQueryResult", 'String'>
     readonly latency: FieldRef<"AIQueryResult", 'Float'>
@@ -11112,6 +11171,25 @@ export namespace Prisma {
      * Filter which AIQueryResults to delete
      */
     where?: AIQueryResultWhereInput
+  }
+
+  /**
+   * AIQueryResult.domain
+   */
+  export type AIQueryResult$domainArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the Domain
+     */
+    select?: DomainSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the Domain
+     */
+    omit?: DomainOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: DomainInclude<ExtArgs> | null
+    where?: DomainWhereInput
   }
 
   /**
@@ -35361,6 +35439,7 @@ export namespace Prisma {
   export const AIQueryResultScalarFieldEnum: {
     id: 'id',
     phraseId: 'phraseId',
+    domainId: 'domainId',
     model: 'model',
     response: 'response',
     latency: 'latency',
@@ -35943,6 +36022,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultListRelationFilter
     generatedIntentPhrases?: GeneratedIntentPhraseListRelationFilter
     relevanceScoreResults?: RelevanceScoreResultListRelationFilter
+    aiQueryResults?: AIQueryResultListRelationFilter
     analysisReports?: AnalysisReportListRelationFilter
     modelPerformances?: ModelPerformanceListRelationFilter
     competitorTrackings?: CompetitorTrackingListRelationFilter
@@ -35981,6 +36061,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultOrderByRelationAggregateInput
     generatedIntentPhrases?: GeneratedIntentPhraseOrderByRelationAggregateInput
     relevanceScoreResults?: RelevanceScoreResultOrderByRelationAggregateInput
+    aiQueryResults?: AIQueryResultOrderByRelationAggregateInput
     analysisReports?: AnalysisReportOrderByRelationAggregateInput
     modelPerformances?: ModelPerformanceOrderByRelationAggregateInput
     competitorTrackings?: CompetitorTrackingOrderByRelationAggregateInput
@@ -35989,10 +36070,11 @@ export namespace Prisma {
 
   export type DomainWhereUniqueInput = Prisma.AtLeast<{
     id?: number
-    url?: string
+    url_userId?: DomainUrlUserIdCompoundUniqueInput
     AND?: DomainWhereInput | DomainWhereInput[]
     OR?: DomainWhereInput[]
     NOT?: DomainWhereInput | DomainWhereInput[]
+    url?: StringFilter<"Domain"> | string
     context?: StringNullableFilter<"Domain"> | string | null
     userId?: IntNullableFilter<"Domain"> | number | null
     createdAt?: DateTimeFilter<"Domain"> | Date | string
@@ -36022,11 +36104,12 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultListRelationFilter
     generatedIntentPhrases?: GeneratedIntentPhraseListRelationFilter
     relevanceScoreResults?: RelevanceScoreResultListRelationFilter
+    aiQueryResults?: AIQueryResultListRelationFilter
     analysisReports?: AnalysisReportListRelationFilter
     modelPerformances?: ModelPerformanceListRelationFilter
     competitorTrackings?: CompetitorTrackingListRelationFilter
     performanceInsights?: PerformanceInsightListRelationFilter
-  }, "id" | "url">
+  }, "id" | "url_userId">
 
   export type DomainOrderByWithAggregationInput = {
     id?: SortOrder
@@ -36336,6 +36419,7 @@ export namespace Prisma {
     NOT?: AIQueryResultWhereInput | AIQueryResultWhereInput[]
     id?: IntFilter<"AIQueryResult"> | number
     phraseId?: IntFilter<"AIQueryResult"> | number
+    domainId?: IntNullableFilter<"AIQueryResult"> | number | null
     model?: StringFilter<"AIQueryResult"> | string
     response?: StringFilter<"AIQueryResult"> | string
     latency?: FloatFilter<"AIQueryResult"> | number
@@ -36353,11 +36437,13 @@ export namespace Prisma {
     competitorMatchScore?: FloatNullableFilter<"AIQueryResult"> | number | null
     createdAt?: DateTimeFilter<"AIQueryResult"> | Date | string
     phrase?: XOR<GeneratedIntentPhraseRelationFilter, GeneratedIntentPhraseWhereInput>
+    domain?: XOR<DomainNullableRelationFilter, DomainWhereInput> | null
   }
 
   export type AIQueryResultOrderByWithRelationInput = {
     id?: SortOrder
     phraseId?: SortOrder
+    domainId?: SortOrderInput | SortOrder
     model?: SortOrder
     response?: SortOrder
     latency?: SortOrder
@@ -36375,6 +36461,7 @@ export namespace Prisma {
     competitorMatchScore?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     phrase?: GeneratedIntentPhraseOrderByWithRelationInput
+    domain?: DomainOrderByWithRelationInput
   }
 
   export type AIQueryResultWhereUniqueInput = Prisma.AtLeast<{
@@ -36383,6 +36470,7 @@ export namespace Prisma {
     OR?: AIQueryResultWhereInput[]
     NOT?: AIQueryResultWhereInput | AIQueryResultWhereInput[]
     phraseId?: IntFilter<"AIQueryResult"> | number
+    domainId?: IntNullableFilter<"AIQueryResult"> | number | null
     model?: StringFilter<"AIQueryResult"> | string
     response?: StringFilter<"AIQueryResult"> | string
     latency?: FloatFilter<"AIQueryResult"> | number
@@ -36400,11 +36488,13 @@ export namespace Prisma {
     competitorMatchScore?: FloatNullableFilter<"AIQueryResult"> | number | null
     createdAt?: DateTimeFilter<"AIQueryResult"> | Date | string
     phrase?: XOR<GeneratedIntentPhraseRelationFilter, GeneratedIntentPhraseWhereInput>
+    domain?: XOR<DomainNullableRelationFilter, DomainWhereInput> | null
   }, "id">
 
   export type AIQueryResultOrderByWithAggregationInput = {
     id?: SortOrder
     phraseId?: SortOrder
+    domainId?: SortOrderInput | SortOrder
     model?: SortOrder
     response?: SortOrder
     latency?: SortOrder
@@ -36434,6 +36524,7 @@ export namespace Prisma {
     NOT?: AIQueryResultScalarWhereWithAggregatesInput | AIQueryResultScalarWhereWithAggregatesInput[]
     id?: IntWithAggregatesFilter<"AIQueryResult"> | number
     phraseId?: IntWithAggregatesFilter<"AIQueryResult"> | number
+    domainId?: IntNullableWithAggregatesFilter<"AIQueryResult"> | number | null
     model?: StringWithAggregatesFilter<"AIQueryResult"> | string
     response?: StringWithAggregatesFilter<"AIQueryResult"> | string
     latency?: FloatWithAggregatesFilter<"AIQueryResult"> | number
@@ -38310,6 +38401,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -38347,6 +38439,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -38383,6 +38476,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -38420,6 +38514,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -38770,11 +38865,13 @@ export namespace Prisma {
     competitorMatchScore?: number | null
     createdAt?: Date | string
     phrase: GeneratedIntentPhraseCreateNestedOneWithoutAiQueryResultsInput
+    domain?: DomainCreateNestedOneWithoutAiQueryResultsInput
   }
 
   export type AIQueryResultUncheckedCreateInput = {
     id?: number
     phraseId: number
+    domainId?: number | null
     model: string
     response: string
     latency: number
@@ -38811,11 +38908,13 @@ export namespace Prisma {
     competitorMatchScore?: NullableFloatFieldUpdateOperationsInput | number | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     phrase?: GeneratedIntentPhraseUpdateOneRequiredWithoutAiQueryResultsNestedInput
+    domain?: DomainUpdateOneWithoutAiQueryResultsNestedInput
   }
 
   export type AIQueryResultUncheckedUpdateInput = {
     id?: IntFieldUpdateOperationsInput | number
     phraseId?: IntFieldUpdateOperationsInput | number
+    domainId?: NullableIntFieldUpdateOperationsInput | number | null
     model?: StringFieldUpdateOperationsInput | string
     response?: StringFieldUpdateOperationsInput | string
     latency?: FloatFieldUpdateOperationsInput | number
@@ -38837,6 +38936,7 @@ export namespace Prisma {
   export type AIQueryResultCreateManyInput = {
     id?: number
     phraseId: number
+    domainId?: number | null
     model: string
     response: string
     latency: number
@@ -38877,6 +38977,7 @@ export namespace Prisma {
   export type AIQueryResultUncheckedUpdateManyInput = {
     id?: IntFieldUpdateOperationsInput | number
     phraseId?: IntFieldUpdateOperationsInput | number
+    domainId?: NullableIntFieldUpdateOperationsInput | number | null
     model?: StringFieldUpdateOperationsInput | string
     response?: StringFieldUpdateOperationsInput | string
     latency?: FloatFieldUpdateOperationsInput | number
@@ -41009,6 +41110,12 @@ export namespace Prisma {
     none?: RelevanceScoreResultWhereInput
   }
 
+  export type AIQueryResultListRelationFilter = {
+    every?: AIQueryResultWhereInput
+    some?: AIQueryResultWhereInput
+    none?: AIQueryResultWhereInput
+  }
+
   export type AnalysisReportListRelationFilter = {
     every?: AnalysisReportWhereInput
     some?: AnalysisReportWhereInput
@@ -41105,6 +41212,10 @@ export namespace Prisma {
     _count?: SortOrder
   }
 
+  export type AIQueryResultOrderByRelationAggregateInput = {
+    _count?: SortOrder
+  }
+
   export type AnalysisReportOrderByRelationAggregateInput = {
     _count?: SortOrder
   }
@@ -41119,6 +41230,11 @@ export namespace Prisma {
 
   export type PerformanceInsightOrderByRelationAggregateInput = {
     _count?: SortOrder
+  }
+
+  export type DomainUrlUserIdCompoundUniqueInput = {
+    url: string
+    userId: number
   }
 
   export type DomainCountOrderByAggregateInput = {
@@ -41489,6 +41605,7 @@ export namespace Prisma {
   export type AIQueryResultCountOrderByAggregateInput = {
     id?: SortOrder
     phraseId?: SortOrder
+    domainId?: SortOrder
     model?: SortOrder
     response?: SortOrder
     latency?: SortOrder
@@ -41510,6 +41627,7 @@ export namespace Prisma {
   export type AIQueryResultAvgOrderByAggregateInput = {
     id?: SortOrder
     phraseId?: SortOrder
+    domainId?: SortOrder
     latency?: SortOrder
     cost?: SortOrder
     presence?: SortOrder
@@ -41525,6 +41643,7 @@ export namespace Prisma {
   export type AIQueryResultMaxOrderByAggregateInput = {
     id?: SortOrder
     phraseId?: SortOrder
+    domainId?: SortOrder
     model?: SortOrder
     response?: SortOrder
     latency?: SortOrder
@@ -41543,6 +41662,7 @@ export namespace Prisma {
   export type AIQueryResultMinOrderByAggregateInput = {
     id?: SortOrder
     phraseId?: SortOrder
+    domainId?: SortOrder
     model?: SortOrder
     response?: SortOrder
     latency?: SortOrder
@@ -41561,6 +41681,7 @@ export namespace Prisma {
   export type AIQueryResultSumOrderByAggregateInput = {
     id?: SortOrder
     phraseId?: SortOrder
+    domainId?: SortOrder
     latency?: SortOrder
     cost?: SortOrder
     presence?: SortOrder
@@ -42609,16 +42730,6 @@ export namespace Prisma {
     tokenUsage?: SortOrder
   }
 
-  export type AIQueryResultListRelationFilter = {
-    every?: AIQueryResultWhereInput
-    some?: AIQueryResultWhereInput
-    none?: AIQueryResultWhereInput
-  }
-
-  export type AIQueryResultOrderByRelationAggregateInput = {
-    _count?: SortOrder
-  }
-
   export type GeneratedIntentPhraseCountOrderByAggregateInput = {
     id?: SortOrder
     domainId?: SortOrder
@@ -42929,6 +43040,13 @@ export namespace Prisma {
     connect?: RelevanceScoreResultWhereUniqueInput | RelevanceScoreResultWhereUniqueInput[]
   }
 
+  export type AIQueryResultCreateNestedManyWithoutDomainInput = {
+    create?: XOR<AIQueryResultCreateWithoutDomainInput, AIQueryResultUncheckedCreateWithoutDomainInput> | AIQueryResultCreateWithoutDomainInput[] | AIQueryResultUncheckedCreateWithoutDomainInput[]
+    connectOrCreate?: AIQueryResultCreateOrConnectWithoutDomainInput | AIQueryResultCreateOrConnectWithoutDomainInput[]
+    createMany?: AIQueryResultCreateManyDomainInputEnvelope
+    connect?: AIQueryResultWhereUniqueInput | AIQueryResultWhereUniqueInput[]
+  }
+
   export type AnalysisReportCreateNestedManyWithoutDomainInput = {
     create?: XOR<AnalysisReportCreateWithoutDomainInput, AnalysisReportUncheckedCreateWithoutDomainInput> | AnalysisReportCreateWithoutDomainInput[] | AnalysisReportUncheckedCreateWithoutDomainInput[]
     connectOrCreate?: AnalysisReportCreateOrConnectWithoutDomainInput | AnalysisReportCreateOrConnectWithoutDomainInput[]
@@ -43081,6 +43199,13 @@ export namespace Prisma {
     connectOrCreate?: RelevanceScoreResultCreateOrConnectWithoutDomainInput | RelevanceScoreResultCreateOrConnectWithoutDomainInput[]
     createMany?: RelevanceScoreResultCreateManyDomainInputEnvelope
     connect?: RelevanceScoreResultWhereUniqueInput | RelevanceScoreResultWhereUniqueInput[]
+  }
+
+  export type AIQueryResultUncheckedCreateNestedManyWithoutDomainInput = {
+    create?: XOR<AIQueryResultCreateWithoutDomainInput, AIQueryResultUncheckedCreateWithoutDomainInput> | AIQueryResultCreateWithoutDomainInput[] | AIQueryResultUncheckedCreateWithoutDomainInput[]
+    connectOrCreate?: AIQueryResultCreateOrConnectWithoutDomainInput | AIQueryResultCreateOrConnectWithoutDomainInput[]
+    createMany?: AIQueryResultCreateManyDomainInputEnvelope
+    connect?: AIQueryResultWhereUniqueInput | AIQueryResultWhereUniqueInput[]
   }
 
   export type AnalysisReportUncheckedCreateNestedManyWithoutDomainInput = {
@@ -43375,6 +43500,20 @@ export namespace Prisma {
     update?: RelevanceScoreResultUpdateWithWhereUniqueWithoutDomainInput | RelevanceScoreResultUpdateWithWhereUniqueWithoutDomainInput[]
     updateMany?: RelevanceScoreResultUpdateManyWithWhereWithoutDomainInput | RelevanceScoreResultUpdateManyWithWhereWithoutDomainInput[]
     deleteMany?: RelevanceScoreResultScalarWhereInput | RelevanceScoreResultScalarWhereInput[]
+  }
+
+  export type AIQueryResultUpdateManyWithoutDomainNestedInput = {
+    create?: XOR<AIQueryResultCreateWithoutDomainInput, AIQueryResultUncheckedCreateWithoutDomainInput> | AIQueryResultCreateWithoutDomainInput[] | AIQueryResultUncheckedCreateWithoutDomainInput[]
+    connectOrCreate?: AIQueryResultCreateOrConnectWithoutDomainInput | AIQueryResultCreateOrConnectWithoutDomainInput[]
+    upsert?: AIQueryResultUpsertWithWhereUniqueWithoutDomainInput | AIQueryResultUpsertWithWhereUniqueWithoutDomainInput[]
+    createMany?: AIQueryResultCreateManyDomainInputEnvelope
+    set?: AIQueryResultWhereUniqueInput | AIQueryResultWhereUniqueInput[]
+    disconnect?: AIQueryResultWhereUniqueInput | AIQueryResultWhereUniqueInput[]
+    delete?: AIQueryResultWhereUniqueInput | AIQueryResultWhereUniqueInput[]
+    connect?: AIQueryResultWhereUniqueInput | AIQueryResultWhereUniqueInput[]
+    update?: AIQueryResultUpdateWithWhereUniqueWithoutDomainInput | AIQueryResultUpdateWithWhereUniqueWithoutDomainInput[]
+    updateMany?: AIQueryResultUpdateManyWithWhereWithoutDomainInput | AIQueryResultUpdateManyWithWhereWithoutDomainInput[]
+    deleteMany?: AIQueryResultScalarWhereInput | AIQueryResultScalarWhereInput[]
   }
 
   export type AnalysisReportUpdateManyWithoutDomainNestedInput = {
@@ -43691,6 +43830,20 @@ export namespace Prisma {
     update?: RelevanceScoreResultUpdateWithWhereUniqueWithoutDomainInput | RelevanceScoreResultUpdateWithWhereUniqueWithoutDomainInput[]
     updateMany?: RelevanceScoreResultUpdateManyWithWhereWithoutDomainInput | RelevanceScoreResultUpdateManyWithWhereWithoutDomainInput[]
     deleteMany?: RelevanceScoreResultScalarWhereInput | RelevanceScoreResultScalarWhereInput[]
+  }
+
+  export type AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput = {
+    create?: XOR<AIQueryResultCreateWithoutDomainInput, AIQueryResultUncheckedCreateWithoutDomainInput> | AIQueryResultCreateWithoutDomainInput[] | AIQueryResultUncheckedCreateWithoutDomainInput[]
+    connectOrCreate?: AIQueryResultCreateOrConnectWithoutDomainInput | AIQueryResultCreateOrConnectWithoutDomainInput[]
+    upsert?: AIQueryResultUpsertWithWhereUniqueWithoutDomainInput | AIQueryResultUpsertWithWhereUniqueWithoutDomainInput[]
+    createMany?: AIQueryResultCreateManyDomainInputEnvelope
+    set?: AIQueryResultWhereUniqueInput | AIQueryResultWhereUniqueInput[]
+    disconnect?: AIQueryResultWhereUniqueInput | AIQueryResultWhereUniqueInput[]
+    delete?: AIQueryResultWhereUniqueInput | AIQueryResultWhereUniqueInput[]
+    connect?: AIQueryResultWhereUniqueInput | AIQueryResultWhereUniqueInput[]
+    update?: AIQueryResultUpdateWithWhereUniqueWithoutDomainInput | AIQueryResultUpdateWithWhereUniqueWithoutDomainInput[]
+    updateMany?: AIQueryResultUpdateManyWithWhereWithoutDomainInput | AIQueryResultUpdateManyWithWhereWithoutDomainInput[]
+    deleteMany?: AIQueryResultScalarWhereInput | AIQueryResultScalarWhereInput[]
   }
 
   export type AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput = {
@@ -44187,6 +44340,12 @@ export namespace Prisma {
     connect?: GeneratedIntentPhraseWhereUniqueInput
   }
 
+  export type DomainCreateNestedOneWithoutAiQueryResultsInput = {
+    create?: XOR<DomainCreateWithoutAiQueryResultsInput, DomainUncheckedCreateWithoutAiQueryResultsInput>
+    connectOrCreate?: DomainCreateOrConnectWithoutAiQueryResultsInput
+    connect?: DomainWhereUniqueInput
+  }
+
   export type NullableFloatFieldUpdateOperationsInput = {
     set?: number | null
     increment?: number
@@ -44201,6 +44360,16 @@ export namespace Prisma {
     upsert?: GeneratedIntentPhraseUpsertWithoutAiQueryResultsInput
     connect?: GeneratedIntentPhraseWhereUniqueInput
     update?: XOR<XOR<GeneratedIntentPhraseUpdateToOneWithWhereWithoutAiQueryResultsInput, GeneratedIntentPhraseUpdateWithoutAiQueryResultsInput>, GeneratedIntentPhraseUncheckedUpdateWithoutAiQueryResultsInput>
+  }
+
+  export type DomainUpdateOneWithoutAiQueryResultsNestedInput = {
+    create?: XOR<DomainCreateWithoutAiQueryResultsInput, DomainUncheckedCreateWithoutAiQueryResultsInput>
+    connectOrCreate?: DomainCreateOrConnectWithoutAiQueryResultsInput
+    upsert?: DomainUpsertWithoutAiQueryResultsInput
+    disconnect?: DomainWhereInput | boolean
+    delete?: DomainWhereInput | boolean
+    connect?: DomainWhereUniqueInput
+    update?: XOR<XOR<DomainUpdateToOneWithWhereWithoutAiQueryResultsInput, DomainUpdateWithoutAiQueryResultsInput>, DomainUncheckedUpdateWithoutAiQueryResultsInput>
   }
 
   export type DomainCreateNestedOneWithoutAnalysisReportsInput = {
@@ -45057,6 +45226,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -45093,6 +45263,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -45746,6 +45917,57 @@ export namespace Prisma {
 
   export type RelevanceScoreResultCreateManyDomainInputEnvelope = {
     data: RelevanceScoreResultCreateManyDomainInput | RelevanceScoreResultCreateManyDomainInput[]
+    skipDuplicates?: boolean
+  }
+
+  export type AIQueryResultCreateWithoutDomainInput = {
+    model: string
+    response: string
+    latency: number
+    cost: number
+    presence: number
+    relevance: number
+    accuracy: number
+    sentiment: number
+    overall: number
+    domainRank?: number | null
+    foundDomains?: NullableJsonNullValueInput | InputJsonValue
+    confidence?: number | null
+    sources?: NullableJsonNullValueInput | InputJsonValue
+    competitorUrls?: NullableJsonNullValueInput | InputJsonValue
+    competitorMatchScore?: number | null
+    createdAt?: Date | string
+    phrase: GeneratedIntentPhraseCreateNestedOneWithoutAiQueryResultsInput
+  }
+
+  export type AIQueryResultUncheckedCreateWithoutDomainInput = {
+    id?: number
+    phraseId: number
+    model: string
+    response: string
+    latency: number
+    cost: number
+    presence: number
+    relevance: number
+    accuracy: number
+    sentiment: number
+    overall: number
+    domainRank?: number | null
+    foundDomains?: NullableJsonNullValueInput | InputJsonValue
+    confidence?: number | null
+    sources?: NullableJsonNullValueInput | InputJsonValue
+    competitorUrls?: NullableJsonNullValueInput | InputJsonValue
+    competitorMatchScore?: number | null
+    createdAt?: Date | string
+  }
+
+  export type AIQueryResultCreateOrConnectWithoutDomainInput = {
+    where: AIQueryResultWhereUniqueInput
+    create: XOR<AIQueryResultCreateWithoutDomainInput, AIQueryResultUncheckedCreateWithoutDomainInput>
+  }
+
+  export type AIQueryResultCreateManyDomainInputEnvelope = {
+    data: AIQueryResultCreateManyDomainInput | AIQueryResultCreateManyDomainInput[]
     skipDuplicates?: boolean
   }
 
@@ -46485,6 +46707,47 @@ export namespace Prisma {
     createdAt?: DateTimeFilter<"RelevanceScoreResult"> | Date | string
   }
 
+  export type AIQueryResultUpsertWithWhereUniqueWithoutDomainInput = {
+    where: AIQueryResultWhereUniqueInput
+    update: XOR<AIQueryResultUpdateWithoutDomainInput, AIQueryResultUncheckedUpdateWithoutDomainInput>
+    create: XOR<AIQueryResultCreateWithoutDomainInput, AIQueryResultUncheckedCreateWithoutDomainInput>
+  }
+
+  export type AIQueryResultUpdateWithWhereUniqueWithoutDomainInput = {
+    where: AIQueryResultWhereUniqueInput
+    data: XOR<AIQueryResultUpdateWithoutDomainInput, AIQueryResultUncheckedUpdateWithoutDomainInput>
+  }
+
+  export type AIQueryResultUpdateManyWithWhereWithoutDomainInput = {
+    where: AIQueryResultScalarWhereInput
+    data: XOR<AIQueryResultUpdateManyMutationInput, AIQueryResultUncheckedUpdateManyWithoutDomainInput>
+  }
+
+  export type AIQueryResultScalarWhereInput = {
+    AND?: AIQueryResultScalarWhereInput | AIQueryResultScalarWhereInput[]
+    OR?: AIQueryResultScalarWhereInput[]
+    NOT?: AIQueryResultScalarWhereInput | AIQueryResultScalarWhereInput[]
+    id?: IntFilter<"AIQueryResult"> | number
+    phraseId?: IntFilter<"AIQueryResult"> | number
+    domainId?: IntNullableFilter<"AIQueryResult"> | number | null
+    model?: StringFilter<"AIQueryResult"> | string
+    response?: StringFilter<"AIQueryResult"> | string
+    latency?: FloatFilter<"AIQueryResult"> | number
+    cost?: FloatFilter<"AIQueryResult"> | number
+    presence?: IntFilter<"AIQueryResult"> | number
+    relevance?: IntFilter<"AIQueryResult"> | number
+    accuracy?: IntFilter<"AIQueryResult"> | number
+    sentiment?: IntFilter<"AIQueryResult"> | number
+    overall?: FloatFilter<"AIQueryResult"> | number
+    domainRank?: IntNullableFilter<"AIQueryResult"> | number | null
+    foundDomains?: JsonNullableFilter<"AIQueryResult">
+    confidence?: FloatNullableFilter<"AIQueryResult"> | number | null
+    sources?: JsonNullableFilter<"AIQueryResult">
+    competitorUrls?: JsonNullableFilter<"AIQueryResult">
+    competitorMatchScore?: FloatNullableFilter<"AIQueryResult"> | number | null
+    createdAt?: DateTimeFilter<"AIQueryResult"> | Date | string
+  }
+
   export type AnalysisReportUpsertWithWhereUniqueWithoutDomainInput = {
     where: AnalysisReportWhereUniqueInput
     update: XOR<AnalysisReportUpdateWithoutDomainInput, AnalysisReportUncheckedUpdateWithoutDomainInput>
@@ -46649,6 +46912,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -46685,6 +46949,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -46736,6 +47001,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -46772,6 +47038,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -46807,6 +47074,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -46843,6 +47111,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -47125,6 +47394,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -47161,6 +47431,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -47528,6 +47799,84 @@ export namespace Prisma {
     create: XOR<GeneratedIntentPhraseCreateWithoutAiQueryResultsInput, GeneratedIntentPhraseUncheckedCreateWithoutAiQueryResultsInput>
   }
 
+  export type DomainCreateWithoutAiQueryResultsInput = {
+    url: string
+    context?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    location?: string | null
+    customKeywords?: string | null
+    intentPhrases?: string | null
+    chatModel?: string | null
+    runAllModels?: boolean
+    locationContext?: string | null
+    user?: UserCreateNestedOneWithoutDomainsInput
+    crawlResults?: CrawlResultCreateNestedManyWithoutDomainInput
+    keywords?: KeywordCreateNestedManyWithoutDomainInput
+    dashboardAnalyses?: DashboardAnalysisCreateNestedManyWithoutDomainInput
+    competitorAnalyses?: CompetitorAnalysisCreateNestedManyWithoutDomainInput
+    suggestedCompetitors?: SuggestedCompetitorCreateNestedManyWithoutDomainInput
+    analysisPhases?: AnalysisPhaseCreateNestedManyWithoutDomainInput
+    semanticAnalyses?: SemanticAnalysisCreateNestedManyWithoutDomainInput
+    keywordAnalyses?: KeywordAnalysisCreateNestedManyWithoutDomainInput
+    searchVolumeClassifications?: SearchVolumeClassificationCreateNestedManyWithoutDomainInput
+    intentClassifications?: IntentClassificationCreateNestedManyWithoutDomainInput
+    communityInsights?: CommunityInsightCreateNestedManyWithoutDomainInput
+    searchPatterns?: SearchPatternCreateNestedManyWithoutDomainInput
+    intentPhraseGenerations?: IntentPhraseGenerationCreateNestedManyWithoutDomainInput
+    communityMiningResults?: CommunityMiningResultCreateNestedManyWithoutDomainInput
+    searchPatternResults?: SearchPatternResultCreateNestedManyWithoutDomainInput
+    intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
+    generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
+    relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
+    modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
+    competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
+    performanceInsights?: PerformanceInsightCreateNestedManyWithoutDomainInput
+  }
+
+  export type DomainUncheckedCreateWithoutAiQueryResultsInput = {
+    id?: number
+    url: string
+    context?: string | null
+    userId?: number | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    location?: string | null
+    customKeywords?: string | null
+    intentPhrases?: string | null
+    chatModel?: string | null
+    runAllModels?: boolean
+    locationContext?: string | null
+    crawlResults?: CrawlResultUncheckedCreateNestedManyWithoutDomainInput
+    keywords?: KeywordUncheckedCreateNestedManyWithoutDomainInput
+    dashboardAnalyses?: DashboardAnalysisUncheckedCreateNestedManyWithoutDomainInput
+    competitorAnalyses?: CompetitorAnalysisUncheckedCreateNestedManyWithoutDomainInput
+    suggestedCompetitors?: SuggestedCompetitorUncheckedCreateNestedManyWithoutDomainInput
+    analysisPhases?: AnalysisPhaseUncheckedCreateNestedManyWithoutDomainInput
+    semanticAnalyses?: SemanticAnalysisUncheckedCreateNestedManyWithoutDomainInput
+    keywordAnalyses?: KeywordAnalysisUncheckedCreateNestedManyWithoutDomainInput
+    searchVolumeClassifications?: SearchVolumeClassificationUncheckedCreateNestedManyWithoutDomainInput
+    intentClassifications?: IntentClassificationUncheckedCreateNestedManyWithoutDomainInput
+    communityInsights?: CommunityInsightUncheckedCreateNestedManyWithoutDomainInput
+    searchPatterns?: SearchPatternUncheckedCreateNestedManyWithoutDomainInput
+    intentPhraseGenerations?: IntentPhraseGenerationUncheckedCreateNestedManyWithoutDomainInput
+    communityMiningResults?: CommunityMiningResultUncheckedCreateNestedManyWithoutDomainInput
+    searchPatternResults?: SearchPatternResultUncheckedCreateNestedManyWithoutDomainInput
+    intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
+    generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
+    relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
+    modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
+    competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
+    performanceInsights?: PerformanceInsightUncheckedCreateNestedManyWithoutDomainInput
+  }
+
+  export type DomainCreateOrConnectWithoutAiQueryResultsInput = {
+    where: DomainWhereUniqueInput
+    create: XOR<DomainCreateWithoutAiQueryResultsInput, DomainUncheckedCreateWithoutAiQueryResultsInput>
+  }
+
   export type GeneratedIntentPhraseUpsertWithoutAiQueryResultsInput = {
     update: XOR<GeneratedIntentPhraseUpdateWithoutAiQueryResultsInput, GeneratedIntentPhraseUncheckedUpdateWithoutAiQueryResultsInput>
     create: XOR<GeneratedIntentPhraseCreateWithoutAiQueryResultsInput, GeneratedIntentPhraseUncheckedCreateWithoutAiQueryResultsInput>
@@ -47576,6 +47925,90 @@ export namespace Prisma {
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutPhraseNestedInput
   }
 
+  export type DomainUpsertWithoutAiQueryResultsInput = {
+    update: XOR<DomainUpdateWithoutAiQueryResultsInput, DomainUncheckedUpdateWithoutAiQueryResultsInput>
+    create: XOR<DomainCreateWithoutAiQueryResultsInput, DomainUncheckedCreateWithoutAiQueryResultsInput>
+    where?: DomainWhereInput
+  }
+
+  export type DomainUpdateToOneWithWhereWithoutAiQueryResultsInput = {
+    where?: DomainWhereInput
+    data: XOR<DomainUpdateWithoutAiQueryResultsInput, DomainUncheckedUpdateWithoutAiQueryResultsInput>
+  }
+
+  export type DomainUpdateWithoutAiQueryResultsInput = {
+    url?: StringFieldUpdateOperationsInput | string
+    context?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    location?: NullableStringFieldUpdateOperationsInput | string | null
+    customKeywords?: NullableStringFieldUpdateOperationsInput | string | null
+    intentPhrases?: NullableStringFieldUpdateOperationsInput | string | null
+    chatModel?: NullableStringFieldUpdateOperationsInput | string | null
+    runAllModels?: BoolFieldUpdateOperationsInput | boolean
+    locationContext?: NullableStringFieldUpdateOperationsInput | string | null
+    user?: UserUpdateOneWithoutDomainsNestedInput
+    crawlResults?: CrawlResultUpdateManyWithoutDomainNestedInput
+    keywords?: KeywordUpdateManyWithoutDomainNestedInput
+    dashboardAnalyses?: DashboardAnalysisUpdateManyWithoutDomainNestedInput
+    competitorAnalyses?: CompetitorAnalysisUpdateManyWithoutDomainNestedInput
+    suggestedCompetitors?: SuggestedCompetitorUpdateManyWithoutDomainNestedInput
+    analysisPhases?: AnalysisPhaseUpdateManyWithoutDomainNestedInput
+    semanticAnalyses?: SemanticAnalysisUpdateManyWithoutDomainNestedInput
+    keywordAnalyses?: KeywordAnalysisUpdateManyWithoutDomainNestedInput
+    searchVolumeClassifications?: SearchVolumeClassificationUpdateManyWithoutDomainNestedInput
+    intentClassifications?: IntentClassificationUpdateManyWithoutDomainNestedInput
+    communityInsights?: CommunityInsightUpdateManyWithoutDomainNestedInput
+    searchPatterns?: SearchPatternUpdateManyWithoutDomainNestedInput
+    intentPhraseGenerations?: IntentPhraseGenerationUpdateManyWithoutDomainNestedInput
+    communityMiningResults?: CommunityMiningResultUpdateManyWithoutDomainNestedInput
+    searchPatternResults?: SearchPatternResultUpdateManyWithoutDomainNestedInput
+    intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
+    generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
+    relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
+    modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
+    competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
+    performanceInsights?: PerformanceInsightUpdateManyWithoutDomainNestedInput
+  }
+
+  export type DomainUncheckedUpdateWithoutAiQueryResultsInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    url?: StringFieldUpdateOperationsInput | string
+    context?: NullableStringFieldUpdateOperationsInput | string | null
+    userId?: NullableIntFieldUpdateOperationsInput | number | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    location?: NullableStringFieldUpdateOperationsInput | string | null
+    customKeywords?: NullableStringFieldUpdateOperationsInput | string | null
+    intentPhrases?: NullableStringFieldUpdateOperationsInput | string | null
+    chatModel?: NullableStringFieldUpdateOperationsInput | string | null
+    runAllModels?: BoolFieldUpdateOperationsInput | boolean
+    locationContext?: NullableStringFieldUpdateOperationsInput | string | null
+    crawlResults?: CrawlResultUncheckedUpdateManyWithoutDomainNestedInput
+    keywords?: KeywordUncheckedUpdateManyWithoutDomainNestedInput
+    dashboardAnalyses?: DashboardAnalysisUncheckedUpdateManyWithoutDomainNestedInput
+    competitorAnalyses?: CompetitorAnalysisUncheckedUpdateManyWithoutDomainNestedInput
+    suggestedCompetitors?: SuggestedCompetitorUncheckedUpdateManyWithoutDomainNestedInput
+    analysisPhases?: AnalysisPhaseUncheckedUpdateManyWithoutDomainNestedInput
+    semanticAnalyses?: SemanticAnalysisUncheckedUpdateManyWithoutDomainNestedInput
+    keywordAnalyses?: KeywordAnalysisUncheckedUpdateManyWithoutDomainNestedInput
+    searchVolumeClassifications?: SearchVolumeClassificationUncheckedUpdateManyWithoutDomainNestedInput
+    intentClassifications?: IntentClassificationUncheckedUpdateManyWithoutDomainNestedInput
+    communityInsights?: CommunityInsightUncheckedUpdateManyWithoutDomainNestedInput
+    searchPatterns?: SearchPatternUncheckedUpdateManyWithoutDomainNestedInput
+    intentPhraseGenerations?: IntentPhraseGenerationUncheckedUpdateManyWithoutDomainNestedInput
+    communityMiningResults?: CommunityMiningResultUncheckedUpdateManyWithoutDomainNestedInput
+    searchPatternResults?: SearchPatternResultUncheckedUpdateManyWithoutDomainNestedInput
+    intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
+    generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
+    relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
+    modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
+    competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
+    performanceInsights?: PerformanceInsightUncheckedUpdateManyWithoutDomainNestedInput
+  }
+
   export type DomainCreateWithoutAnalysisReportsInput = {
     url: string
     context?: string | null
@@ -47606,6 +48039,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
     performanceInsights?: PerformanceInsightCreateNestedManyWithoutDomainInput
@@ -47642,6 +48076,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
     performanceInsights?: PerformanceInsightUncheckedCreateNestedManyWithoutDomainInput
@@ -47693,6 +48128,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
     performanceInsights?: PerformanceInsightUpdateManyWithoutDomainNestedInput
@@ -47729,6 +48165,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
     performanceInsights?: PerformanceInsightUncheckedUpdateManyWithoutDomainNestedInput
@@ -47764,6 +48201,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
     performanceInsights?: PerformanceInsightCreateNestedManyWithoutDomainInput
@@ -47800,6 +48238,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
     performanceInsights?: PerformanceInsightUncheckedCreateNestedManyWithoutDomainInput
@@ -47851,6 +48290,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
     performanceInsights?: PerformanceInsightUpdateManyWithoutDomainNestedInput
@@ -47887,6 +48327,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
     performanceInsights?: PerformanceInsightUncheckedUpdateManyWithoutDomainNestedInput
@@ -47922,6 +48363,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     performanceInsights?: PerformanceInsightCreateNestedManyWithoutDomainInput
@@ -47958,6 +48400,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     performanceInsights?: PerformanceInsightUncheckedCreateNestedManyWithoutDomainInput
@@ -48009,6 +48452,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     performanceInsights?: PerformanceInsightUpdateManyWithoutDomainNestedInput
@@ -48045,6 +48489,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     performanceInsights?: PerformanceInsightUncheckedUpdateManyWithoutDomainNestedInput
@@ -48080,6 +48525,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -48116,6 +48562,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -48167,6 +48614,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -48203,6 +48651,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -48237,6 +48686,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -48273,6 +48723,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -48324,6 +48775,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -48360,6 +48812,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -48395,6 +48848,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -48431,6 +48885,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -48482,6 +48937,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -48518,6 +48974,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -48553,6 +49010,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -48589,6 +49047,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -48640,6 +49099,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -48676,6 +49136,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -48711,6 +49172,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -48747,6 +49209,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -48798,6 +49261,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -48834,6 +49298,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -48869,6 +49334,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -48905,6 +49371,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -48956,6 +49423,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -48992,6 +49460,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -49027,6 +49496,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -49063,6 +49533,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -49114,6 +49585,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -49150,6 +49622,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -49185,6 +49658,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -49221,6 +49695,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -49272,6 +49747,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -49308,6 +49784,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -49343,6 +49820,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -49379,6 +49857,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -49430,6 +49909,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -49466,6 +49946,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -49501,6 +49982,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -49537,6 +50019,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -49630,6 +50113,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -49666,6 +50150,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -49749,6 +50234,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -49785,6 +50271,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -49878,6 +50365,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -49914,6 +50402,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -50145,6 +50634,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -50181,6 +50671,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -50232,6 +50723,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -50268,6 +50760,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -50303,6 +50796,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -50339,6 +50833,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -50432,6 +50927,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -50468,6 +50964,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -50551,6 +51048,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -50587,6 +51085,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -50680,6 +51179,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -50716,6 +51216,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -50799,6 +51300,7 @@ export namespace Prisma {
     searchPatternResults?: SearchPatternResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -50835,6 +51337,7 @@ export namespace Prisma {
     searchPatternResults?: SearchPatternResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -50928,6 +51431,7 @@ export namespace Prisma {
     searchPatternResults?: SearchPatternResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -50964,6 +51468,7 @@ export namespace Prisma {
     searchPatternResults?: SearchPatternResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -51047,6 +51552,7 @@ export namespace Prisma {
     searchPatternResults?: SearchPatternResultCreateNestedManyWithoutDomainInput
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -51083,6 +51589,7 @@ export namespace Prisma {
     searchPatternResults?: SearchPatternResultUncheckedCreateNestedManyWithoutDomainInput
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -51182,10 +51689,12 @@ export namespace Prisma {
     competitorUrls?: NullableJsonNullValueInput | InputJsonValue
     competitorMatchScore?: number | null
     createdAt?: Date | string
+    domain?: DomainCreateNestedOneWithoutAiQueryResultsInput
   }
 
   export type AIQueryResultUncheckedCreateWithoutPhraseInput = {
     id?: number
+    domainId?: number | null
     model: string
     response: string
     latency: number
@@ -51254,6 +51763,7 @@ export namespace Prisma {
     searchPatternResults?: SearchPatternResultUpdateManyWithoutDomainNestedInput
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -51290,6 +51800,7 @@ export namespace Prisma {
     searchPatternResults?: SearchPatternResultUncheckedUpdateManyWithoutDomainNestedInput
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -51376,30 +51887,6 @@ export namespace Prisma {
     data: XOR<AIQueryResultUpdateManyMutationInput, AIQueryResultUncheckedUpdateManyWithoutPhraseInput>
   }
 
-  export type AIQueryResultScalarWhereInput = {
-    AND?: AIQueryResultScalarWhereInput | AIQueryResultScalarWhereInput[]
-    OR?: AIQueryResultScalarWhereInput[]
-    NOT?: AIQueryResultScalarWhereInput | AIQueryResultScalarWhereInput[]
-    id?: IntFilter<"AIQueryResult"> | number
-    phraseId?: IntFilter<"AIQueryResult"> | number
-    model?: StringFilter<"AIQueryResult"> | string
-    response?: StringFilter<"AIQueryResult"> | string
-    latency?: FloatFilter<"AIQueryResult"> | number
-    cost?: FloatFilter<"AIQueryResult"> | number
-    presence?: IntFilter<"AIQueryResult"> | number
-    relevance?: IntFilter<"AIQueryResult"> | number
-    accuracy?: IntFilter<"AIQueryResult"> | number
-    sentiment?: IntFilter<"AIQueryResult"> | number
-    overall?: FloatFilter<"AIQueryResult"> | number
-    domainRank?: IntNullableFilter<"AIQueryResult"> | number | null
-    foundDomains?: JsonNullableFilter<"AIQueryResult">
-    confidence?: FloatNullableFilter<"AIQueryResult"> | number | null
-    sources?: JsonNullableFilter<"AIQueryResult">
-    competitorUrls?: JsonNullableFilter<"AIQueryResult">
-    competitorMatchScore?: FloatNullableFilter<"AIQueryResult"> | number | null
-    createdAt?: DateTimeFilter<"AIQueryResult"> | Date | string
-  }
-
   export type DomainCreateWithoutRelevanceScoreResultsInput = {
     url: string
     context?: string | null
@@ -51429,6 +51916,7 @@ export namespace Prisma {
     searchPatternResults?: SearchPatternResultCreateNestedManyWithoutDomainInput
     intentClassificationResults?: IntentClassificationResultCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingCreateNestedManyWithoutDomainInput
@@ -51465,6 +51953,7 @@ export namespace Prisma {
     searchPatternResults?: SearchPatternResultUncheckedCreateNestedManyWithoutDomainInput
     intentClassificationResults?: IntentClassificationResultUncheckedCreateNestedManyWithoutDomainInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedCreateNestedManyWithoutDomainInput
+    aiQueryResults?: AIQueryResultUncheckedCreateNestedManyWithoutDomainInput
     analysisReports?: AnalysisReportUncheckedCreateNestedManyWithoutDomainInput
     modelPerformances?: ModelPerformanceUncheckedCreateNestedManyWithoutDomainInput
     competitorTrackings?: CompetitorTrackingUncheckedCreateNestedManyWithoutDomainInput
@@ -51558,6 +52047,7 @@ export namespace Prisma {
     searchPatternResults?: SearchPatternResultUpdateManyWithoutDomainNestedInput
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -51594,6 +52084,7 @@ export namespace Prisma {
     searchPatternResults?: SearchPatternResultUncheckedUpdateManyWithoutDomainNestedInput
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -51691,6 +52182,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUpdateManyWithoutDomainNestedInput
@@ -51727,6 +52219,7 @@ export namespace Prisma {
     intentClassificationResults?: IntentClassificationResultUncheckedUpdateManyWithoutDomainNestedInput
     generatedIntentPhrases?: GeneratedIntentPhraseUncheckedUpdateManyWithoutDomainNestedInput
     relevanceScoreResults?: RelevanceScoreResultUncheckedUpdateManyWithoutDomainNestedInput
+    aiQueryResults?: AIQueryResultUncheckedUpdateManyWithoutDomainNestedInput
     analysisReports?: AnalysisReportUncheckedUpdateManyWithoutDomainNestedInput
     modelPerformances?: ModelPerformanceUncheckedUpdateManyWithoutDomainNestedInput
     competitorTrackings?: CompetitorTrackingUncheckedUpdateManyWithoutDomainNestedInput
@@ -51946,6 +52439,27 @@ export namespace Prisma {
     breakdown?: NullableJsonNullValueInput | InputJsonValue
     factors?: NullableJsonNullValueInput | InputJsonValue
     tokenUsage?: number | null
+    createdAt?: Date | string
+  }
+
+  export type AIQueryResultCreateManyDomainInput = {
+    id?: number
+    phraseId: number
+    model: string
+    response: string
+    latency: number
+    cost: number
+    presence: number
+    relevance: number
+    accuracy: number
+    sentiment: number
+    overall: number
+    domainRank?: number | null
+    foundDomains?: NullableJsonNullValueInput | InputJsonValue
+    confidence?: number | null
+    sources?: NullableJsonNullValueInput | InputJsonValue
+    competitorUrls?: NullableJsonNullValueInput | InputJsonValue
+    competitorMatchScore?: number | null
     createdAt?: Date | string
   }
 
@@ -52610,6 +53124,68 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
+  export type AIQueryResultUpdateWithoutDomainInput = {
+    model?: StringFieldUpdateOperationsInput | string
+    response?: StringFieldUpdateOperationsInput | string
+    latency?: FloatFieldUpdateOperationsInput | number
+    cost?: FloatFieldUpdateOperationsInput | number
+    presence?: IntFieldUpdateOperationsInput | number
+    relevance?: IntFieldUpdateOperationsInput | number
+    accuracy?: IntFieldUpdateOperationsInput | number
+    sentiment?: IntFieldUpdateOperationsInput | number
+    overall?: FloatFieldUpdateOperationsInput | number
+    domainRank?: NullableIntFieldUpdateOperationsInput | number | null
+    foundDomains?: NullableJsonNullValueInput | InputJsonValue
+    confidence?: NullableFloatFieldUpdateOperationsInput | number | null
+    sources?: NullableJsonNullValueInput | InputJsonValue
+    competitorUrls?: NullableJsonNullValueInput | InputJsonValue
+    competitorMatchScore?: NullableFloatFieldUpdateOperationsInput | number | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    phrase?: GeneratedIntentPhraseUpdateOneRequiredWithoutAiQueryResultsNestedInput
+  }
+
+  export type AIQueryResultUncheckedUpdateWithoutDomainInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    phraseId?: IntFieldUpdateOperationsInput | number
+    model?: StringFieldUpdateOperationsInput | string
+    response?: StringFieldUpdateOperationsInput | string
+    latency?: FloatFieldUpdateOperationsInput | number
+    cost?: FloatFieldUpdateOperationsInput | number
+    presence?: IntFieldUpdateOperationsInput | number
+    relevance?: IntFieldUpdateOperationsInput | number
+    accuracy?: IntFieldUpdateOperationsInput | number
+    sentiment?: IntFieldUpdateOperationsInput | number
+    overall?: FloatFieldUpdateOperationsInput | number
+    domainRank?: NullableIntFieldUpdateOperationsInput | number | null
+    foundDomains?: NullableJsonNullValueInput | InputJsonValue
+    confidence?: NullableFloatFieldUpdateOperationsInput | number | null
+    sources?: NullableJsonNullValueInput | InputJsonValue
+    competitorUrls?: NullableJsonNullValueInput | InputJsonValue
+    competitorMatchScore?: NullableFloatFieldUpdateOperationsInput | number | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type AIQueryResultUncheckedUpdateManyWithoutDomainInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    phraseId?: IntFieldUpdateOperationsInput | number
+    model?: StringFieldUpdateOperationsInput | string
+    response?: StringFieldUpdateOperationsInput | string
+    latency?: FloatFieldUpdateOperationsInput | number
+    cost?: FloatFieldUpdateOperationsInput | number
+    presence?: IntFieldUpdateOperationsInput | number
+    relevance?: IntFieldUpdateOperationsInput | number
+    accuracy?: IntFieldUpdateOperationsInput | number
+    sentiment?: IntFieldUpdateOperationsInput | number
+    overall?: FloatFieldUpdateOperationsInput | number
+    domainRank?: NullableIntFieldUpdateOperationsInput | number | null
+    foundDomains?: NullableJsonNullValueInput | InputJsonValue
+    confidence?: NullableFloatFieldUpdateOperationsInput | number | null
+    sources?: NullableJsonNullValueInput | InputJsonValue
+    competitorUrls?: NullableJsonNullValueInput | InputJsonValue
+    competitorMatchScore?: NullableFloatFieldUpdateOperationsInput | number | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
   export type AnalysisReportUpdateWithoutDomainInput = {
     overallScore?: FloatFieldUpdateOperationsInput | number
     scoreBreakdown?: JsonNullValueInput | InputJsonValue
@@ -53158,6 +53734,7 @@ export namespace Prisma {
 
   export type AIQueryResultCreateManyPhraseInput = {
     id?: number
+    domainId?: number | null
     model: string
     response: string
     latency: number
@@ -53222,10 +53799,12 @@ export namespace Prisma {
     competitorUrls?: NullableJsonNullValueInput | InputJsonValue
     competitorMatchScore?: NullableFloatFieldUpdateOperationsInput | number | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    domain?: DomainUpdateOneWithoutAiQueryResultsNestedInput
   }
 
   export type AIQueryResultUncheckedUpdateWithoutPhraseInput = {
     id?: IntFieldUpdateOperationsInput | number
+    domainId?: NullableIntFieldUpdateOperationsInput | number | null
     model?: StringFieldUpdateOperationsInput | string
     response?: StringFieldUpdateOperationsInput | string
     latency?: FloatFieldUpdateOperationsInput | number
@@ -53246,6 +53825,7 @@ export namespace Prisma {
 
   export type AIQueryResultUncheckedUpdateManyWithoutPhraseInput = {
     id?: IntFieldUpdateOperationsInput | number
+    domainId?: NullableIntFieldUpdateOperationsInput | number | null
     model?: StringFieldUpdateOperationsInput | string
     response?: StringFieldUpdateOperationsInput | string
     latency?: FloatFieldUpdateOperationsInput | number

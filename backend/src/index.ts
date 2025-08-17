@@ -12,6 +12,7 @@ import dashboardRouter from './routes/dashboard';
 // Onboarding router removed
 import authRouter from './routes/auth';
 import { PrismaClient } from '../generated/prisma';
+import { authenticateToken, AuthenticatedRequest } from './middleware/auth';
 
 const app = express();
 const prisma = new PrismaClient();
@@ -46,9 +47,16 @@ const corsOptions: cors.CorsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '5mb' }));
 
-// Debug endpoint to list all domains
-app.get('/api/debug/domains', async (req: Request, res: Response) => {
+// Debug endpoint to list all domains (ADMIN ONLY - REMOVE IN PRODUCTION)
+app.get('/api/debug/domains', authenticateToken, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
   try {
+    // Only allow admin users (you can add admin check here)
+    // For now, this endpoint should be removed in production
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'Debug endpoint not available in production' });
+    }
+    
     const domains = await prisma.domain.findMany({
       select: {
         id: true,

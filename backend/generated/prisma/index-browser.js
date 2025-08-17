@@ -184,6 +184,7 @@ exports.Prisma.PhraseScalarFieldEnum = {
 exports.Prisma.AIQueryResultScalarFieldEnum = {
   id: 'id',
   phraseId: 'phraseId',
+  domainId: 'domainId',
   model: 'model',
   response: 'response',
   latency: 'latency',

@@ -30,10 +30,13 @@ router.get('/check/:url', authenticateToken, asyncHandler(async (req: Request, r
     
     let domain: any = null;
     
-    // Try to find the domain with any of the possible URL formats
+    // Try to find the domain with any of the possible URL formats for this user
     for (const possibleUrl of possibleUrls) {
-      domain = await prisma.domain.findUnique({
-        where: { url: possibleUrl },
+      domain = await prisma.domain.findFirst({
+        where: { 
+          url: possibleUrl,
+          userId: authReq.user.userId
+        },
         include: {
           dashboardAnalyses: true,
           crawlResults: { orderBy: { createdAt: 'desc' }, take: 1 }
@@ -45,7 +48,7 @@ router.get('/check/:url', authenticateToken, asyncHandler(async (req: Request, r
       }
     }
 
-    if (!domain || domain.userId !== authReq.user.userId) {
+    if (!domain) {
       return res.json({ exists: false });
     }
 
@@ -124,14 +127,17 @@ router.post('/', authenticateToken, asyncHandler(async (req: Request, res: Respo
 
     sendEvent({ type: 'progress', phase: 'domain_extraction', step: 'Validating domain and checking existing analysis...', progress: 5 });
 
-    // Check if domain already exists
-    let domain = await prisma.domain.findUnique({
-      where: { url: normalizedUrl }
+    // Check if domain already exists for this user
+    let domain = await prisma.domain.findFirst({
+      where: { 
+        url: normalizedUrl,
+        userId: authReq.user.userId
+      }
     });
 
     let isNewDomain = false;
     if (!domain) {
-      // Create new domain
+      // Create new domain for this user
       domain = await prisma.domain.create({
         data: {
           url: normalizedUrl,
@@ -140,9 +146,6 @@ router.post('/', authenticateToken, asyncHandler(async (req: Request, res: Respo
         }
       });
       isNewDomain = true;
-    } else if (domain.userId !== authReq.user.userId) {
-      sendErrorAndEnd('Domain already exists and is owned by another user');
-      return;
     }
     
     sendEvent({ type: 'domain_created', domainId: domain.id, isNewDomain });

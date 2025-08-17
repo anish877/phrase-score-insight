@@ -26,7 +26,7 @@ model User {
 
 model Domain {
   id                          Int                          @id @default(autoincrement())
-  url                         String                       @unique
+  url                         String
   context                     String?                      @db.Text
   userId                      Int?
   user                        User?                        @relation(fields: [userId], references: [id])
@@ -50,6 +50,7 @@ model Domain {
   intentClassificationResults IntentClassificationResult[]
   generatedIntentPhrases      GeneratedIntentPhrase[]
   relevanceScoreResults       RelevanceScoreResult[]
+  aiQueryResults              AIQueryResult[]
   location                    String? // User's location (city/country)
   customKeywords              String? // Custom keywords for analysis
   intentPhrases               String? // Custom intent phrases for analysis
@@ -60,6 +61,9 @@ model Domain {
   modelPerformances           ModelPerformance[]
   competitorTrackings         CompetitorTracking[]
   performanceInsights         PerformanceInsight[]
+
+  @@unique([url, userId])
+  @@index([userId])
 }
 
 model CrawlResult {
@@ -112,12 +116,16 @@ model Phrase {
   phraseScores                PhraseScore[]
   createdAt                   DateTime                     @default(now())
   updatedAt                   DateTime                     @updatedAt
+
+  @@index([keywordId])
 }
 
 model AIQueryResult {
   id                   Int                   @id @default(autoincrement())
   phrase               GeneratedIntentPhrase @relation(fields: [phraseId], references: [id])
   phraseId             Int
+  domain               Domain?               @relation(fields: [domainId], references: [id])
+  domainId             Int?
   model                String
   response             String                @db.Text
   latency              Float
@@ -134,6 +142,8 @@ model AIQueryResult {
   competitorUrls       Json?
   competitorMatchScore Float?
   createdAt            DateTime              @default(now())
+
+  @@index([domainId])
 }
 
 // New model for comprehensive analysis reports

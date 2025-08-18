@@ -133,25 +133,25 @@ exports.Prisma.DomainScalarFieldEnum = {
   id: 'id',
   url: 'url',
   context: 'context',
-  userId: 'userId',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
+  userId: 'userId',
   location: 'location',
+  chatModel: 'chatModel',
   customKeywords: 'customKeywords',
   intentPhrases: 'intentPhrases',
-  chatModel: 'chatModel',
   runAllModels: 'runAllModels',
   locationContext: 'locationContext'
 };
 
 exports.Prisma.CrawlResultScalarFieldEnum = {
   id: 'id',
-  domainId: 'domainId',
   pagesScanned: 'pagesScanned',
-  analyzedUrls: 'analyzedUrls',
   extractedContext: 'extractedContext',
+  createdAt: 'createdAt',
   tokenUsage: 'tokenUsage',
-  createdAt: 'createdAt'
+  domainId: 'domainId',
+  analyzedUrls: 'analyzedUrls'
 };
 
 exports.Prisma.KeywordScalarFieldEnum = {
@@ -160,31 +160,30 @@ exports.Prisma.KeywordScalarFieldEnum = {
   volume: 'volume',
   difficulty: 'difficulty',
   cpc: 'cpc',
-  intent: 'intent',
-  domainId: 'domainId',
   isSelected: 'isSelected',
   createdAt: 'createdAt',
-  updatedAt: 'updatedAt'
+  updatedAt: 'updatedAt',
+  domainId: 'domainId',
+  intent: 'intent'
 };
 
 exports.Prisma.PhraseScalarFieldEnum = {
   id: 'id',
   text: 'text',
   keywordId: 'keywordId',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
   relevanceScore: 'relevanceScore',
   sources: 'sources',
   trend: 'trend',
-  intent: 'intent',
-  confidence: 'confidence',
   isSelected: 'isSelected',
-  createdAt: 'createdAt',
-  updatedAt: 'updatedAt'
+  confidence: 'confidence',
+  intent: 'intent'
 };
 
 exports.Prisma.AIQueryResultScalarFieldEnum = {
   id: 'id',
   phraseId: 'phraseId',
-  domainId: 'domainId',
   model: 'model',
   response: 'response',
   latency: 'latency',
@@ -194,13 +193,13 @@ exports.Prisma.AIQueryResultScalarFieldEnum = {
   accuracy: 'accuracy',
   sentiment: 'sentiment',
   overall: 'overall',
+  createdAt: 'createdAt',
+  competitorMatchScore: 'competitorMatchScore',
+  competitorUrls: 'competitorUrls',
+  confidence: 'confidence',
   domainRank: 'domainRank',
   foundDomains: 'foundDomains',
-  confidence: 'confidence',
-  sources: 'sources',
-  competitorUrls: 'competitorUrls',
-  competitorMatchScore: 'competitorMatchScore',
-  createdAt: 'createdAt'
+  sources: 'sources'
 };
 
 exports.Prisma.AnalysisReportScalarFieldEnum = {
@@ -264,34 +263,34 @@ exports.Prisma.PerformanceInsightScalarFieldEnum = {
 
 exports.Prisma.DashboardAnalysisScalarFieldEnum = {
   id: 'id',
-  domainId: 'domainId',
   metrics: 'metrics',
   insights: 'insights',
   industryAnalysis: 'industryAnalysis',
   createdAt: 'createdAt',
-  updatedAt: 'updatedAt'
+  updatedAt: 'updatedAt',
+  domainId: 'domainId'
 };
 
 exports.Prisma.CompetitorAnalysisScalarFieldEnum = {
   id: 'id',
-  domainId: 'domainId',
   competitors: 'competitors',
   marketInsights: 'marketInsights',
   strategicRecommendations: 'strategicRecommendations',
   competitiveAnalysis: 'competitiveAnalysis',
   competitorList: 'competitorList',
   createdAt: 'createdAt',
-  updatedAt: 'updatedAt'
+  updatedAt: 'updatedAt',
+  domainId: 'domainId'
 };
 
 exports.Prisma.SuggestedCompetitorScalarFieldEnum = {
   id: 'id',
-  domainId: 'domainId',
   name: 'name',
   competitorDomain: 'competitorDomain',
   reason: 'reason',
   type: 'type',
-  createdAt: 'createdAt'
+  createdAt: 'createdAt',
+  domainId: 'domainId'
 };
 
 exports.Prisma.AnalysisPhaseScalarFieldEnum = {
@@ -452,16 +451,16 @@ exports.Prisma.GeneratedIntentPhraseScalarFieldEnum = {
   keywordId: 'keywordId',
   phrase: 'phrase',
   relevanceScore: 'relevanceScore',
-  intent: 'intent',
-  intentConfidence: 'intentConfidence',
   sources: 'sources',
   trend: 'trend',
+  intent: 'intent',
   communityInsights: 'communityInsights',
   searchPatterns: 'searchPatterns',
   isSelected: 'isSelected',
   tokenUsage: 'tokenUsage',
   createdAt: 'createdAt',
-  updatedAt: 'updatedAt'
+  updatedAt: 'updatedAt',
+  intentConfidence: 'intentConfidence'
 };
 
 exports.Prisma.RelevanceScoreResultScalarFieldEnum = {

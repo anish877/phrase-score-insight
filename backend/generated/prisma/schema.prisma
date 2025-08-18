@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
   output   = "../generated/prisma"
@@ -27,40 +21,39 @@ model User {
 model Domain {
   id                          Int                          @id @default(autoincrement())
   url                         String
-  context                     String?                      @db.Text
-  userId                      Int?
-  user                        User?                        @relation(fields: [userId], references: [id])
+  context                     String?
   createdAt                   DateTime                     @default(now())
   updatedAt                   DateTime                     @updatedAt
-  crawlResults                CrawlResult[]
-  keywords                    Keyword[]
-  dashboardAnalyses           DashboardAnalysis[]
-  competitorAnalyses          CompetitorAnalysis[]
-  suggestedCompetitors        SuggestedCompetitor[]
+  userId                      Int?
+  location                    String?
+  chatModel                   String?
+  customKeywords              String?
+  intentPhrases               String?
+  runAllModels                Boolean                      @default(false)
+  locationContext             String?
   analysisPhases              AnalysisPhase[]
-  semanticAnalyses            SemanticAnalysis[]
-  keywordAnalyses             KeywordAnalysis[]
-  searchVolumeClassifications SearchVolumeClassification[]
-  intentClassifications       IntentClassification[]
-  communityInsights           CommunityInsight[]
-  searchPatterns              SearchPattern[]
-  intentPhraseGenerations     IntentPhraseGeneration[]
-  communityMiningResults      CommunityMiningResult[]
-  searchPatternResults        SearchPatternResult[]
-  intentClassificationResults IntentClassificationResult[]
-  generatedIntentPhrases      GeneratedIntentPhrase[]
-  relevanceScoreResults       RelevanceScoreResult[]
-  aiQueryResults              AIQueryResult[]
-  location                    String? // User's location (city/country)
-  customKeywords              String? // Custom keywords for analysis
-  intentPhrases               String? // Custom intent phrases for analysis
-  chatModel                   String? // Selected chat model for analysis
-  runAllModels                Boolean                      @default(false) // Whether to run analysis across all models
-  locationContext             String?                      @db.Text // AI-generated context about domain-location interrelation
   analysisReports             AnalysisReport[]
-  modelPerformances           ModelPerformance[]
+  communityInsights           CommunityInsight[]
+  communityMiningResults      CommunityMiningResult[]
+  competitorAnalyses          CompetitorAnalysis[]
   competitorTrackings         CompetitorTracking[]
+  crawlResults                CrawlResult[]
+  dashboardAnalyses           DashboardAnalysis[]
+  user                        User?                        @relation(fields: [userId], references: [id])
+  generatedIntentPhrases      GeneratedIntentPhrase[]
+  intentClassifications       IntentClassification[]
+  intentClassificationResults IntentClassificationResult[]
+  intentPhraseGenerations     IntentPhraseGeneration[]
+  keywords                    Keyword[]
+  keywordAnalyses             KeywordAnalysis[]
+  modelPerformances           ModelPerformance[]
   performanceInsights         PerformanceInsight[]
+  relevanceScoreResults       RelevanceScoreResult[]
+  searchPatterns              SearchPattern[]
+  searchPatternResults        SearchPatternResult[]
+  searchVolumeClassifications SearchVolumeClassification[]
+  semanticAnalyses            SemanticAnalysis[]
+  suggestedCompetitors        SuggestedCompetitor[]
 
   @@unique([url, userId])
   @@index([userId])
@@ -68,13 +61,13 @@ model Domain {
 
 model CrawlResult {
   id               Int      @id @default(autoincrement())
-  domain           Domain?  @relation(fields: [domainId], references: [id])
-  domainId         Int?
   pagesScanned     Int
-  analyzedUrls     String   @db.Text // Store the URLs that were analyzed as JSON array
-  extractedContext String   @db.Text
-  tokenUsage       Int? // Add this line to persist GPT token usage
+  extractedContext String
   createdAt        DateTime @default(now())
+  tokenUsage       Int?
+  domainId         Int?
+  analyzedUrls     String
+  domain           Domain?  @relation(fields: [domainId], references: [id])
 }
 
 model Keyword {
@@ -83,19 +76,19 @@ model Keyword {
   volume                      Int
   difficulty                  String
   cpc                         Float
-  intent                      String? // Add intent field for keyword classification
-  domainId                    Int?
-  domain                      Domain?                      @relation(fields: [domainId], references: [id])
   isSelected                  Boolean                      @default(false)
   createdAt                   DateTime                     @default(now())
   updatedAt                   DateTime                     @updatedAt
-  phrases                     Phrase[]
+  domainId                    Int?
+  intent                      String?
   communityInsights           CommunityInsight[]
-  searchPatterns              SearchPattern[]
   communityMiningResults      CommunityMiningResult[]
-  searchPatternResults        SearchPatternResult[]
-  intentClassificationResults IntentClassificationResult[]
   generatedIntentPhrases      GeneratedIntentPhrase[]
+  intentClassificationResults IntentClassificationResult[]
+  domain                      Domain?                      @relation(fields: [domainId], references: [id])
+  phrases                     Phrase[]
+  searchPatterns              SearchPattern[]
+  searchPatternResults        SearchPatternResult[]
 
   @@unique([term, domainId])
   @@index([domainId])
@@ -104,30 +97,25 @@ model Keyword {
 model Phrase {
   id                          Int                          @id @default(autoincrement())
   text                        String
-  keyword                     Keyword                      @relation(fields: [keywordId], references: [id])
   keywordId                   Int
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
   relevanceScore              Int?
   sources                     Json?
   trend                       String?
-  intent                      String? // Add intent field
-  confidence                  Int? // Add confidence field
   isSelected                  Boolean                      @default(false)
+  confidence                  Int?
+  intent                      String?
+  keyword                     Keyword                      @relation(fields: [keywordId], references: [id])
   phraseIntentClassifications PhraseIntentClassification[]
   phraseScores                PhraseScore[]
-  createdAt                   DateTime                     @default(now())
-  updatedAt                   DateTime                     @updatedAt
-
-  @@index([keywordId])
 }
 
 model AIQueryResult {
   id                   Int                   @id @default(autoincrement())
-  phrase               GeneratedIntentPhrase @relation(fields: [phraseId], references: [id])
   phraseId             Int
-  domain               Domain?               @relation(fields: [domainId], references: [id])
-  domainId             Int?
   model                String
-  response             String                @db.Text
+  response             String
   latency              Float
   cost                 Float
   presence             Int
@@ -135,39 +123,35 @@ model AIQueryResult {
   accuracy             Int
   sentiment            Int
   overall              Float
+  createdAt            DateTime              @default(now())
+  competitorMatchScore Float?
+  competitorUrls       Json?
+  confidence           Float?
   domainRank           Int?
   foundDomains         Json?
-  confidence           Float?
   sources              Json?
-  competitorUrls       Json?
-  competitorMatchScore Float?
-  createdAt            DateTime              @default(now())
-
-  @@index([domainId])
+  phrase               GeneratedIntentPhrase @relation(fields: [phraseId], references: [id])
 }
 
-// New model for comprehensive analysis reports
 model AnalysisReport {
   id                  Int      @id @default(autoincrement())
-  domain              Domain?  @relation(fields: [domainId], references: [id])
   domainId            Int?
   overallScore        Float
-  scoreBreakdown      Json // Store detailed score breakdown
-  modelPerformance    Json // Store model performance data
-  competitorAnalysis  Json // Store competitor analysis
-  performanceInsights Json // Store SWOT analysis
-  recommendations     Json // Store strategic recommendations
-  analysisMetadata    Json // Store analysis metadata
+  scoreBreakdown      Json
+  modelPerformance    Json
+  competitorAnalysis  Json
+  performanceInsights Json
+  recommendations     Json
+  analysisMetadata    Json
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+  domain              Domain?  @relation(fields: [domainId], references: [id])
 
   @@index([domainId])
 }
 
-// New model for real-time model performance tracking
 model ModelPerformance {
   id             Int      @id @default(autoincrement())
-  domain         Domain?  @relation(fields: [domainId], references: [id])
   domainId       Int?
   model          String
   totalQueries   Int
@@ -182,15 +166,14 @@ model ModelPerformance {
   overallScore   Float
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  domain         Domain?  @relation(fields: [domainId], references: [id])
 
   @@unique([domainId, model])
   @@index([domainId])
 }
 
-// New model for competitor tracking
 model CompetitorTracking {
   id               Int      @id @default(autoincrement())
-  domain           Domain?  @relation(fields: [domainId], references: [id])
   domainId         Int?
   competitorDomain String
   frequency        Int
@@ -199,74 +182,73 @@ model CompetitorTracking {
   lastSeen         DateTime
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+  domain           Domain?  @relation(fields: [domainId], references: [id])
 
   @@unique([domainId, competitorDomain])
   @@index([domainId])
 }
 
-// New model for performance insights
 model PerformanceInsight {
   id          Int      @id @default(autoincrement())
-  domain      Domain?  @relation(fields: [domainId], references: [id])
   domainId    Int?
-  insightType String // 'strength', 'weakness', 'opportunity', 'threat'
+  insightType String
   area        String
   score       Float?
-  description String   @db.Text
+  description String
   potential   String?
   action      String?
   risk        String?
   mitigation  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  domain      Domain?  @relation(fields: [domainId], references: [id])
 
   @@index([domainId, insightType])
 }
 
 model DashboardAnalysis {
   id               Int      @id @default(autoincrement())
-  domain           Domain?  @relation(fields: [domainId], references: [id])
-  domainId         Int?
-  metrics          Json // Store all metrics as JSON
-  insights         Json // Store insights as JSON
-  industryAnalysis Json // Store industry analysis as JSON
+  metrics          Json
+  insights         Json
+  industryAnalysis Json
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+  domainId         Int?
+  domain           Domain?  @relation(fields: [domainId], references: [id])
 
   @@index([domainId])
 }
 
 model CompetitorAnalysis {
   id                       Int      @id @default(autoincrement())
-  domain                   Domain?  @relation(fields: [domainId], references: [id])
-  domainId                 Int?
-  competitors              Json // Store competitors array as JSON
-  marketInsights           Json // Store market insights as JSON
-  strategicRecommendations Json // Store recommendations as JSON
-  competitiveAnalysis      Json // Store competitive analysis as JSON
-  competitorList           String   @db.Text // Store the list of competitors analyzed
+  competitors              Json
+  marketInsights           Json
+  strategicRecommendations Json
+  competitiveAnalysis      Json
+  competitorList           String
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
+  domainId                 Int?
+  domain                   Domain?  @relation(fields: [domainId], references: [id])
 
   @@index([domainId])
 }
 
 model SuggestedCompetitor {
   id               Int      @id @default(autoincrement())
-  domain           Domain?  @relation(fields: [domainId], references: [id])
-  domainId         Int?
   name             String
   competitorDomain String
-  reason           String   @db.Text
-  type             String // 'direct' or 'indirect'
+  reason           String
+  type             String
   createdAt        DateTime @default(now())
+  domainId         Int?
+  domain           Domain?  @relation(fields: [domainId], references: [id])
 
   @@index([domainId])
 }
 
 model AnalysisPhase {
   id         Int       @id @default(autoincrement())
-  domain     Domain?   @relation(fields: [domainId], references: [id])
   domainId   Int?
   phase      String
   status     String
@@ -278,6 +260,7 @@ model AnalysisPhase {
   tokenUsage Int?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+  domain     Domain?   @relation(fields: [domainId], references: [id])
 
   @@unique([domainId, phase])
   @@index([domainId])
@@ -285,7 +268,6 @@ model AnalysisPhase {
 
 model SemanticAnalysis {
   id             Int      @id @default(autoincrement())
-  domain         Domain?  @relation(fields: [domainId], references: [id])
   domainId       Int?
   contentSummary String
   keyThemes      Json
@@ -295,13 +277,13 @@ model SemanticAnalysis {
   tokenUsage     Int?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  domain         Domain?  @relation(fields: [domainId], references: [id])
 
   @@index([domainId])
 }
 
 model KeywordAnalysis {
   id                   Int      @id @default(autoincrement())
-  domain               Domain?  @relation(fields: [domainId], references: [id])
   domainId             Int?
   keywords             Json
   searchVolumeData     Json
@@ -310,13 +292,13 @@ model KeywordAnalysis {
   tokenUsage           Int?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
+  domain               Domain?  @relation(fields: [domainId], references: [id])
 
   @@index([domainId])
 }
 
 model SearchVolumeClassification {
   id                   Int      @id @default(autoincrement())
-  domain               Domain?  @relation(fields: [domainId], references: [id])
   domainId             Int?
   highVolumeKeywords   Json
   mediumVolumeKeywords Json
@@ -326,13 +308,13 @@ model SearchVolumeClassification {
   tokenUsage           Int?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
+  domain               Domain?  @relation(fields: [domainId], references: [id])
 
   @@index([domainId])
 }
 
 model IntentClassification {
   id                    Int      @id @default(autoincrement())
-  domain                Domain?  @relation(fields: [domainId], references: [id])
   domainId              Int?
   informationalKeywords Json
   navigationalKeywords  Json
@@ -342,20 +324,21 @@ model IntentClassification {
   tokenUsage            Int?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+  domain                Domain?  @relation(fields: [domainId], references: [id])
 
   @@index([domainId])
 }
 
 model CommunityInsight {
   id         Int      @id @default(autoincrement())
-  domain     Domain?  @relation(fields: [domainId], references: [id])
   domainId   Int?
-  keyword    Keyword? @relation(fields: [keywordId], references: [id])
   keywordId  Int?
   sources    Json
   summary    String
   tokenUsage Int?
   createdAt  DateTime @default(now())
+  domain     Domain?  @relation(fields: [domainId], references: [id])
+  keyword    Keyword? @relation(fields: [keywordId], references: [id])
 
   @@index([domainId])
   @@index([keywordId])
@@ -363,14 +346,14 @@ model CommunityInsight {
 
 model SearchPattern {
   id         Int      @id @default(autoincrement())
-  domain     Domain?  @relation(fields: [domainId], references: [id])
   domainId   Int?
-  keyword    Keyword? @relation(fields: [keywordId], references: [id])
   keywordId  Int?
   patterns   Json
   summary    String
   tokenUsage Int?
   createdAt  DateTime @default(now())
+  domain     Domain?  @relation(fields: [domainId], references: [id])
+  keyword    Keyword? @relation(fields: [keywordId], references: [id])
 
   @@index([domainId])
   @@index([keywordId])
@@ -378,33 +361,31 @@ model SearchPattern {
 
 model PhraseIntentClassification {
   id         Int      @id @default(autoincrement())
-  phrase     Phrase   @relation(fields: [phraseId], references: [id])
   phraseId   Int
   intent     String
   confidence Int?
   createdAt  DateTime @default(now())
+  phrase     Phrase   @relation(fields: [phraseId], references: [id])
 
   @@index([phraseId])
 }
 
 model PhraseScore {
   id        Int      @id @default(autoincrement())
-  phrase    Phrase   @relation(fields: [phraseId], references: [id])
   phraseId  Int
   score     Int
   breakdown Json?
   createdAt DateTime @default(now())
+  phrase    Phrase   @relation(fields: [phraseId], references: [id])
 
   @@index([phraseId])
 }
 
-// New models for AI-powered intent phrase generation
 model IntentPhraseGeneration {
   id         Int       @id @default(autoincrement())
-  domain     Domain?   @relation(fields: [domainId], references: [id])
   domainId   Int
-  status     String    @default("pending") // pending, running, completed, failed
-  phase      String // community_mining, search_patterns, intent_classification, phrase_generation, relevance_scoring
+  status     String    @default("pending")
+  phase      String
   progress   Int       @default(0)
   startTime  DateTime  @default(now())
   endTime    DateTime?
@@ -413,6 +394,7 @@ model IntentPhraseGeneration {
   tokenUsage Int?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+  domain     Domain    @relation(fields: [domainId], references: [id])
 
   @@index([domainId, phase])
   @@index([domainId])
@@ -420,16 +402,16 @@ model IntentPhraseGeneration {
 
 model CommunityMiningResult {
   id         Int      @id @default(autoincrement())
-  domain     Domain?  @relation(fields: [domainId], references: [id])
   domainId   Int
-  keyword    Keyword? @relation(fields: [keywordId], references: [id])
   keywordId  Int?
-  platform   String // reddit, quora, etc.
-  insights   Json // Store community insights as JSON
+  platform   String
+  insights   Json
   sentiment  String?
   frequency  Int?
   tokenUsage Int?
   createdAt  DateTime @default(now())
+  domain     Domain   @relation(fields: [domainId], references: [id])
+  keyword    Keyword? @relation(fields: [keywordId], references: [id])
 
   @@index([domainId])
   @@index([keywordId])
@@ -437,16 +419,16 @@ model CommunityMiningResult {
 
 model SearchPatternResult {
   id          Int      @id @default(autoincrement())
-  domain      Domain?  @relation(fields: [domainId], references: [id])
   domainId    Int
-  keyword     Keyword? @relation(fields: [keywordId], references: [id])
   keywordId   Int?
-  patterns    Json // Store search patterns as JSON
+  patterns    Json
   volume      Int?
   seasonality Json?
   trends      Json?
   tokenUsage  Int?
   createdAt   DateTime @default(now())
+  domain      Domain   @relation(fields: [domainId], references: [id])
+  keyword     Keyword? @relation(fields: [keywordId], references: [id])
 
   @@index([domainId])
   @@index([keywordId])
@@ -454,15 +436,15 @@ model SearchPatternResult {
 
 model IntentClassificationResult {
   id         Int      @id @default(autoincrement())
-  domain     Domain?  @relation(fields: [domainId], references: [id])
   domainId   Int
-  keyword    Keyword? @relation(fields: [keywordId], references: [id])
   keywordId  Int?
-  intent     String // informational, navigational, transactional, commercial
+  intent     String
   confidence Int?
   patterns   Json?
   tokenUsage Int?
   createdAt  DateTime @default(now())
+  domain     Domain   @relation(fields: [domainId], references: [id])
+  keyword    Keyword? @relation(fields: [keywordId], references: [id])
 
   @@index([domainId])
   @@index([keywordId])
@@ -470,24 +452,24 @@ model IntentClassificationResult {
 
 model GeneratedIntentPhrase {
   id                    Int                    @id @default(autoincrement())
-  domain                Domain?                @relation(fields: [domainId], references: [id])
   domainId              Int
-  keyword               Keyword?               @relation(fields: [keywordId], references: [id])
   keywordId             Int?
   phrase                String
   relevanceScore        Int?
-  intent                String?
-  intentConfidence      Int?
   sources               Json?
   trend                 String?
+  intent                String?
   communityInsights     Json?
   searchPatterns        Json?
   isSelected            Boolean                @default(false)
   tokenUsage            Int?
-  relevanceScoreResults RelevanceScoreResult[]
-  aiQueryResults        AIQueryResult[]
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
+  intentConfidence      Int?
+  aiQueryResults        AIQueryResult[]
+  domain                Domain                 @relation(fields: [domainId], references: [id])
+  keyword               Keyword?               @relation(fields: [keywordId], references: [id])
+  relevanceScoreResults RelevanceScoreResult[]
 
   @@index([domainId])
   @@index([keywordId])
@@ -495,15 +477,15 @@ model GeneratedIntentPhrase {
 
 model RelevanceScoreResult {
   id         Int                    @id @default(autoincrement())
-  domain     Domain?                @relation(fields: [domainId], references: [id])
   domainId   Int
-  phrase     GeneratedIntentPhrase? @relation(fields: [phraseId], references: [id])
   phraseId   Int?
   score      Int
-  breakdown  Json? // Store score breakdown as JSON
-  factors    Json? // Store scoring factors as JSON
+  breakdown  Json?
+  factors    Json?
   tokenUsage Int?
   createdAt  DateTime               @default(now())
+  domain     Domain                 @relation(fields: [domainId], references: [id])
+  phrase     GeneratedIntentPhrase? @relation(fields: [phraseId], references: [id])
 
   @@index([domainId])
   @@index([phraseId])

@@ -139,28 +139,28 @@ function extractRealDataFromResponse(response: string, phrase: string, domain?: 
 }
 
 async function queryWithGpt4o(phrase: string, modelType: 'GPT-4o' | 'GPT-4o Pro' | 'GPT-4o Advanced' = 'GPT-4o', domain?: string, location?: string): Promise<{ response: string, cost: number }> {
-    // Simplified system prompts for each model type
+    // Simplified system prompts for more natural LLM interaction
     let systemPrompt = '';
     let temperature = 0.7;
     let maxTokens = 2000;
     
     if (modelType === 'GPT-4o') {
-        systemPrompt = `You are a helpful AI assistant. When users ask questions, provide natural, conversational responses with relevant websites and resources. Include realistic URLs from actual companies and organizations. If a target domain is relevant to the query, mention it naturally as part of your helpful response.`;
+        systemPrompt = `You are a helpful AI assistant. When users ask questions, provide natural, conversational responses with relevant websites and resources. Include realistic URLs from actual companies when mentioning helpful resources.`;
         temperature = 0.7;
         maxTokens = 2000;
     } else if (modelType === 'GPT-4o Pro') {
-        systemPrompt = `You are an expert consultant providing comprehensive analysis and recommendations. Include authoritative sources, strategic insights, and multiple perspectives. If a target domain is relevant, include it as part of your strategic analysis.`;
+        systemPrompt = `You are an expert consultant providing comprehensive analysis and recommendations. When users ask questions, provide detailed, well-researched responses with authoritative sources and strategic insights. Include realistic URLs from industry leaders.`;
         temperature = 0.6;
         maxTokens = 2500;
     } else {
-        systemPrompt = `You are an innovative AI assistant providing creative, forward-thinking solutions. Include cutting-edge technologies, emerging trends, and innovative approaches. If a target domain is relevant, position it as an innovative solution.`;
+        systemPrompt = `You are an innovative AI assistant providing creative, forward-thinking solutions. When users ask questions, offer cutting-edge perspectives and innovative approaches with references to AI/ML companies and emerging technologies. Include realistic URLs from innovative tech companies.`;
         temperature = 0.8;
         maxTokens = 2200;
     }
     
     const userPrompt = `User Query: "${phrase}"
 
-Please provide a helpful response to this user's question. Include relevant websites and resources that would actually help them.${domain ? `\n\nNote: If ${domain} is relevant to this query, mention it naturally as part of your helpful response.` : ''}${location ? `\nLocation: ${location}` : ''}
+Please provide a helpful response to this question. Include relevant websites and resources that would actually help the user.${domain ? ` If ${domain} is relevant to this query, mention it naturally as part of your helpful response.` : ''}${location ? ` Consider the location: ${location}` : ''}
 
 Respond naturally and conversationally, as if you're helping a real person. Include realistic URLs from actual companies and organizations.`;
     
@@ -194,17 +194,22 @@ async function scoreResponseWithAI(phrase: string, response: string, model: stri
   competitorUrls: string[];
   competitorMatchScore: number;
 }> {
-    // Simplified scoring prompt
+    // Simplified scoring prompts for more natural LLM interaction
     const domainContext = domain ? `\nTarget Domain: ${domain}` : '';
     const locationContext = location ? `\nLocation: ${location}` : '';
     
-    const scoringPrompt = `Analyze this AI response for domain visibility:
+    let scoringPrompt = '';
+    let temperature = 0.1;
+    
+    if (model === 'GPT-4o') {
+        scoringPrompt = `Analyze this AI assistant response for domain visibility:
 
 Query: "${phrase}"
 Response: "${response}"${domainContext}${locationContext}
 
-Extract all URLs from the response and check if the target domain appears. Return ONLY a JSON object with these fields:
+Extract all URLs and check if the target domain appears. Score the response quality.
 
+Return ONLY this JSON:
 {
   "presence": 0 or 1,
   "relevance": 1-5,
@@ -212,28 +217,57 @@ Extract all URLs from the response and check if the target domain appears. Retur
   "sentiment": 1-5,
   "overall": 1-5,
   "domainRank": number,
-  "foundDomains": ["domain1.com", "domain2.com"]
-}
+  "foundDomains": array
+}`;
+        temperature = 0.1;
+    } else if (model === 'Claude 3') {
+        scoringPrompt = `Analyze this Claude 3 response for domain visibility:
 
-Scoring:
-- presence: 1 if target domain found, 0 if not
-- relevance: how relevant the response is to the query (1-5)
-- accuracy: how accurate/realistic the recommendations are (1-5)
-- sentiment: how positive/helpful for target domain (1-5)
-- overall: overall visibility score (1-5)
-- domainRank: position of target domain (1st=1, 2nd=2, etc., 0 if not found)
-- foundDomains: array of all domains found in response
+Query: "${phrase}"
+Response: "${response}"${domainContext}${locationContext}
 
-Return ONLY the JSON object.`;
+Extract all URLs and check if the target domain appears. Score the comprehensive analysis quality.
+
+Return ONLY this JSON:
+{
+  "presence": 0 or 1,
+  "relevance": 1-5,
+  "accuracy": 1-5, 
+  "sentiment": 1-5,
+  "overall": 1-5,
+  "domainRank": number,
+  "foundDomains": array
+}`;
+        temperature = 0.2;
+    } else {
+        scoringPrompt = `Analyze this Gemini 1.5 response for domain visibility:
+
+Query: "${phrase}"
+Response: "${response}"${domainContext}${locationContext}
+
+Extract all URLs and check if the target domain appears. Score the innovative approach quality.
+
+Return ONLY this JSON:
+{
+  "presence": 0 or 1,
+  "relevance": 1-5,
+  "accuracy": 1-5, 
+  "sentiment": 1-5,
+  "overall": 1-5,
+  "domainRank": number,
+  "foundDomains": array
+}`;
+        temperature = 0.3;
+    }
     
     const completion = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [
-            { role: 'system', content: 'You are a helpful assistant that returns JSON.' },
+            { role: 'system', content: 'You are a helpful assistant.' },
             { role: 'user', content: scoringPrompt }
         ],
         max_tokens: 400,
-        temperature: 0.1
+        temperature: temperature
     });
     const scoringText = completion.choices[0].message?.content || '{}';
     try {

@@ -730,7 +730,6 @@ async function processQueryBatch(
             aiQueryResultRecord = await prisma.aIQueryResult.create({
               data: {
                 phraseId: phraseRecord.id,
-                domainId: phraseRecord.domainId,
                 model, // This preserves the display name: 'GPT-4o', 'Claude 3', or 'Gemini 1.5'
                 response,
                 latency,
@@ -901,7 +900,6 @@ router.post('/analyze', authenticateToken, asyncHandler(async (req: Authenticate
     const aiResult = await prisma.aIQueryResult.create({
       data: {
         phraseId: phraseRecord.id,
-        domainId: phraseRecord.domainId,
         model: result.model,
         response: result.response,
         latency: result.latency,
@@ -1011,7 +1009,6 @@ router.post('/batch-analyze', authenticateToken, asyncHandler(async (req: Authen
         const aiResult = await prisma.aIQueryResult.create({
           data: {
             phraseId: phraseRecord.id,
-            domainId: phraseRecord.domainId,
             model: result.model,
             response: result.response,
             latency: result.latency,
@@ -1056,65 +1053,299 @@ router.post('/batch-analyze', authenticateToken, asyncHandler(async (req: Authen
   }
 }));
 
+// GET /api/ai-queries/debug/:domainId - Debug endpoint (no auth) to test database
+router.get('/debug/:domainId', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { domainId } = req.params;
+    
+    console.log('AI Query Debug - Testing database for domain:', domainId);
+    
+    // Test 1: Check if domain exists
+    const domain = await prisma.domain.findUnique({
+      where: { id: parseInt(domainId) }
+    });
+    
+    if (!domain) {
+      return res.json({ 
+        success: false, 
+        error: 'Domain not found',
+        domainId: parseInt(domainId)
+      });
+    }
+    
+    // Test 2: Check if there are any AI query results
+    const resultCount = await prisma.aIQueryResult.count({
+      where: {
+        phrase: {
+          domainId: parseInt(domainId)
+        }
+      }
+    });
+    
+    // Test 3: Try to get one result without relations
+    const oneResult = await prisma.aIQueryResult.findFirst({
+      where: {
+        phrase: {
+          domainId: parseInt(domainId)
+        }
+      }
+    });
+    
+    // Test 4: Try to get results with relations (this is where the error might be)
+    let relationTest = null;
+    try {
+      relationTest = await prisma.aIQueryResult.findFirst({
+        where: {
+          phrase: {
+            domainId: parseInt(domainId)
+          }
+        },
+        include: {
+          phrase: {
+            include: {
+              keyword: {
+                select: {
+                  term: true
+                }
+              }
+            }
+          }
+        }
+      });
+    } catch (relationError) {
+      relationTest = {
+        error: relationError instanceof Error ? relationError.message : String(relationError)
+      };
+    }
+    
+    res.json({
+      success: true,
+      domain: {
+        id: domain.id,
+        url: domain.url,
+        userId: domain.userId
+      },
+      resultCount,
+      hasResults: resultCount > 0,
+      sampleResult: oneResult ? {
+        id: oneResult.id,
+        model: oneResult.model,
+        phraseId: oneResult.phraseId
+      } : null,
+      relationTest
+    });
+  } catch (error) {
+    console.error('AI Query Debug - Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Debug failed',
+      details: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
+  }
+}));
+
+// GET /api/ai-queries/test/:domainId - Test endpoint to check basic functionality
+router.get('/test/:domainId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { domainId } = req.params;
+    
+    console.log('AI Query Test - Testing basic functionality for domain:', domainId);
+    
+    // Test 1: Check if domain exists
+    const domain = await prisma.domain.findUnique({
+      where: { id: parseInt(domainId) }
+    });
+    
+    if (!domain) {
+      return res.json({ 
+        success: false, 
+        error: 'Domain not found',
+        domainId: parseInt(domainId)
+      });
+    }
+    
+    // Test 2: Check if there are any AI query results
+    const resultCount = await prisma.aIQueryResult.count({
+      where: {
+        phrase: {
+          domainId: parseInt(domainId)
+        }
+      }
+    });
+    
+    // Test 3: Try to get one result without relations
+    const oneResult = await prisma.aIQueryResult.findFirst({
+      where: {
+        phrase: {
+          domainId: parseInt(domainId)
+        }
+      }
+    });
+    
+    res.json({
+      success: true,
+      domain: {
+        id: domain.id,
+        url: domain.url,
+        userId: domain.userId
+      },
+      resultCount,
+      hasResults: resultCount > 0,
+      sampleResult: oneResult ? {
+        id: oneResult.id,
+        model: oneResult.model,
+        phraseId: oneResult.phraseId
+      } : null
+    });
+  } catch (error) {
+    console.error('AI Query Test - Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Test failed',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+}));
+
 // GET /api/ai-queries/results/:domainId - Get AI query results for a domain
 router.get('/results/:domainId', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { domainId } = req.params;
     const { keyword, limit = 50, offset = 0 } = req.query;
 
+    console.log('AI Query Results - Request details:', {
+      domainId,
+      keyword,
+      limit,
+      offset,
+      userId: req.user?.userId,
+      userEmail: req.user?.email
+    });
+
     // Check domain ownership
     const domain = await prisma.domain.findUnique({
       where: { id: parseInt(domainId) }
     });
 
+    console.log('AI Query Results - Domain lookup result:', {
+      domainFound: !!domain,
+      domainUserId: domain?.userId,
+      requestUserId: req.user?.userId
+    });
+
     if (!domain) {
+      console.log('AI Query Results - Domain not found for ID:', domainId);
       return res.status(404).json({ error: 'Domain not found' });
     }
 
-    if (domain.userId !== req.user.userId) {
+    // Check if domain has a userId (some domains might not be associated with users)
+    if (domain.userId && domain.userId !== req.user.userId) {
+      console.log('AI Query Results - Access denied:', {
+        domainUserId: domain.userId,
+        requestUserId: req.user.userId
+      });
       return res.status(403).json({ error: 'Access denied' });
     }
 
     // Build where clause
     const whereClause: any = {
       phrase: {
-        keyword: {
-          domainId: parseInt(domainId)
-        }
+        domainId: parseInt(domainId)
       }
     };
 
     if (keyword) {
-      whereClause.phrase.keyword.term = keyword;
+      whereClause.phrase.keyword = {
+        term: keyword
+      };
     }
 
-    // Get results with pagination
-    const results = await prisma.aIQueryResult.findMany({
-      where: whereClause,
-      include: {
+    console.log('AI Query Results - Query where clause:', whereClause);
+
+    // First, let's check if there are any AI query results for this domain at all
+    const basicResults = await prisma.aIQueryResult.findMany({
+      where: {
         phrase: {
-          include: {
-            keyword: {
-              select: {
-                term: true
+          domainId: parseInt(domainId)
+        }
+      },
+      take: 5
+    });
+
+    console.log('AI Query Results - Basic query found:', basicResults.length, 'results');
+
+    // Get results with pagination
+    let results;
+    let totalCount;
+    
+    try {
+      // Try the full query with relations first
+      results = await prisma.aIQueryResult.findMany({
+        where: whereClause,
+        include: {
+          phrase: {
+            include: {
+              keyword: {
+                select: {
+                  term: true
+                }
               }
             }
           }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      take: parseInt(limit as string),
-      skip: parseInt(offset as string)
-    });
+        },
+        orderBy: {
+          createdAt: 'desc'
+        },
+        take: parseInt(limit as string),
+        skip: parseInt(offset as string)
+      });
 
-    // Get total count
-    const totalCount = await prisma.aIQueryResult.count({
-      where: whereClause
-    });
+      // Get total count
+      totalCount = await prisma.aIQueryResult.count({
+        where: whereClause
+      });
+    } catch (queryError) {
+      console.error('AI Query Results - Query error with relations:', {
+        error: queryError instanceof Error ? queryError.message : String(queryError),
+        stack: queryError instanceof Error ? queryError.stack : undefined,
+        whereClause
+      });
+      
+      // Fallback to basic query without relations
+      try {
+        results = await prisma.aIQueryResult.findMany({
+          where: {
+            phrase: {
+              domainId: parseInt(domainId)
+            }
+          },
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: parseInt(limit as string),
+          skip: parseInt(offset as string)
+        });
 
-    console.log(`Retrieved ${results.length} AI query results for domain ${domainId}`);
+        totalCount = await prisma.aIQueryResult.count({
+          where: {
+            phrase: {
+              domainId: parseInt(domainId)
+            }
+          }
+        });
+        
+        console.log('AI Query Results - Fallback query successful:', results.length, 'results');
+      } catch (fallbackError) {
+        console.error('AI Query Results - Fallback query also failed:', {
+          error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+        });
+        throw fallbackError;
+      }
+    }
+
+    console.log(`AI Query Results - Retrieved ${results.length} results for domain ${domainId}, total: ${totalCount}`);
+    
     res.json({
       results,
       pagination: {
@@ -1125,7 +1356,12 @@ router.get('/results/:domainId', authenticateToken, asyncHandler(async (req: Aut
       }
     });
   } catch (error) {
-    console.error('Error fetching AI query results:', error);
+    console.error('AI Query Results - Error details:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      domainId: req.params.domainId,
+      userId: req.user?.userId
+    });
     res.status(500).json({ error: 'Failed to fetch AI query results' });
   }
 }));

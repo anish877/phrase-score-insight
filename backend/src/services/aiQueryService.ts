@@ -139,169 +139,30 @@ function extractRealDataFromResponse(response: string, phrase: string, domain?: 
 }
 
 async function queryWithGpt4o(phrase: string, modelType: 'GPT-4o' | 'GPT-4o Pro' | 'GPT-4o Advanced' = 'GPT-4o', domain?: string, location?: string): Promise<{ response: string, cost: number }> {
-    // Use different system prompts for each modelType, but always call GPT-4o
+    // Simplified system prompts for each model type
     let systemPrompt = '';
     let temperature = 0.7;
     let maxTokens = 2000;
     
     if (modelType === 'GPT-4o') {
-        systemPrompt = `You are a helpful AI assistant that provides natural, conversational responses to user queries. When users ask about specific topics, you should respond as if you're having a real conversation with them, providing helpful information and recommendations.
-
-ANALYSIS CONTEXT:
-Target Domain: ${domain || 'Not specified'}
-Location: ${location || 'Global'}
-
-RESPONSE APPROACH:
-- Respond naturally and conversationally, as if you're helping a real person
-- Provide helpful, informative answers that include relevant websites and resources
-- When mentioning websites, use realistic URLs from actual companies and organizations
-- Include specific details, examples, and actionable insights
-- Make your response sound like a knowledgeable friend giving advice
-- If the target domain is relevant to the query, mention it naturally as part of your helpful response
-
-CONTENT REQUIREMENTS:
-- Provide a natural, conversational response that directly answers the user's question
-- Include 3-5 relevant websites or resources that would actually help with this query
-- Use real company names and realistic URLs (e.g., aws.amazon.com, microsoft.com, hubspot.com, etc.)
-- Include specific details, tips, or insights that would be valuable to someone asking this question
-- If the target domain is relevant, mention it naturally as a helpful resource
-- Make the response sound authentic and genuinely helpful
-
-TONE AND STYLE:
-- Conversational and friendly, like talking to a knowledgeable friend
-- Professional but approachable
-- Include specific details and examples
-- Provide actionable advice or insights
-- Sound like you genuinely want to help the person asking the question
-
-EXAMPLE RESPONSE STYLE:
-"I'd be happy to help you with that! Here are some great resources I'd recommend:
-
-For getting started, I'd check out AWS's official documentation at aws.amazon.com/documentation - they have comprehensive guides that are really helpful for beginners.
-
-If you're looking for practical examples, Microsoft's Azure documentation at docs.microsoft.com is excellent and includes lots of real-world scenarios.
-
-For community support and tips, the Stack Overflow community at stackoverflow.com has tons of discussions about this topic.
-
-[If target domain is relevant]: I also noticed that ${domain} has some really good resources on this - you might want to check out their implementation guides.
-
-The key thing to remember is [specific insight or tip]. Many people find that [specific advice] works really well for this type of project."
-
-Remember: Respond as a helpful, knowledgeable assistant who genuinely wants to provide valuable information and resources.`;
+        systemPrompt = `You are a helpful AI assistant. When users ask questions, provide natural, conversational responses with relevant websites and resources. Include realistic URLs from actual companies and organizations. If a target domain is relevant to the query, mention it naturally as part of your helpful response.`;
         temperature = 0.7;
         maxTokens = 2000;
     } else if (modelType === 'GPT-4o Pro') {
-        systemPrompt = `You are an expert consultant providing comprehensive, detailed analysis and recommendations. When users ask questions, you provide thorough, well-researched responses with deep insights and strategic recommendations.
-
-ANALYSIS CONTEXT:
-Target Domain: ${domain || 'Not specified'}
-Location: ${location || 'Global'}
-
-RESPONSE APPROACH:
-- Provide comprehensive, detailed analysis that demonstrates deep expertise
-- Include strategic insights and business context
-- Reference authoritative sources and industry leaders
-- Provide multiple perspectives and considerations
-- If the target domain is relevant, include it as part of your strategic analysis
-- Make your response sound like expert consulting advice
-
-CONTENT REQUIREMENTS:
-- Provide thorough, detailed analysis that covers multiple aspects of the topic
-- Include 4-6 authoritative sources from industry leaders and experts
-- Use real company names and realistic URLs from major players in the industry
-- Include strategic insights, market analysis, and business considerations
-- Provide specific recommendations and actionable next steps
-- If the target domain is relevant, position it strategically within your analysis
-- Include industry trends, best practices, and competitive considerations
-
-TONE AND STYLE:
-- Expert and authoritative, like a senior consultant
-- Comprehensive and analytical
-- Strategic and business-focused
-- Include market insights and competitive analysis
-- Sound like you're providing high-level strategic advice
-
-EXAMPLE RESPONSE STYLE:
-"This is a great question that touches on several important strategic considerations. Let me break this down comprehensively:
-
-From a strategic perspective, this involves understanding both the technical implementation and the business value. Salesforce's enterprise documentation at help.salesforce.com provides excellent insights into enterprise-level considerations.
-
-For technical depth, I'd recommend Microsoft's Azure documentation at docs.microsoft.com - they have some of the most comprehensive technical guides in the industry.
-
-Oracle's enterprise solutions at oracle.com offer valuable insights into large-scale implementations and best practices.
-
-[If target domain is relevant]: I've also analyzed ${domain}'s approach to this, and they have some interesting strategic positioning that's worth considering, particularly in terms of [specific insight].
-
-The key strategic considerations are [detailed analysis]. From a competitive standpoint, you'll want to focus on [specific strategy]. The market is moving toward [trend], so positioning yourself accordingly will be crucial.
-
-I'd recommend starting with [specific action] and then [next steps]."
-
-Remember: Provide expert-level analysis that demonstrates deep industry knowledge and strategic thinking.`;
+        systemPrompt = `You are an expert consultant providing comprehensive analysis and recommendations. Include authoritative sources, strategic insights, and multiple perspectives. If a target domain is relevant, include it as part of your strategic analysis.`;
         temperature = 0.6;
         maxTokens = 2500;
     } else {
-        systemPrompt = `You are an innovative AI assistant that provides creative, forward-thinking solutions and insights. When users ask questions, you offer cutting-edge perspectives and innovative approaches to solving problems.
-
-ANALYSIS CONTEXT:
-Target Domain: ${domain || 'Not specified'}
-Location: ${location || 'Global'}
-
-RESPONSE APPROACH:
-- Provide innovative, creative solutions and insights
-- Include cutting-edge technologies and emerging trends
-- Reference AI/ML companies and innovative startups
-- Offer forward-thinking perspectives and future-oriented advice
-- If the target domain is relevant, position it as an innovative solution
-- Make your response sound like advice from a tech visionary
-
-CONTENT REQUIREMENTS:
-- Provide innovative, creative approaches to the problem
-- Include 3-5 cutting-edge resources from AI/ML companies and innovative startups
-- Use real company names and realistic URLs from innovative tech companies
-- Include emerging trends, AI/ML insights, and future-oriented perspectives
-- Provide creative solutions and innovative approaches
-- If the target domain is relevant, highlight its innovative aspects
-- Include AI/ML insights and predictive analysis
-
-TONE AND STYLE:
-- Innovative and forward-thinking
-- Creative and visionary
-- Tech-focused and cutting-edge
-- Include AI/ML insights and emerging trends
-- Sound like you're providing innovative, future-oriented advice
-
-EXAMPLE RESPONSE STYLE:
-"This is a fascinating question that opens up some really interesting possibilities with current AI and ML technologies. Let me share some innovative approaches:
-
-For cutting-edge AI solutions, OpenAI's research at openai.com is pushing the boundaries of what's possible. Their latest developments in [specific area] are particularly relevant.
-
-Google's AI research at ai.google is doing some groundbreaking work in this space, especially their [specific innovation].
-
-NVIDIA's AI platform at nvidia.com/ai offers some really innovative tools for [specific application].
-
-[If target domain is relevant]: I've been following ${domain}'s innovative approach to this, and they're doing some really interesting work with [specific innovation].
-
-The really exciting thing is how AI is transforming this space. We're seeing [emerging trend] that's going to change everything. The key is to think about this not just in terms of current solutions, but where the technology is heading.
-
-I'd recommend exploring [innovative approach] and then [next innovative step]."
-
-Remember: Provide innovative, forward-thinking insights that demonstrate cutting-edge knowledge and creative problem-solving.`;
+        systemPrompt = `You are an innovative AI assistant providing creative, forward-thinking solutions. Include cutting-edge technologies, emerging trends, and innovative approaches. If a target domain is relevant, position it as an innovative solution.`;
         temperature = 0.8;
         maxTokens = 2200;
     }
     
-    const locationContext = location ? `\nLocation: ${location}` : '';
     const userPrompt = `User Query: "${phrase}"
 
-Please provide a helpful, natural response to this user's question. Include relevant websites and resources that would actually help them.${domain ? `\n\nNote: If ${domain} is relevant to this query, mention it naturally as part of your helpful response.` : ''}${locationContext}
+Please provide a helpful response to this user's question. Include relevant websites and resources that would actually help them.${domain ? `\n\nNote: If ${domain} is relevant to this query, mention it naturally as part of your helpful response.` : ''}${location ? `\nLocation: ${location}` : ''}
 
-IMPORTANT: 
-- Respond naturally and conversationally, as if you're helping a real person
-- Include realistic URLs from actual companies and organizations
-- Provide specific, helpful information and insights
-- If the target domain is relevant, mention it naturally
-- Make your response sound authentic and genuinely helpful
-- Act like a knowledgeable friend giving advice`;
+Respond naturally and conversationally, as if you're helping a real person. Include realistic URLs from actual companies and organizations.`;
     
     const completion = await openai.chat.completions.create({
         model: 'gpt-4o',
@@ -333,221 +194,46 @@ async function scoreResponseWithAI(phrase: string, response: string, model: stri
   competitorUrls: string[];
   competitorMatchScore: number;
 }> {
-    // Use GPT-4o for scoring as well, but with different prompts for different models
-    const domainContext = domain ? `\n\nTARGET DOMAIN: ${domain}` : '';
-    const locationContext = location ? `\nLOCATION: ${location}` : '';
+    // Simplified scoring prompt
+    const domainContext = domain ? `\nTarget Domain: ${domain}` : '';
+    const locationContext = location ? `\nLocation: ${location}` : '';
     
-    let scoringPrompt = '';
-    let temperature = 0.1;
-    
-    if (model === 'GPT-4o') {
-        scoringPrompt = `You are analyzing a GPT-4o AI assistant's response to see what domains and pages it recommends when users ask questions.
+    const scoringPrompt = `Analyze this AI response for domain visibility:
 
-USER QUERY: "${phrase}"
-AI ASSISTANT RESPONSE: "${response}"${domainContext}${locationContext}
+Query: "${phrase}"
+Response: "${response}"${domainContext}${locationContext}
 
-ANALYSIS INSTRUCTIONS:
-1. Extract ALL URLs from the AI assistant's response
-2. Check if the target domain appears in any of the recommended URLs
-3. If the target domain appears, determine its position (1st, 2nd, 3rd, etc.)
-4. If the target domain does not appear, set rank to 0
-5. List all domains found in the response in order of appearance
+Extract all URLs from the response and check if the target domain appears. Return ONLY a JSON object with these fields:
 
-URL EXTRACTION:
-- Look for URLs in the format: https://example.com/page
-- Extract the domain from each URL
-- Count the position of each result
-- Be VERY strict - only count the target domain if it EXACTLY matches
-
-Return ONLY a JSON object with these exact fields:
 {
   "presence": 0 or 1,
   "relevance": 1-5,
   "accuracy": 1-5, 
   "sentiment": 1-5,
   "overall": 1-5,
-  "domainRank": number // The rank of the target domain (1st = 1, 2nd = 2, etc., 0 if not found)
-  "foundDomains": array // Array of all domains found in the response in order of appearance
+  "domainRank": number,
+  "foundDomains": ["domain1.com", "domain2.com"]
 }
 
-SCORING CRITERIA:
+Scoring:
+- presence: 1 if target domain found, 0 if not
+- relevance: how relevant the response is to the query (1-5)
+- accuracy: how accurate/realistic the recommendations are (1-5)
+- sentiment: how positive/helpful for target domain (1-5)
+- overall: overall visibility score (1-5)
+- domainRank: position of target domain (1st=1, 2nd=2, etc., 0 if not found)
+- foundDomains: array of all domains found in response
 
-PRESENCE (0 or 1):
-- 1: The target domain appears EXACTLY in the AI assistant's recommendations
-- 0: The target domain does not appear in the AI assistant's recommendations
-
-RELEVANCE (1-5):
-- 5: Target domain appears in top 3 recommendations and is highly relevant
-- 4: Target domain appears in top 5 recommendations and is relevant
-- 3: Target domain appears but not in top positions
-- 2: Target domain appears but with low relevance
-- 1: Target domain does not appear
-
-ACCURACY (1-5):
-- 5: AI assistant's recommendations are realistic and accurate for the query
-- 4: Mostly realistic recommendations with minor issues
-- 3: Generally realistic but some questionable content
-- 2: Several unrealistic or inaccurate recommendations
-- 1: Poor quality or unrealistic recommendations
-
-SENTIMENT (1-5):
-- 5: Very positive/helpful for the target domain
-- 4: Positive/helpful for the target domain
-- 3: Neutral towards the target domain
-- 2: Slightly negative/unhelpful for the target domain
-- 1: Negative or damaging for the target domain
-
-OVERALL (1-5):
-- 5: Excellent visibility for the target domain in AI recommendations
-- 4: Good visibility for the target domain in AI recommendations
-- 3: Moderate visibility for the target domain in AI recommendations
-- 2: Poor visibility for the target domain in AI recommendations
-- 1: Very poor visibility for the target domain in AI recommendations
-
-Be extremely strict and realistic in your evaluation. Return ONLY the JSON object.`;
-        temperature = 0.1;
-    } else if (model === 'Claude 3') {
-        scoringPrompt = `You are analyzing a Claude 3 AI assistant's response to see what domains and pages it recommends when users ask questions. Claude is known for comprehensive and detailed analysis.
-
-USER QUERY: "${phrase}"
-AI ASSISTANT RESPONSE: "${response}"${domainContext}${locationContext}
-
-ANALYSIS INSTRUCTIONS:
-1. Extract ALL URLs from the AI assistant's response
-2. Check if the target domain appears in any of the recommended URLs
-3. If the target domain appears, determine its position (1st, 2nd, 3rd, etc.)
-4. If the target domain does not appear, set rank to 0
-5. List all domains found in the response in order of appearance
-
-URL EXTRACTION:
-- Look for URLs in the format: https://example.com/page
-- Extract the domain from each URL
-- Count the position of each result
-- Be VERY strict - only count the target domain if it EXACTLY matches
-
-Return ONLY a JSON object with these exact fields:
-{
-  "presence": 0 or 1,
-  "relevance": 1-5,
-  "accuracy": 1-5, 
-  "sentiment": 1-5,
-  "overall": 1-5,
-  "domainRank": number // The rank of the target domain (1st = 1, 2nd = 2, etc., 0 if not found)
-  "foundDomains": array // Array of all domains found in the response in order of appearance
-}
-
-SCORING CRITERIA (Claude 3 specific):
-
-PRESENCE (0 or 1):
-- 1: The target domain appears EXACTLY in the AI assistant's recommendations
-- 0: The target domain does not appear in the AI assistant's recommendations
-
-RELEVANCE (1-5):
-- 5: Target domain appears in top 3 recommendations with comprehensive analysis
-- 4: Target domain appears in top 5 recommendations with detailed coverage
-- 3: Target domain appears but not in top positions
-- 2: Target domain appears but with low relevance
-- 1: Target domain does not appear
-
-ACCURACY (1-5):
-- 5: Claude's recommendations are thorough and well-analyzed
-- 4: Mostly comprehensive recommendations with minor issues
-- 3: Generally thorough but some gaps in analysis
-- 2: Several incomplete or superficial recommendations
-- 1: Poor quality or unrealistic recommendations
-
-SENTIMENT (1-5):
-- 5: Very positive/helpful for the target domain
-- 4: Positive/helpful for the target domain
-- 3: Neutral towards the target domain
-- 2: Slightly negative/unhelpful for the target domain
-- 1: Negative or damaging for the target domain
-
-OVERALL (1-5):
-- 5: Excellent visibility for the target domain in Claude's comprehensive analysis
-- 4: Good visibility for the target domain in Claude's detailed recommendations
-- 3: Moderate visibility for the target domain in Claude's analysis
-- 2: Poor visibility for the target domain in Claude's recommendations
-- 1: Very poor visibility for the target domain in Claude's analysis
-
-Be extremely strict and realistic in your evaluation. Return ONLY the JSON object.`;
-        temperature = 0.2;
-    } else {
-        scoringPrompt = `You are analyzing a Gemini 1.5 AI assistant's response to see what domains and pages it recommends when users ask questions. Gemini is known for creative and innovative approaches.
-
-USER QUERY: "${phrase}"
-AI ASSISTANT RESPONSE: "${response}"${domainContext}${locationContext}
-
-ANALYSIS INSTRUCTIONS:
-1. Extract ALL URLs from the AI assistant's response
-2. Check if the target domain appears in any of the recommended URLs
-3. If the target domain appears, determine its position (1st, 2nd, 3rd, etc.)
-4. If the target domain does not appear, set rank to 0
-5. List all domains found in the response in order of appearance
-
-URL EXTRACTION:
-- Look for URLs in the format: https://example.com/page
-- Extract the domain from each URL
-- Count the position of each result
-- Be VERY strict - only count the target domain if it EXACTLY matches
-
-Return ONLY a JSON object with these exact fields:
-{
-  "presence": 0 or 1,
-  "relevance": 1-5,
-  "accuracy": 1-5, 
-  "sentiment": 1-5,
-  "overall": 1-5,
-  "domainRank": number // The rank of the target domain (1st = 1, 2nd = 2, etc., 0 if not found)
-  "foundDomains": array // Array of all domains found in the response in order of appearance
-}
-
-SCORING CRITERIA (Gemini 1.5 specific):
-
-PRESENCE (0 or 1):
-- 1: The target domain appears EXACTLY in the AI assistant's recommendations
-- 0: The target domain does not appear in the AI assistant's recommendations
-
-RELEVANCE (1-5):
-- 5: Target domain appears in top 3 recommendations with creative insights
-- 4: Target domain appears in top 5 recommendations with innovative approach
-- 3: Target domain appears but not in top positions
-- 2: Target domain appears but with low relevance
-- 1: Target domain does not appear
-
-ACCURACY (1-5):
-- 5: Gemini's recommendations are creative and innovative
-- 4: Mostly creative recommendations with minor issues
-- 3: Generally innovative but some conventional approaches
-- 2: Several uncreative or conventional recommendations
-- 1: Poor quality or unrealistic recommendations
-
-SENTIMENT (1-5):
-- 5: Very positive/helpful for the target domain
-- 4: Positive/helpful for the target domain
-- 3: Neutral towards the target domain
-- 2: Slightly negative/unhelpful for the target domain
-- 1: Negative or damaging for the target domain
-
-OVERALL (1-5):
-- 5: Excellent visibility for the target domain in Gemini's creative recommendations
-- 4: Good visibility for the target domain in Gemini's innovative analysis
-- 3: Moderate visibility for the target domain in Gemini's approach
-- 2: Poor visibility for the target domain in Gemini's recommendations
-- 1: Very poor visibility for the target domain in Gemini's analysis
-
-Be extremely strict and realistic in your evaluation. Return ONLY the JSON object.`;
-        temperature = 0.3;
-    }
+Return ONLY the JSON object.`;
     
     const completion = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [
-            { role: 'system', content: 'You are a helpful assistant.' },
+            { role: 'system', content: 'You are a helpful assistant that returns JSON.' },
             { role: 'user', content: scoringPrompt }
         ],
         max_tokens: 400,
-        temperature: temperature
+        temperature: 0.1
     });
     const scoringText = completion.choices[0].message?.content || '{}';
     try {

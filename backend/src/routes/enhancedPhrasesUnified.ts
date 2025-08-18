@@ -3,7 +3,7 @@
  * 
  * This file contains a single unified function that follows the exact flowchart:
  * 1. Semantic Content Analysis
- * 2. Community Data Mining (USING REAL SERP API for Reddit/Quora)
+ * 2. Community Data Mining (USING REAL REDDIT API)
  * 3. Competitor Research
  * 4. Search Pattern Analysis
  * 5. Creating optimized intent phrases
@@ -12,9 +12,8 @@
  * 
  * No duplication - only one function that handles the complete flow.
  * 
- * SERP API INTEGRATION:
- * - Real Reddit data mining using SERP API
- * - Real Quora data mining using SERP API
+ * REDDIT API INTEGRATION:
+ * - Real Reddit data mining using Reddit API
  * - Rate limiting and error handling
  * - Actual community insights from real discussions
  */
@@ -25,14 +24,13 @@ import OpenAI from 'openai';
 import { authenticateToken } from '../middleware/auth';
 
 /**
- * FIXED REDDIT AND QUORA DATA MINING
+ * FIXED REDDIT DATA MINING
  * 
  * Issues fixed:
  * 1. Reddit API requires .json endpoint and proper parameters
- * 2. Quora search strategy improved with better site targeting
- * 3. Better error handling and debugging
- * 4. Improved relevance scoring
- * 5. Better fallback mechanisms
+ * 2. Better error handling and debugging
+ * 3. Improved relevance scoring
+ * 4. Better fallback mechanisms
  */
 
 // ===============================================
@@ -150,100 +148,7 @@ const searchRedditAPI = async (
   }
 };
 
-// Enhanced SERP API configuration with proper error handling (for Quora)
-const SERP_API_CONFIG = {
-  baseUrl: 'https://serpapi.com/search',
-  apiKey: process.env.SERP_API_KEY,
-  rateLimit: 5000, // 5 seconds between requests
-  maxRetries: 3,
-  timeout: 30000, // 30 seconds timeout
-  defaultParams: {
-    gl: 'us',
-    hl: 'en',
-    num: '30', // Increased for better data
-    safe: 'off',
-    device: 'desktop'
-  }
-};
 
-if (!SERP_API_CONFIG.apiKey) throw new Error('SERP_API_KEY not set in environment variables');
-
-// ===============================================
-// IMPROVED QUORA SEARCH WITH SERP API
-// ===============================================
-
-// FIXED: Better Quora search strategy
-const searchQuoraEnhanced = async (query: string, location?: string, retries = 3) => {
-  // FIXED: Use more specific Quora search queries
-  const quoraSearchQueries = [
-    `"${query}" site:quora.com`,
-    `${query} site:quora.com questions`,
-    `${query} site:quora.com answers`,
-    `how to ${query} site:quora.com`,
-    `what is ${query} site:quora.com`
-  ];
-
-  for (const searchQuery of quoraSearchQueries) {
-    try {
-      console.log(`🔍 Quora SERP: Trying query "${searchQuery}"`);
-      
-      const params = new URLSearchParams({
-        api_key: SERP_API_CONFIG.apiKey!,
-        engine: 'google',
-        q: searchQuery,
-        ...SERP_API_CONFIG.defaultParams,
-        num: '20', // Reduced for better success rate
-        ...(location && { location: location })
-      });
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), SERP_API_CONFIG.timeout);
-      
-      const response = await fetch(`${SERP_API_CONFIG.baseUrl}?${params}`, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; SEOBot/1.0)',
-          'Accept': 'application/json',
-        },
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        console.warn(`⚠️ Quora SERP HTTP ${response.status} for "${searchQuery}"`);
-        continue; // Try next query
-      }
-      
-      const data = await response.json();
-      
-      console.log(`📊 Quora SERP response:`, {
-        hasResults: !!data?.organic_results,
-        resultCount: data?.organic_results?.length || 0,
-        hasError: !!data?.error,
-        status: data?.search_metadata?.status
-      });
-      
-      if (data?.organic_results && Array.isArray(data.organic_results) && data.organic_results.length > 0) {
-        console.log(`✅ Quora: Found ${data.organic_results.length} results with "${searchQuery}"`);
-        return data;
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Rate limit between queries
-      
-    } catch (error) {
-      console.error(`❌ Quora SERP error for "${searchQuery}":`, error);
-      continue; // Try next query
-    }
-  }
-  
-  // If all queries fail, return empty structure
-  console.warn(`❌ All Quora queries failed for "${query}"`);
-        return {
-          organic_results: [],
-    failed: true,
-          isEmpty: true
-        };
-};
 
 // ===============================================
 // IMPROVED DATA EXTRACTION WITH BETTER FILTERING
@@ -307,72 +212,9 @@ const extractRedditDataEnhanced = (redditData: any, businessContext: string) => 
   return validPosts;
 };
 
-// FIXED: Better Quora data extraction
-const extractQuoraDataEnhanced = (serpData: any, businessContext: string) => {
-  if (!serpData?.organic_results || !Array.isArray(serpData.organic_results) || serpData.organic_results.length === 0) {
-    console.warn('❌ No Quora results to extract');
-    return [];
-  }
-  
-  console.log(`📊 Processing ${serpData.organic_results.length} Quora SERP results...`);
-  
-  const validResults = serpData.organic_results
-    .filter((result: any) => {
-      // FIXED: More specific Quora URL filtering
-      const isQuora = result.link && result.link.includes('quora.com/') && !result.link.includes('/profile/');
-      const hasContent = result.title && result.title.length > 5 && result.snippet && result.snippet.length > 10;
-      
-      if (!isQuora || !hasContent) {
-        console.log(`❌ Filtered out result: "${result.title?.substring(0, 50)}..." (isQuora: ${isQuora}, hasContent: ${hasContent})`);
-        return false;
-      }
-      
-      return true;
-    })
-    .map((result: any) => {
-      const title = result.title?.trim() || '';
-      const content = result.snippet?.trim() || '';
-      const fullText = `${title} ${content}`.toLowerCase();
-      
-      return {
-        title,
-        content,
-        url: result.link || '',
-        author: 'quora_user',
-        answers: extractAnswersCount(content) || 0,
-        views: extractViewsCount(content) || 0,
-        relevanceScore: calculateEnhancedRelevanceScore(fullText, businessContext),
-        platform: 'quora',
-        fullText
-      };
-    })
-    .filter((item: any) => item.relevanceScore > 1) // Lower threshold
-    .sort((a: any, b: any) => b.relevanceScore - a.relevanceScore)
-    .slice(0, 25);
 
-  console.log(`✅ Quora: Extracted ${validResults.length} valid results`);
-  if (validResults.length > 0) {
-    console.log(`📊 Top Quora result: "${validResults[0].title}" (score: ${validResults[0].relevanceScore})`);
-  }
-  
-  return validResults;
-};
 
-// Helper functions for extracting metrics
-const extractCommentsCount = (snippet: string): number => {
-  const match = snippet.match(/(\d+)\s*comments?/i);
-  return match ? parseInt(match[1]) : 0;
-};
 
-const extractAnswersCount = (snippet: string): number => {
-  const match = snippet.match(/(\d+)\s*answers?/i);
-  return match ? parseInt(match[1]) : 0;
-};
-
-const extractViewsCount = (snippet: string): number => {
-  const match = snippet.match(/(\d+(?:,\d+)*)\s*views?/i);
-  return match ? parseInt(match[1].replace(/,/g, '')) : 0;
-};
 
 // ===============================================
 // IMPROVED QUERY GENERATION
@@ -502,7 +344,6 @@ const performEnhancedCommunityMining = async (businessContext: string, domain: a
   console.log(`📋 Generated ${strategicQueries.length} strategic queries`);
   
   const allRedditData = [];
-  const allQuoraData = [];
   let successfulQueries = 0;
   let failedQueries = 0;
 
@@ -560,42 +401,8 @@ const performEnhancedCommunityMining = async (businessContext: string, domain: a
     }
   }
 
-  // FIXED: Quora mining with better strategy
-  console.log('🔍 Enhanced Quora mining...');
-  
-  for (const query of strategicQueries.slice(0, 5)) { // Limit Quora queries due to SERP API costs
-    try {
-      console.log(`📊 Quora query: "${query}"`);
-      
-      const serpData = await searchQuoraEnhanced(query, domain.location);
-      
-      if (!serpData.failed && !serpData.isEmpty && serpData.organic_results.length > 0) {
-        const quoraResults = extractQuoraDataEnhanced(serpData, businessContext);
-        allQuoraData.push(...quoraResults);
-        successfulQueries++;
-        console.log(`✅ Quora: ${quoraResults.length} quality results for "${query}"`);
-      } else {
-        failedQueries++;
-        console.warn(`❌ Quora: No quality results for "${query}"`);
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, 3000)); // Longer delay for SERP API
-      
-    } catch (error) {
-      failedQueries++;
-      console.error(`❌ Quora mining error for "${query}":`, error);
-    }
-  }
-
   // FIXED: Better data deduplication and quality filtering
   const uniqueRedditData = allRedditData
-    .filter((item: any, index: number, arr: any[]) => 
-      index === arr.findIndex((t: any) => t.url === item.url || (t.title === item.title && Math.abs(t.title.length - item.title.length) < 5))
-    )
-    .sort((a: any, b: any) => b.relevanceScore - a.relevanceScore)
-    .slice(0, 20);
-
-  const uniqueQuoraData = allQuoraData
     .filter((item: any, index: number, arr: any[]) => 
       index === arr.findIndex((t: any) => t.url === item.url || (t.title === item.title && Math.abs(t.title.length - item.title.length) < 5))
     )
@@ -607,24 +414,21 @@ const performEnhancedCommunityMining = async (businessContext: string, domain: a
     successfulQueries,
     failedQueries,
     redditResults: uniqueRedditData.length,
-    quoraResults: uniqueQuoraData.length,
-    totalResults: uniqueRedditData.length + uniqueQuoraData.length,
+    totalResults: uniqueRedditData.length,
     averageRelevance: {
-      reddit: uniqueRedditData.length > 0 ? uniqueRedditData.reduce((sum: number, item: any) => sum + item.relevanceScore, 0) / uniqueRedditData.length : 0,
-      quora: uniqueQuoraData.length > 0 ? uniqueQuoraData.reduce((sum: number, item: any) => sum + item.relevanceScore, 0) / uniqueQuoraData.length : 0
+      reddit: uniqueRedditData.length > 0 ? uniqueRedditData.reduce((sum: number, item: any) => sum + item.relevanceScore, 0) / uniqueRedditData.length : 0
     },
-    qualityRating: (uniqueRedditData.length + uniqueQuoraData.length) > 10 ? 'High' : 
-                   (uniqueRedditData.length + uniqueQuoraData.length) > 3 ? 'Medium' : 'Low'
+    qualityRating: uniqueRedditData.length > 10 ? 'High' : 
+                   uniqueRedditData.length > 3 ? 'Medium' : 'Low'
   };
 
   console.log(`📈 Community Mining Results:`, dataQuality);
-  console.log(`🎯 Final data: ${uniqueRedditData.length} Reddit posts, ${uniqueQuoraData.length} Quora questions`);
+  console.log(`🎯 Final data: ${uniqueRedditData.length} Reddit posts`);
 
   return {
     redditData: uniqueRedditData,
-    quoraData: uniqueQuoraData,
     dataQuality,
-    allData: [...uniqueRedditData, ...uniqueQuoraData]
+    allData: [...uniqueRedditData]
   };
 };
 
@@ -1094,7 +898,7 @@ const createLegacyRealDataPhrasePrompt = (
 • Domain: ${domain.url}
 • Context: ${domain.context}
 
-**REAL USER QUESTIONS FROM REDDIT/QUORA:**
+**REAL USER QUESTIONS FROM REDDIT:**
 ${realQuestions.slice(0, 10).map((q: any) => 
   `• "${q.question}" [${q.platform.toUpperCase()}] (Engagement: ${q.engagement})`
 ).join('\n')}
@@ -1161,7 +965,7 @@ Return this exact JSON structure:
       "voiceSearchOptimized": true,
       "basedOnRealQuestion": "Best practices for diversity",
       "userLanguageUsed": ["best", "practices", "small businesses"],
-      "platform": "quora",
+      "platform": "reddit",
       "naturalness": 90
     },
     {
@@ -1197,7 +1001,7 @@ Return this exact JSON structure:
       "voiceSearchOptimized": true,
       "basedOnRealQuestion": "Professional consulting services",
       "userLanguageUsed": ["professional", "consulting", "immediate results"],
-      "platform": "quora",
+      "platform": "reddit",
       "naturalness": 85
     }
   ]
@@ -1250,6 +1054,19 @@ const generateEnhancedIntentPhrases = async (
     // Extract real user data
     const { realQuestions, realPhrases, userLanguagePatterns } = extractRealUserQuestions(communityInsightData);
     
+    // Emit extracted Reddit posts for this keyword during phrase generation
+    try {
+      const posts = communityInsightData?.sources?.dataPoints;
+      if (Array.isArray(posts) && posts.length > 0) {
+        sendEvent('debug', {
+          type: 'reddit',
+          stage: 'phrase_generation',
+          keyword: keyword.term,
+          posts
+        });
+      }
+    } catch {}
+    
     // Use intent-focused prompt
     const prompt = createRealDataPhrasePrompt(
       keyword,
@@ -1278,6 +1095,18 @@ const generateEnhancedIntentPhrases = async (
     });
 
     const response = completion.choices[0]?.message?.content;
+    
+    // NEW: emit debug raw AI response for phrase generation
+    try {
+      if (response && typeof sendEvent === 'function') {
+        sendEvent('debug', {
+          type: 'ai',
+          stage: 'phrase_generation',
+          keyword: keyword.term,
+          responseRaw: response
+        });
+      }
+    } catch {}
     
     if (response && response.trim()) {
       let phraseData = parseAIResponse(response, null);
@@ -1670,59 +1499,7 @@ const generateEnhancedPhrases = async (
   }
 };
 
-const extractRedditData = (serpData: any) => {
-  if (!serpData || !serpData.organic_results || !Array.isArray(serpData.organic_results)) {
-    console.warn('Invalid SERP data structure for Reddit extraction');
-    return [];
-  }
-  
-  return serpData.organic_results
-    .filter((result: any) => {
-      return result && 
-             result.link && 
-             typeof result.link === 'string' && 
-             result.link.includes('reddit.com') &&
-             result.title &&
-             result.snippet;
-    })
-    .map((result: any) => ({
-      title: (result.title || '').trim(),
-      content: (result.snippet || '').trim(),
-      subreddit: extractSubredditFromUrl(result.link) || 'unknown',
-      url: result.link || '',
-      score: result.rating || 0,
-      comments: 0,
-      author: 'reddit_user',
-      created: new Date().toISOString()
-    }))
-    .filter((item: any) => item.title.length > 0 && item.content.length > 0);
-};
 
-const extractQuoraData = (serpData: any) => {
-  if (!serpData || !serpData.organic_results || !Array.isArray(serpData.organic_results)) {
-    console.warn('Invalid SERP data structure for Quora extraction');
-    return [];
-  }
-  
-  return serpData.organic_results
-    .filter((result: any) => {
-      return result && 
-             result.link && 
-             typeof result.link === 'string' && 
-             result.link.includes('quora.com') &&
-             result.title &&
-             result.snippet;
-    })
-    .map((result: any) => ({
-      title: (result.title || '').trim(),
-      content: (result.snippet || '').trim(),
-      url: result.link || '',
-      author: 'quora_user',
-      answers: 0,
-      views: 0
-    }))
-    .filter((item: any) => item.title.length > 0 && item.content.length > 0);
-};
 
 const extractSubredditFromUrl = (url: string): string => {
   const match = url.match(/reddit\.com\/r\/([^\/]+)/);
@@ -2079,7 +1856,7 @@ router.post('/:domainId/step3/generate', authenticateToken, async (req, res) => 
     // Initialize generation steps according to flowchart
     const generatingSteps = [
       { name: 'Semantic Content Analysis', status: 'pending', progress: 0, description: 'Analyzing brand voice, theme, and target audience' },
-      { name: 'Community Data Mining', status: 'pending', progress: 0, description: 'Extracting real insights from Reddit and Quora using SERP API' },
+              { name: 'Community Data Mining', status: 'pending', progress: 0, description: 'Extracting real insights from Reddit using Reddit API' },
       { name: 'Competitor Research', status: 'pending', progress: 0, description: 'Researching competitors mentioned in community discussions' },
       { name: 'Search Pattern Analysis', status: 'pending', progress: 0, description: 'Analyzing user search behaviors' },
       { name: 'Creating optimized intent phrases', status: 'pending', progress: 0, description: 'Generating optimized search phrases' },
@@ -2142,7 +1919,7 @@ URL: ${domain.url}
 Business Context: ${domain.context || 'Context not provided'}
 Geographic Focus: ${domain.location || 'Global market'}
 
-CRITICAL REQUIREMENT: Generate ONLY concise, search-friendly content that can be used for Reddit and Quora queries. Keep each section under 50 words.
+      CRITICAL REQUIREMENT: Generate ONLY concise, search-friendly content that can be used for Reddit queries. Keep each section under 50 words.
 
 OUTPUT FORMAT:
 Return a concise JSON object with search-friendly content:
@@ -2190,6 +1967,14 @@ EXAMPLE OUTPUT:
       const response = completion.choices[0]?.message?.content;
       
       if (response) {
+        // NEW: emit debug raw AI response for semantic analysis
+        try {
+          sendEvent('debug', {
+            type: 'ai',
+            stage: 'semantic_analysis',
+            responseRaw: response
+          });
+        } catch {}
         const semanticData = parseAIResponse(response, { error: 'Failed to parse semantic data' });
         semanticContext = semanticData ? JSON.stringify(semanticData) : response;
         totalTokenUsage += completion.usage?.total_tokens || 0;
@@ -2233,11 +2018,11 @@ EXAMPLE OUTPUT:
     // STEP 2: COMMUNITY DATA MINING (PER DOMAIN)
     // ========================================
     sendEvent('step-update', { index: 1, status: 'running', progress: 0 });
-    sendEvent('progress', { 
-      phase: 'community_mining',
-      message: 'Community Data Mining - Extracting insights from Reddit and Quora for domain',
-      progress: 25
-    });
+          sendEvent('progress', { 
+        phase: 'community_mining',
+        message: 'Community Data Mining - Extracting insights from Reddit for domain',
+        progress: 25
+      });
 
     // Check if community insight already exists
     const existingCommunityInsight = await prisma.communityInsight.findFirst({
@@ -2247,6 +2032,18 @@ EXAMPLE OUTPUT:
     if (existingCommunityInsight) {
       console.log('Community insight already exists, using existing data...');
       communityInsightData = existingCommunityInsight;
+      // Emit debug reddit posts from existing insight if available
+      try {
+        const sourcesObj = (existingCommunityInsight as any)?.sources as any;
+        const posts = Array.isArray(sourcesObj?.dataPoints) ? sourcesObj.dataPoints : [];
+        if (posts.length > 0) {
+          sendEvent('debug', {
+            type: 'reddit',
+            stage: 'community_mining',
+            posts
+          });
+        }
+      } catch {}
       sendEvent('progress', { 
         phase: 'community_mining',
         message: 'Community Data Mining - Using existing data',
@@ -2262,14 +2059,10 @@ EXAMPLE OUTPUT:
         `${businessContext} problems issues reddit`,
         `${businessContext} solutions help reddit`,
         `${businessContext} advice tips reddit`,
-        `best ${businessContext} recommendations reddit`,
-        `${businessContext} questions answers quora`,
-        `how to ${businessContext} quora`,
-        `${businessContext} vs alternatives quora`
+        `best ${businessContext} recommendations reddit`
       ];
 
       const allRedditData = [];
-      const allQuoraData = [];
 
       try {
         console.log(`🚀 Starting enhanced community mining for domain: ${domain.url}`);
@@ -2279,42 +2072,48 @@ EXAMPLE OUTPUT:
         // Use the enhanced community mining function with semantic data
         const miningResults = await performEnhancedCommunityMining(businessContext, domain, parsedSemanticData);
         
-        const { redditData: allRedditData, quoraData: allQuoraData, dataQuality } = miningResults;
+        const { redditData: allRedditData, dataQuality } = miningResults;
         const successfulQueries = dataQuality.successfulQueries;
         const failedQueries = dataQuality.failedQueries;
 
         // Use the data from enhanced mining results (already processed)
         const uniqueRedditData = allRedditData;
-        const uniqueQuoraData = allQuoraData;
+
+        // NEW: emit debug Reddit posts
+        try {
+          sendEvent('debug', {
+            type: 'reddit',
+            posts: uniqueRedditData
+          });
+        } catch {}
 
         console.log(`📈 Data Quality Assessment:`, dataQuality);
-        console.log(`🎯 Final community data: ${uniqueRedditData.length} Reddit posts, ${uniqueQuoraData.length} Quora questions`);
+        console.log(`🎯 Final community data: ${uniqueRedditData.length} Reddit posts`);
 
         // Store enhanced community data with quality metrics
         communityInsightData = {
           domainId: domain.id,
           sources: {
             reddit: uniqueRedditData.length,
-            quora: uniqueQuoraData.length,
-            total: uniqueRedditData.length + uniqueQuoraData.length,
+            total: uniqueRedditData.length,
             quality: dataQuality.qualityRating,
             searchQueries: dataQuality.totalQueries,
             successRate: (dataQuality.successfulQueries / dataQuality.totalQueries * 100).toFixed(1) + '%',
-            dataPoints: [...uniqueRedditData, ...uniqueQuoraData].slice(0, 50),
+            dataPoints: [...uniqueRedditData].slice(0, 50),
             qualityMetrics: dataQuality
           },
           summary: JSON.stringify({
-            primaryQuestions: uniqueRedditData.concat(uniqueQuoraData)
+            primaryQuestions: uniqueRedditData
               .slice(0, 10)
-              .map(item => item.title),
+              .map((item: any) => item.title),
             criticalPainPoints: uniqueRedditData
-              .filter(item => item.content.toLowerCase().includes('problem') || item.content.toLowerCase().includes('issue'))
+              .filter((item: any) => item.content.toLowerCase().includes('problem') || item.content.toLowerCase().includes('issue'))
               .slice(0, 5)
-              .map(item => item.content.substring(0, 100) + '...'),
-            recommendedSolutions: uniqueQuoraData
-              .filter(item => item.title.toLowerCase().includes('how') || item.title.toLowerCase().includes('best'))
+              .map((item: any) => item.content.substring(0, 100) + '...'),
+            recommendedSolutions: uniqueRedditData
+              .filter((item: any) => item.title.toLowerCase().includes('how') || item.title.toLowerCase().includes('best'))
               .slice(0, 5)
-              .map(item => item.title),
+              .map((item: any) => item.title),
             marketOpportunities: [
               `High-quality community engagement opportunities`,
               `Content gaps identified in competitor discussions`,
@@ -2322,11 +2121,8 @@ EXAMPLE OUTPUT:
               `Emerging trends in ${businessContext} discussions`
             ],
             languagePatterns: [...new Set([
-              ...uniqueRedditData.flatMap(item => 
+              ...uniqueRedditData.flatMap((item: any) => 
                 item.title.toLowerCase().match(/\b(?:how to|best|top|guide|tips|help|solution|problem|issue|fix|improve|optimize)\b/g) || []
-              ),
-              ...uniqueQuoraData.flatMap(item => 
-                item.title.toLowerCase().match(/\b(?:what|why|how|when|where|which|should|can|will|is|are)\b/g) || []
               )
             ])].slice(0, 15)
           }),
@@ -2334,7 +2130,7 @@ EXAMPLE OUTPUT:
         };
 
         // If we have quality community data, proceed with AI analysis
-        if (dataQuality.qualityRating !== 'Low' && (uniqueRedditData.length + uniqueQuoraData.length) > 5) {
+        if (dataQuality.qualityRating !== 'Low' && uniqueRedditData.length > 5) {
           try {
             const enhancedCommunityAnalysisPrompt = `
 # ELITE COMMUNITY INTELLIGENCE EXTRACTION v2.0
@@ -2350,13 +2146,12 @@ You are a world-class digital anthropologist and business intelligence expert wi
 
 ## COMMUNITY DATA ANALYZED
 **Reddit Insights:** ${uniqueRedditData.length} high-relevance discussions
-**Quora Intelligence:** ${uniqueQuoraData.length} targeted Q&A sessions
-**Average Relevance Score:** Reddit ${dataQuality.averageRelevance.reddit.toFixed(1)}/20, Quora ${dataQuality.averageRelevance.quora.toFixed(1)}/20
+**Average Relevance Score:** Reddit ${dataQuality.averageRelevance.reddit.toFixed(1)}/20
 
 **Top Community Content Sample:**
-${[...uniqueRedditData, ...uniqueQuoraData]
+${uniqueRedditData
   .slice(0, 8)
-  .map((item: any, idx: number) => `${idx + 1}. [${item.platform.toUpperCase()}] ${item.title}\n   Content: "${item.content.substring(0, 150)}..."\n   Relevance: ${item.relevanceScore}/20`)
+  .map((item: any, idx: number) => `${idx + 1}. [REDDIT] ${item.title}\n   Content: "${item.content.substring(0, 150)}..."\n   Relevance: ${item.relevanceScore}/20`)
   .join('\n\n')}
 
 ## ADVANCED EXTRACTION FRAMEWORK
@@ -2564,6 +2359,14 @@ Return ONLY the JSON object with no additional explanatory text.
             const response = completion.choices[0]?.message?.content;
             
             if (response && response.trim()) {
+              // NEW: emit debug raw AI response for community analysis
+              try {
+                sendEvent('debug', {
+                  type: 'ai',
+                  stage: 'community_analysis',
+                  responseRaw: response
+                });
+              } catch {}
               const communityAnalysisData = parseAIResponse(response, {
                 userIntelligence: { primaryPersonas: [], psychologyInsights: {} },
                 searchBehaviorIntelligence: { naturalLanguagePatterns: [], problemFramingLanguage: {}, solutionSeekingBehavior: {} },
@@ -2578,12 +2381,11 @@ Return ONLY the JSON object with no additional explanatory text.
                 domainId: domain.id,
                 sources: {
                   reddit: uniqueRedditData.length,
-                  quora: uniqueQuoraData.length,
-                  total: uniqueRedditData.length + uniqueQuoraData.length,
+                  total: uniqueRedditData.length,
                   quality: dataQuality.qualityRating,
                   searchQueries: dataQuality.totalQueries,
                   successRate: (dataQuality.successfulQueries / dataQuality.totalQueries * 100).toFixed(1) + '%',
-                  dataPoints: [...uniqueRedditData, ...uniqueQuoraData].slice(0, 50),
+                  dataPoints: [...uniqueRedditData].slice(0, 50),
                   qualityMetrics: dataQuality,
                   enhancedAnalysis: communityAnalysisData
                 },
@@ -2616,8 +2418,7 @@ Return ONLY the JSON object with no additional explanatory text.
             domainId: domain.id,
             sources: { 
               reddit: allRedditData?.length || 0, 
-              quora: allQuoraData?.length || 0, 
-              total: (allRedditData?.length || 0) + (allQuoraData?.length || 0),
+              total: allRedditData?.length || 0,
               quality: 'Low',
               fallback: true,
               reason: 'Insufficient community data retrieved',
@@ -2659,7 +2460,6 @@ Return ONLY the JSON object with no additional explanatory text.
           domainId: domain.id,
           sources: { 
             reddit: 0, 
-            quora: 0, 
             total: 0,
             error: error instanceof Error ? error.message : 'Community mining failed',
             fallback: true,
@@ -2976,6 +2776,14 @@ Remember: This analysis should reveal the competitive landscape as experienced b
 
       const response = completion.choices[0]?.message?.content;
       if (response && response.trim()) {
+        // NEW: emit debug raw AI response for competitor research
+        try {
+          sendEvent('debug', {
+            type: 'ai',
+            stage: 'competitor_research',
+            responseRaw: response
+          });
+        } catch {}
         const competitorData = parseAIResponse(response, {
           competitors: [],
           analysis: 'Failed to parse competitor data',
@@ -3313,6 +3121,15 @@ Remember: This analysis should reveal not just what users search for, but WHY th
 
         const response = completion.choices[0]?.message?.content;
         if (response && response.trim()) {
+          // NEW: emit debug raw AI response for search patterns per keyword
+          try {
+            sendEvent('debug', {
+              type: 'ai',
+              stage: 'search_patterns',
+              keyword: keyword.term,
+              responseRaw: response
+            });
+          } catch {}
           const patternData = parseAIResponse(response, {
             patterns: [],
             summary: 'Failed to parse search pattern data',

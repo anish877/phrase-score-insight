@@ -26,6 +26,32 @@ interface IntentPhrase {
   wordCount?: number;
 }
 
+type RedditPostDebug = {
+  title?: string;
+  url?: string;
+  subreddit?: string;
+  score?: number;
+  relevanceScore?: number;
+};
+
+type DebugItem = {
+  id: string;
+  type: 'reddit' | 'ai';
+  stage?: string;
+  keyword?: string;
+  payload: RedditPostDebug[] | string;
+  ts: number;
+};
+
+type CommunityInsightItem = {
+  keywordId: number;
+  keyword: string;
+  sources?: {
+    dataPoints?: RedditPostDebug[];
+    [key: string]: unknown;
+  };
+  summary?: string;
+};
 
 
 interface Step3Data {
@@ -62,10 +88,12 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
   const [isPhraseGenerationActive, setIsPhraseGenerationActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [step3Data, setStep3Data] = useState<Step3Data | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
+  const [debugItems, setDebugItems] = useState<DebugItem[]>([]);
   
   const [generatingSteps, setGeneratingSteps] = useState([
     { name: 'Semantic Content Analysis', status: 'pending', progress: 0, description: 'Analyzing brand voice, theme, and target audience' },
-    { name: 'Community Data Mining', status: 'pending', progress: 0, description: 'Extracting real insights from Reddit and Quora using SERP API' },
+    { name: 'Community Data Mining', status: 'pending', progress: 0, description: 'Extracting real insights from Reddit using Reddit API' },
     { name: 'Competitor Research', status: 'pending', progress: 0, description: 'Researching competitors mentioned in community discussions' },
     { name: 'Search Pattern Analysis', status: 'pending', progress: 0, description: 'Analyzing user search behaviors' },
     { name: 'Creating optimized intent phrases', status: 'pending', progress: 0, description: 'Generating optimized search phrases' },
@@ -82,6 +110,31 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
   const [isContinuing, setIsContinuing] = useState(false);
   const phrasesReceivedRef = useRef(0);
   const receivedPhrasesRef = useRef<IntentPhrase[]>([]);
+
+  // When toggling debug on, if we have community insights with dataPoints, prefill debug with those posts
+  useEffect(() => {
+    if (!showDebug) return;
+    // If we already have some debug items, don't flood
+    if (debugItems.length > 0) return;
+    const insights: CommunityInsightItem[] = (step3Data?.communityInsights || []) as CommunityInsightItem[];
+    const collected: DebugItem[] = [];
+    insights.forEach((ins) => {
+      const dataPoints = Array.isArray(ins?.sources?.dataPoints) ? ins.sources!.dataPoints! : [];
+      if (dataPoints.length > 0) {
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        collected.push({
+          id,
+          type: 'reddit',
+          stage: 'existing_insights',
+          payload: dataPoints,
+          ts: Date.now()
+        });
+      }
+    });
+    if (collected.length > 0) {
+      setDebugItems(prev => [...collected, ...prev].slice(0, 200));
+    }
+  }, [showDebug, step3Data]);
 
   // Load existing Step3Results data
   useEffect(() => {
@@ -294,7 +347,7 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
     // Initialize generating steps
     setGeneratingSteps([
       { name: 'Semantic Content Analysis', status: 'running', progress: 0, description: 'Analyzing brand voice, theme, and target audience' },
-      { name: 'Community Data Mining', status: 'pending', progress: 0, description: 'Extracting real insights from Reddit and Quora using SERP API' },
+      { name: 'Community Data Mining', status: 'pending', progress: 0, description: 'Extracting real insights from Reddit using Reddit API' },
       { name: 'Competitor Research', status: 'pending', progress: 0, description: 'Researching competitors mentioned in community discussions' },
       { name: 'Search Pattern Analysis', status: 'pending', progress: 0, description: 'Analyzing user search behaviors' },
       { name: 'Creating optimized intent phrases', status: 'pending', progress: 0, description: 'Generating optimized search phrases' },
@@ -362,6 +415,12 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
               
               console.log('Received event:', eventType, data);
               
+              if (eventType === 'debug') {
+                // Capture debug items (reddit posts or ai raw responses)
+                const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                const payload: RedditPostDebug[] | string = data.type === 'reddit' ? (data.posts as RedditPostDebug[]) : (data.responseRaw as string);
+                setDebugItems(prev => [{ id, type: data.type as 'reddit' | 'ai', stage: data.stage, keyword: data.keyword, payload, ts: Date.now() }, ...prev].slice(0, 200));
+              } else 
               if (eventType === 'progress') {
                 // Update step progress
                 const { phase, step, progress, message } = data;
@@ -1225,12 +1284,12 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
                                     <p className="text-xs text-blue-600">Mining community discussions</p>
                                   </div>
                                   <div className="w-full flex-shrink-0 text-center">
-                                    <h4 className="text-xs font-medium text-blue-800 mb-1">Quora Research</h4>
-                                    <p className="text-xs text-blue-600">Extracting expert insights</p>
+                                    <h4 className="text-xs font-medium text-blue-800 mb-1">Data Processing</h4>
+                                    <p className="text-xs text-blue-600">Processing community insights</p>
                                   </div>
                                   <div className="w-full flex-shrink-0 text-center">
-                                    <h4 className="text-xs font-medium text-blue-800 mb-1">SERP API Integration</h4>
-                                    <p className="text-xs text-blue-600">Processing search results</p>
+                                    <h4 className="text-xs font-medium text-blue-800 mb-1">Quality Filtering</h4>
+                                    <p className="text-xs text-blue-600">Filtering relevant content</p>
                                   </div>
                                 </>
                               )}
@@ -1388,10 +1447,69 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
               )}
             </div>
           </div>
+          {/* Debug Toggle */}
+          <div className="mt-4 flex items-center justify-between">
+            <button
+              onClick={() => setShowDebug(prev => !prev)}
+              className="px-3 py-1.5 text-xs border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+            >
+              {showDebug ? 'Hide Debug' : 'Show Debug'}
+            </button>
+            {showDebug && (
+              <div className="text-xs text-gray-500">Debug items: {debugItems.length}</div>
+            )}
+          </div>
         </div>
 
         {/* Clean Content Area */}
         <div className="p-8">
+          {showDebug && (
+            <div className="mb-6 border border-amber-300 bg-amber-50 rounded-lg p-4 max-h-80 overflow-auto">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-amber-800">Debug Stream</h4>
+                <button
+                  className="text-xs text-amber-700 hover:underline"
+                  onClick={() => setDebugItems([])}
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="space-y-3">
+                {debugItems.length === 0 && (
+                  <div className="text-xs text-amber-700">No debug items yet…</div>
+                )}
+                {debugItems.map(item => (
+                  <div key={item.id} className="bg-white border border-amber-200 rounded p-3">
+                    <div className="flex items-center justify-between text-xs mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">{item.type.toUpperCase()}</span>
+                        {item.stage && <span className="text-amber-700">{item.stage}</span>}
+                        {item.keyword && <span className="text-amber-700">[{item.keyword}]</span>}
+                      </div>
+                      <span className="text-amber-600">{new Date(item.ts).toLocaleTimeString()}</span>
+                    </div>
+                    {/* Render payload compactly */}
+                    {item.type === 'reddit' ? (
+                      <div className="space-y-2">
+                        {(Array.isArray(item.payload) ? (item.payload as RedditPostDebug[]) : []).slice(0, 5).map((p: RedditPostDebug, idx: number) => (
+                          <div key={idx} className="text-xs text-gray-700">
+                            <div className="font-medium truncate">{p.title}</div>
+                            <div className="text-gray-500 truncate">{p.url}</div>
+                            <div className="text-gray-500">r/{p.subreddit} • score {p.score} • rel {p.relevanceScore}</div>
+                          </div>
+                        ))}
+                        {Array.isArray(item.payload) && (item.payload as RedditPostDebug[]).length > 5 && (
+                          <div className="text-xs text-amber-700">+{(item.payload as RedditPostDebug[]).length - 5} more…</div>
+                        )}
+                      </div>
+                    ) : (
+                      <pre className="whitespace-pre-wrap break-words text-xs text-gray-800 max-h-40 overflow-auto">{typeof item.payload === 'string' ? item.payload : JSON.stringify(item.payload, null, 2)}</pre>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Selection Counter */}
           <div className="flex items-center justify-between mb-8">
             <div>

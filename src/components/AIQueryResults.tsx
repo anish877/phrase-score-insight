@@ -90,6 +90,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
   const [results, setResults] = useState<{
     tableData?: Array<{
       phrase: string;
+      keyword?: string;
       model: string;
       response: string;
       domainPresence: string;
@@ -152,27 +153,6 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
   // Calculate exact expected results - will be determined by the backend
   const [totalExpected, setTotalExpected] = useState(0); // Dynamic total from backend
 
-  // Auto-advance carousel to show running task
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const runningTaskIndex = loadingTasks.findIndex(task => task.status === 'running');
-      if (runningTaskIndex !== -1) {
-        setCurrentTaskIndex(runningTaskIndex);
-      }
-    }, 500);
-
-    return () => clearInterval(interval);
-  }, [loadingTasks]);
-
-  // Auto-advance loading carousel
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentLoadingIndex(prev => (prev + 1) % 3);
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, []);
-
   // Transform raw results to match StepThree format
   const transformResults = (rawResults: AIQueryResult[]) => {
     console.log('TransformResults called with:', rawResults.length, 'results');
@@ -180,6 +160,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
     
     const tableData = rawResults.map(result => ({
       phrase: result.phrase,
+      keyword: result.keyword,
       model: result.model === 'GPT-4o' ? 'chatgpt' : 
              result.model === 'Claude 3' ? 'claude' : 'gemini',
       response: result.response,
@@ -188,10 +169,10 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
       overallScore: Math.round(result.scores.overall * 20), // Convert 0-5 to 0-100
       position: result.domainRank,
       url: result.url,
-      confidence: result.confidence,
-      sources: result.sources,
-      competitorUrls: result.competitorUrls,
-      competitorMatchScore: result.competitorMatchScore
+      confidence: typeof result.scores.confidence === 'number' ? result.scores.confidence : undefined,
+      sources: result.scores.sources || [],
+      competitorUrls: result.scores.competitorUrls || [],
+      competitorMatchScore: result.scores.competitorMatchScore
     }));
 
     const modelStats = {
@@ -204,20 +185,14 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
     rawResults.forEach(result => {
       let modelKey = 'gemini'; // default
       
-      console.log('Processing result for model:', result.model);
-      
       // Map the display model names to frontend keys
       if (result.model === 'GPT-4o') {
         modelKey = 'chatgpt';
-        console.log('Mapped to chatgpt');
       } else if (result.model === 'Claude 3') {
         modelKey = 'claude';
-        console.log('Mapped to claude');
       } else if (result.model === 'Gemini 1.5') {
         modelKey = 'gemini';
-        console.log('Mapped to gemini');
       } else {
-        console.log('Unknown model, defaulting to claude:', result.model);
         modelKey = 'claude';
       }
       
@@ -225,19 +200,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
       if (result.scores.presence > 0) {
         modelStats[modelKey].ranked++;
       }
-      
-      console.log(`Updated ${modelKey}: total=${modelStats[modelKey].total}, ranked=${modelStats[modelKey].ranked}`);
     });
-
-    console.log('Final model stats calculation:', {
-      rawResults: rawResults.map(r => ({ model: r.model, presence: r.scores.presence })),
-      modelStats
-    });
-    
-    console.log('Model breakdown in transformResults:');
-    console.log('- chatgpt:', modelStats.chatgpt);
-    console.log('- claude:', modelStats.claude);
-    console.log('- gemini:', modelStats.gemini);
 
     return {
       tableData,
@@ -317,7 +280,6 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
       const existingResults = await checkExistingResults();
       
       if (existingResults.length > 0) {
-        console.log('Found existing results:', existingResults.length);
         setRawResults(existingResults);
         resultsRef.current = existingResults;
         
@@ -405,23 +367,8 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
             if (setQueryStats && stats) setQueryStats(stats);
             setModelStatus({ 'GPT-4o': 'Done', 'Claude 3': 'Done', 'Gemini 1.5': 'Done' });
             
-            console.log('Analysis complete. Raw results:', resultsRef.current.map(r => ({
-              model: r.model,
-              phrase: r.phrase,
-              presence: r.scores.presence
-            })));
-            console.log('All model names in results:', resultsRef.current.map(r => r.model));
-            
-            // Mark all tasks as completed
-            setLoadingTasks(prev => prev.map(task => ({
-              ...task,
-              status: 'completed',
-              progress: 100
-            })));
-            
             // Transform and set results
             const transformedResults = transformResults(resultsRef.current);
-            console.log('Transformed results:', transformedResults);
             setResults(transformedResults);
             
             ctrl.abort();
@@ -433,13 +380,6 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
           }
           if (ev.event === 'result') {
             const data: AIQueryResult = JSON.parse(ev.data);
-            
-            console.log('Received result:', {
-              model: data.model,
-              phrase: data.phrase,
-              presence: data.scores.presence
-            });
-            console.log('Raw result data:', data);
             
             // Prevent duplicate results
             const isDuplicate = resultsRef.current.some(r => 
@@ -458,21 +398,6 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
               
               // Update model status
               setModelStatus(prev => ({ ...prev, [data.model]: 'Querying...' }));
-              
-              // Update competitive analysis task when we get competitor data
-              if (data.scores.competitorUrls && data.scores.competitorUrls.length > 0) {
-                setLoadingTasks(prev => {
-                  const newTasks = [...prev];
-                  newTasks[2] = { ...newTasks[2], status: 'completed', progress: 100 };
-                  newTasks[3] = { ...newTasks[3], status: 'running', progress: 50 };
-                  return newTasks;
-                });
-              }
-              
-              // Check if we've exceeded expected results
-              if (resultsRef.current.length > totalExpected) {
-                console.warn(`Exceeded expected results: ${resultsRef.current.length}/${totalExpected}`);
-              }
             }
           } else if (ev.event === 'stats') {
             const data: AIQueryStats = JSON.parse(ev.data);
@@ -488,9 +413,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
             });
           } else if (ev.event === 'progress') {
             const data = JSON.parse(ev.data);
-            let msg = data.message;
-            
-            console.log('Progress event:', msg);
+            const msg: string = data.message;
             
             // Check if this is the initialization message with total queries info
             if (msg.includes('Processing') && msg.includes('queries')) {
@@ -498,63 +421,16 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
               if (match) {
                 const total = parseInt(match[1]);
                 setTotalExpected(total);
-                console.log('Total expected queries from backend:', total);
               }
             }
             
-            // Enhanced message parsing
-            const match = msg.match(/Querying [^ ]+ for "(.+?)"/);
-            if (match) {
-              msg = `Querying: "${match[1]}"...`;
-            }
-            
-            const scoringMatch = msg.match(/Scoring [^ ]+ response for "(.+?)"/);
-            if (scoringMatch) {
-              msg = `Scoring: "${scoringMatch[1]}"...`;
-            }
-            
-            if (msg.includes('Processing') && msg.includes('batches')) {
-              msg = `Processing ${totalExpected} queries in batches...`;
-            }
-            
             setCurrentPhrase(msg);
-            
-            // Update task progress based on message content
-            if (data.message?.includes('Initializing AI analysis engine')) {
-              setLoadingTasks(prev => {
-                const newTasks = [...prev];
-                newTasks[0] = { ...newTasks[0], status: 'running', progress: 25 };
-                return newTasks;
-              });
-            } else if (data.message?.includes('Processing batch')) {
-              setLoadingTasks(prev => {
-                const newTasks = [...prev];
-                newTasks[0] = { ...newTasks[0], status: 'completed', progress: 100 };
-                newTasks[1] = { ...newTasks[1], status: 'running', progress: 30 };
-                return newTasks;
-              });
-            } else if (data.message?.includes('Querying')) {
-              setLoadingTasks(prev => {
-                const newTasks = [...prev];
-                newTasks[1] = { ...newTasks[1], status: 'running', progress: 60 };
-                return newTasks;
-              });
-            } else if (data.message?.includes('Evaluating')) {
-              setLoadingTasks(prev => {
-                const newTasks = [...prev];
-                newTasks[1] = { ...newTasks[1], status: 'completed', progress: 100 };
-                newTasks[2] = { ...newTasks[2], status: 'running', progress: 40 };
-                return newTasks;
-              });
-            }
           } else if (ev.event === 'error') {
             clearTimeout(overallTimeout);
             try {
               const data = JSON.parse(ev.data);
-              console.error('Analysis error event:', data);
               setError(data.error || 'An error occurred during analysis.');
             } catch {
-              console.error('Analysis error event (raw):', ev.data);
               setError('An error occurred during analysis.');
             }
             setIsAnalyzing(false);
@@ -610,9 +486,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
       total: data?.total || 0
     };
     
-    console.log(`Model data for ${modelId}:`, safeData);
-    
-    return { ...model, ...safeData };
+    return { ...model, ...safeData } as { id: string; name: string; ranked: number; total: number };
   };
 
   const getFilteredTableData = () => {
@@ -895,6 +769,13 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
     );
   }
 
+  // Helper to map frontend model key to backend stats model label
+  const mapModelIdToStatsName = (id: string) => {
+    if (id === 'chatgpt') return 'GPT-4o';
+    if (id === 'claude') return 'Claude 3';
+    return 'Gemini 1.5';
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
       {/* Header Section */}
@@ -953,31 +834,29 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         {models.map(model => {
           const data = getModelData(model.id);
-          const percentage = data.total > 0 ? Math.round((data.ranked / data.total) * 100) : 0;
-          
-          console.log(`Model ${model.name} (${model.id}): total=${data.total}, ranked=${data.ranked}, percentage=${percentage}%`);
+          const statsName = mapModelIdToStatsName(model.id);
+          const modelStatsFromServer = stats?.models?.find(m => m.model === statsName);
+          const avgOverallPct = modelStatsFromServer ? modelStatsFromServer.avgOverall : (data.total > 0 ? Math.round((data.ranked / data.total) * 100) : 0);
+          const presenceRate = modelStatsFromServer ? modelStatsFromServer.presenceRate : (data.total > 0 ? Math.round((data.ranked / data.total) * 100) : 0);
           
           return (
             <div key={model.id} className="bg-white border border-gray-100 rounded-lg p-5">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-medium text-gray-900">{model.name}</h3>
                 <div className="text-2xl font-light text-gray-900">
-                  {data.total > 0 ? `${percentage}%` : '0%'}
+                  {avgOverallPct}%
                 </div>
               </div>
-              
+              <div className="text-xs text-gray-500 mb-3">Avg Score</div>
               <div className="mb-3">
                 <div className="w-full bg-gray-100 rounded-full h-1.5">
                   <div
                     className="h-1.5 rounded-full bg-gray-900 transition-all duration-500"
-                    style={{ width: `${percentage}%` }}
+                    style={{ width: `${avgOverallPct}%` }}
                   ></div>
                 </div>
               </div>
-
-              <div className="text-xs text-gray-500">
-                {data.ranked} of {data.total} queries successful
-              </div>
+              <div className="text-xs text-gray-500">Presence: {presenceRate}%</div>
             </div>
           );
         })}
@@ -1007,8 +886,8 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
       <div className="space-y-4">
         {getFilteredTableData().map((row, index) => {
           const model = models.find(m => m.id === row.model);
-          const confidence = row.confidence || Math.floor(Math.random() * 30) + 70;
-          const sources = row.sources || ['Documentation', 'Reports', 'Community'];
+          const confidence = row.confidence ?? 60;
+          const sources = row.sources || [];
           const responseId = `${row.phrase}-${row.model}-${index}`;
           const isExpanded = expandedResponses[responseId];
           
@@ -1049,6 +928,13 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
                 {/* Query */}
                 <div className="mb-4">
                   <h3 className="text-sm font-medium text-gray-900 mb-2">Query</h3>
+                  {row.keyword && (
+                    <div className="mb-1">
+                      <span className="inline-flex items-center px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded">
+                        Keyword: {row.keyword}
+                      </span>
+                    </div>
+                  )}
                   <p className="text-sm text-gray-600">{row.phrase}</p>
                 </div>
 
@@ -1056,29 +942,7 @@ const AIQueryResults: React.FC<AIQueryResultsProps> = ({
                 <div className="mb-4">
                   <h3 className="text-sm font-medium text-gray-900 mb-2">AI Response</h3>
                   <div className={`text-sm text-gray-600 leading-relaxed prose prose-sm max-w-none ${isExpanded ? '' : 'line-clamp-3'}`}>
-                    <ReactMarkdown 
-                      components={{
-                        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                        ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-                        ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                        li: ({ children }) => <li className="text-sm">{children}</li>,
-                        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                        em: ({ children }) => <em className="italic">{children}</em>,
-                        code: ({ children }) => <code className="bg-gray-100 px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
-                        pre: ({ children }) => <pre className="bg-gray-100 p-2 rounded text-xs font-mono overflow-x-auto mb-2">{children}</pre>,
-                        blockquote: ({ children }) => <blockquote className="border-l-4 border-gray-300 pl-3 italic text-gray-500 mb-2">{children}</blockquote>,
-                        h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
-                        h2: ({ children }) => <h2 className="text-base font-semibold mb-2">{children}</h2>,
-                        h3: ({ children }) => <h3 className="text-sm font-semibold mb-1">{children}</h3>,
-                        a: ({ href, children }) => (
-                          <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline">
-                            {children}
-                          </a>
-                        ),
-                      }}
-                    >
-                      {row.response}
-                    </ReactMarkdown>
+                    <ReactMarkdown>{row.response}</ReactMarkdown>
                   </div>
                   
                   {row.response.length > 200 && (

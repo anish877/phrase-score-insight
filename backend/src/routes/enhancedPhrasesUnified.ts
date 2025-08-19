@@ -4,11 +4,10 @@
  * This file contains a single unified function that follows the exact flowchart:
  * 1. Semantic Content Analysis
  * 2. Community Data Mining (USING REAL REDDIT API)
- * 3. Competitor Research
- * 4. Search Pattern Analysis
- * 5. Creating optimized intent phrases
- * 6. Intent Classification (integrated with phrase generation)
- * 7. Relevance Score (integrated with phrase generation)
+ * 3. Search Pattern Analysis
+ * 4. Creating optimized intent phrases
+ * 5. Intent Classification (integrated with phrase generation)
+ * 6. Relevance Score (integrated with phrase generation)
  * 
  * No duplication - only one function that handles the complete flow.
  * 
@@ -39,189 +38,292 @@ import { authenticateToken } from '../middleware/auth';
 
 const REDDIT_API_CONFIG = {
   baseUrl: 'https://www.reddit.com',
-  userAgent: 'SEOAnalysisBot/1.0 (by /u/YourUsername)',
-  rateLimit: 1000, // Reduced to 1 second (Reddit allows 60 requests per minute)
+  userAgent: 'SEOAnalysisBot/1.0',
+  rateLimit: 2000, // 2 seconds between requests
   maxRetries: 3,
-  timeout: 10000, // Reduced timeout
-  resultsPerQuery: 25
+  timeout: 15000,
+  resultsPerQuery: 50 // Increased for better data
 };
 
-// FIXED: Reddit API helper functions with better error handling
-const searchRedditAPI = async (
-  query: string, 
-  subreddit?: string,
-  options: { sort?: 'relevance' | 'hot' | 'top' | 'new'; time?: 'all' | 'year' | 'month' | 'week' | 'day'; limit?: number; retries?: number } = {}
-) => {
-  const { sort = 'top', time = 'all', limit = REDDIT_API_CONFIG.resultsPerQuery, retries = REDDIT_API_CONFIG.maxRetries } = options;
+// ENHANCED: Better subreddit targeting for quality data
+const getTargetSubreddits = (businessContext: string) => {
+  const contextLower = businessContext.toLowerCase();
+  
+  // Business-specific subreddits
+  const businessSubs = ['entrepreneur', 'smallbusiness', 'business', 'startups', 'freelance'];
+  const adviceSubs = ['AskReddit', 'advice', 'LifeProTips', 'personalfinance'];
+  const techSubs = ['webdev', 'marketing', 'SEO', 'socialmedia', 'design'];
+  
+  // Context-specific targeting
+  if (contextLower.includes('marketing') || contextLower.includes('seo')) {
+    return ['marketing', 'SEO', 'PPC', 'socialmedia', 'entrepreneur', 'smallbusiness'];
+  }
+  if (contextLower.includes('design') || contextLower.includes('web')) {
+    return ['webdev', 'web_design', 'UI_Design', 'freelance', 'entrepreneur'];
+  }
+  if (contextLower.includes('finance') || contextLower.includes('accounting')) {
+    return ['personalfinance', 'entrepreneur', 'smallbusiness', 'investing'];
+  }
+  
+  return [...businessSubs, ...adviceSubs].slice(0, 6);
+};
+
+// ENHANCED: Smarter query generation using semantic data
+const generateStrategicQueries = (semanticData: any, businessContext: string): string[] => {
+  const queries = new Set<string>();
+  
+  // Extract semantic data if available
+  const searchTerms = semanticData?.searchTerms || [];
+  const keyProblems = semanticData?.keyProblems || [];
+  const primaryServices = semanticData?.primaryServices || [];
+  
+  // Base business context queries
+  const baseContext = businessContext.toLowerCase().replace(/[^\w\s]/g, '').trim();
+  
+  // Problem-focused queries (highest value for phrase generation)
+  if (keyProblems.length > 0) {
+    keyProblems.slice(0, 3).forEach((problem: string) => {
+      queries.add(`${problem} help`);
+      queries.add(`struggling with ${problem}`);
+      queries.add(`${problem} solutions`);
+    });
+  }
+  
+  // Service-specific queries
+  if (primaryServices.length > 0) {
+    primaryServices.slice(0, 3).forEach((service: string) => {
+      queries.add(`need ${service}`);
+      queries.add(`${service} recommendations`);
+      queries.add(`best ${service} provider`);
+    });
+  }
+  
+  // Search term queries
+  if (searchTerms.length > 0) {
+    searchTerms.slice(0, 3).forEach((term: string) => {
+      queries.add(`${term} advice`);
+      queries.add(`${term} tips`);
+    });
+  }
+  
+  // Fallback queries if semantic data is limited
+  if (queries.size < 5) {
+    queries.add(`${baseContext} problems`);
+    queries.add(`${baseContext} help`);
+    queries.add(`need ${baseContext}`);
+    queries.add(`${baseContext} advice`);
+    queries.add(`best ${baseContext}`);
+  }
+  
+  // Question-focused queries (great for phrase generation)
+  queries.add(`how to ${baseContext}`);
+  queries.add(`what is best ${baseContext}`);
+  queries.add(`where to find ${baseContext}`);
+  
+  return Array.from(queries).slice(0, 12);
+};
+
+// ENHANCED: Better Reddit search with multiple strategies
+const searchRedditAPI = async (query: string, subreddit?: string, options: { sort?: string; time?: string; limit?: number } = {}) => {
+  const { sort = 'top', time = 'year', limit = 50 } = options;
   
   try {
-    console.log(`🔍 Reddit API: Searching for "${query}"${subreddit ? ` in r/${subreddit}` : ''}`);
+    console.log(`🔍 Reddit API: "${query}" in ${subreddit ? `r/${subreddit}` : 'all Reddit'}`);
     
-    // FIXED: Use proper Reddit search endpoint structure
     let searchUrl: string;
-    
     if (subreddit) {
-      // Search within specific subreddit
       searchUrl = `${REDDIT_API_CONFIG.baseUrl}/r/${subreddit}/search.json?q=${encodeURIComponent(query)}&sort=${sort}&t=${time}&limit=${limit}&restrict_sr=on&type=link`;
     } else {
-      // FIXED: Search across all of Reddit with better parameters
       searchUrl = `${REDDIT_API_CONFIG.baseUrl}/search.json?q=${encodeURIComponent(query)}&sort=${sort}&t=${time}&limit=${limit}&type=link`;
     }
     
-    console.log(`📍 Reddit URL: ${searchUrl}`);
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), REDDIT_API_CONFIG.timeout);
-      
-      const response = await fetch(searchUrl, {
-        headers: {
-          'User-Agent': REDDIT_API_CONFIG.userAgent,
-          'Accept': 'application/json',
-        },
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (response.status === 429) {
-        const retryAfter = response.headers.get('retry-after');
-      const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 2000;
-      console.log(`⏳ Reddit rate limited, waiting ${waitTime}ms...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-      
-      // Retry once after rate limit
-      if (retries > 0) {
-        return await searchRedditAPI(query, subreddit, { ...options, retries: retries - 1 });
-      }
-      }
-      
-      if (!response.ok) {
-        throw new Error(`Reddit API HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-    console.log(`📊 Reddit raw response structure:`, {
-      hasData: !!data,
-      hasDataProp: !!data?.data,
-      hasChildren: !!data?.data?.children,
-      childrenLength: data?.data?.children?.length || 0
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REDDIT_API_CONFIG.timeout);
+    
+    const response = await fetch(searchUrl, {
+      headers: {
+        'User-Agent': REDDIT_API_CONFIG.userAgent,
+        'Accept': 'application/json',
+      },
+      signal: controller.signal
     });
     
+    clearTimeout(timeoutId);
+    
+    if (response.status === 429) {
+      const waitTime = 3000; // 3 seconds for rate limit
+      console.log(`⏳ Rate limited, waiting ${waitTime}ms...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      return { posts: [], isEmpty: true, rateLimited: true };
+    }
+    
+    if (!response.ok) {
+      throw new Error(`Reddit API HTTP ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
     if (!data?.data?.children || !Array.isArray(data.data.children)) {
-      console.warn(`❌ Reddit: Invalid data structure for "${query}"`);
-      return {
-        posts: [],
-        isEmpty: true,
-        query,
-        subreddit,
-        error: 'Invalid data structure'
-      };
+      return { posts: [], isEmpty: true, error: 'Invalid data structure' };
     }
     
     if (data.data.children.length === 0) {
-      console.warn(`❌ Reddit: No results found for "${query}"`);
-        return {
-          posts: [],
-          isEmpty: true,
-          query,
-          subreddit
-        };
-      }
-      
-    console.log(`✅ Reddit: Found ${data.data.children.length} results for "${query}"`);
-      return {
-        posts: data.data.children.map((child: any) => child.data),
-        isEmpty: false,
-        query,
-        subreddit
-      };
-      
-    } catch (error) {
-    console.error(`❌ Reddit API error for "${query}":`, error);
-        return {
-          posts: [],
-          error: error instanceof Error ? error.message : 'Unknown error',
-          failed: true,
-          query,
-          subreddit
-        };
+      return { posts: [], isEmpty: true };
+    }
+    
+    console.log(`✅ Found ${data.data.children.length} results`);
+    return {
+      posts: data.data.children.map((child: any) => child.data),
+      isEmpty: false
+    };
+    
+  } catch (error) {
+    console.error(`❌ Reddit API error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    return { posts: [], error: error instanceof Error ? error.message : 'Unknown error', failed: true };
   }
 };
-
-
 
 // ===============================================
 // IMPROVED DATA EXTRACTION WITH BETTER FILTERING
 // ===============================================
 
-// FIXED: Better Reddit data extraction with improved relevance
+// ENHANCED: Much better data extraction with quality scoring
 const extractRedditDataEnhanced = (redditData: any, businessContext: string) => {
-  if (!redditData?.posts || !Array.isArray(redditData.posts) || redditData.posts.length === 0) {
-    console.warn('❌ No Reddit results to extract');
+  if (!redditData?.posts || !Array.isArray(redditData.posts)) {
     return [];
   }
   
-  console.log(`📊 Processing ${redditData.posts.length} Reddit results...`);
+  console.log(`📊 Processing ${redditData.posts.length} Reddit posts...`);
   
   const validPosts = redditData.posts
     .filter((post: any) => {
-      // FIXED: More lenient content validation
-      const hasTitle = post.title && typeof post.title === 'string' && post.title.length > 3;
-      const hasContent = (post.selftext && post.selftext.length > 5) || post.url;
-      const notDeleted = post.title !== '[deleted]' && post.title !== '[removed]';
-      const notRemoved = post.selftext !== '[removed]' && post.selftext !== '[deleted]';
+      // Basic validation
+      const hasTitle = post.title && post.title.length > 10;
+      const hasContent = (post.selftext && post.selftext.length > 20) || post.url;
+      const notDeleted = !['[deleted]', '[removed]'].includes(post.title);
+      const hasEngagement = (post.score || 0) > 5 || (post.num_comments || 0) > 3;
       
-      const isValid = hasTitle && hasContent && notDeleted && notRemoved;
-      
-      if (!isValid) {
-        console.log(`❌ Filtered out Reddit post: "${post.title?.substring(0, 50)}..." (hasTitle: ${hasTitle}, hasContent: ${hasContent})`);
-      }
-      
-      return isValid;
+      return hasTitle && hasContent && notDeleted && hasEngagement;
     })
     .map((post: any) => {
-      const title = post.title?.trim() || '';
-      const content = post.selftext?.trim() || post.url || '';
-      const subreddit = post.subreddit || 'unknown';
+      const title = post.title.trim();
+      const content = (post.selftext || '').trim();
       const fullText = `${title} ${content}`.toLowerCase();
+      
+      // ENHANCED: Multi-factor relevance scoring
+      const relevanceScore = calculateAdvancedRelevanceScore(fullText, businessContext, {
+        score: post.score || 0,
+        comments: post.num_comments || 0,
+        subreddit: post.subreddit
+      });
       
       return {
         title,
         content,
-        subreddit,
-        url: post.permalink ? `https://reddit.com${post.permalink}` : post.url || '',
+        subreddit: post.subreddit,
+        url: `https://reddit.com${post.permalink}`,
         score: post.score || 0,
         comments: post.num_comments || 0,
-        author: post.author || 'reddit_user',
         created: new Date((post.created_utc || 0) * 1000).toISOString(),
-        relevanceScore: calculateEnhancedRelevanceScore(fullText, businessContext),
+        relevanceScore,
         platform: 'reddit',
-        upvoteRatio: post.upvote_ratio || 0,
-        fullText
+        fullText,
+        // ENHANCED: Extract actionable insights
+        hasQuestion: /\b(how|what|where|when|why|which|should|can|will)\b.*\?/.test(fullText),
+        hasProblem: /\b(problem|issue|challenge|trouble|difficulty|struggle)\b/.test(fullText),
+        hasSolution: /\b(solution|fix|solve|help|advice|tip|guide)\b/.test(fullText),
+        hasComparison: /\b(best|better|vs|versus|compare|alternative)\b/.test(fullText)
       };
     })
-    .filter((item: any) => item.relevanceScore > 1) // Lower threshold
-    .sort((a: any, b: any) => b.relevanceScore - a.relevanceScore)
-    .slice(0, 25);
+    .filter((item: any) => item.relevanceScore > 3) // Higher threshold
+    .sort((a: any, b: any) => {
+      // Sort by relevance score, then engagement
+      if (b.relevanceScore !== a.relevanceScore) {
+        return b.relevanceScore - a.relevanceScore;
+      }
+      return (b.score + b.comments * 2) - (a.score + a.comments * 2);
+    })
+    .slice(0, 30); // Keep top 30 most relevant posts
 
-  console.log(`✅ Reddit: Extracted ${validPosts.length} valid posts`);
-  if (validPosts.length > 0) {
-    console.log(`📊 Top Reddit post: "${validPosts[0].title}" (score: ${validPosts[0].relevanceScore})`);
-  }
-  
+  console.log(`✅ Extracted ${validPosts.length} high-quality posts`);
   return validPosts;
 };
 
-
-
-
+// ENHANCED: Advanced relevance scoring with multiple factors
+const calculateAdvancedRelevanceScore = (text: string, businessContext: string, metadata: any): number => {
+  const lowerText = text.toLowerCase();
+  const lowerContext = businessContext.toLowerCase();
+  let score = 0;
+  
+  // 1. Direct context matching (high weight)
+  const contextWords = lowerContext.split(/\s+/).filter(word => word.length > 2);
+  const tokens = lowerText.split(/[^a-z0-9_]+/);
+  contextWords.forEach(word => {
+    const safeWord = word.replace(/[^a-z0-9_]/g, '');
+    if (!safeWord || safeWord.length <= 2) return;
+    const wordCount = tokens.reduce((acc: number, t: string) => acc + (t === safeWord ? 1 : 0), 0);
+    score += wordCount * 4;
+  });
+  
+  // 2. Business intent signals (high value for phrase generation)
+  const businessSignals = [
+    'need help', 'looking for', 'recommend', 'advice', 'tips', 'guide',
+    'best way', 'how to', 'what should', 'where can', 'who does',
+    'problem with', 'issue with', 'struggling', 'difficulty'
+  ];
+  businessSignals.forEach(signal => {
+    if (lowerText.includes(signal)) score += 6;
+  });
+  
+  // 3. Question format (excellent for phrase generation)
+  if (/\b(how|what|where|when|why|which|should|can|will|do|does|is|are)\b.*\?/.test(lowerText)) {
+    score += 8;
+  }
+  
+  // 4. Commercial intent signals
+  const commercialSignals = [
+    'price', 'cost', 'budget', 'expensive', 'cheap', 'worth',
+    'hire', 'buy', 'purchase', 'service', 'company', 'professional'
+  ];
+  commercialSignals.forEach(signal => {
+    if (lowerText.includes(signal)) score += 3;
+  });
+  
+  // 5. Problem-solution pairs (great for generating helpful phrases)
+  const problemSolutionPairs = [
+    ['problem', 'solution'], ['issue', 'fix'], ['challenge', 'overcome'],
+    ['trouble', 'help'], ['difficult', 'easy'], ['confusing', 'clear']
+  ];
+  problemSolutionPairs.forEach(([problem, solution]) => {
+    if (lowerText.includes(problem) && lowerText.includes(solution)) {
+      score += 5;
+    }
+  });
+  
+  // 6. Engagement quality bonus
+  const engagementScore = (metadata.score || 0) + (metadata.comments || 0) * 2;
+  if (engagementScore > 50) score += 4;
+  else if (engagementScore > 20) score += 2;
+  else if (engagementScore > 10) score += 1;
+  
+  // 7. Content quality indicators
+  const textLength = text.length;
+  if (textLength > 200 && textLength < 1000) score += 3; // Sweet spot for quality content
+  if (textLength > 100) score += 1;
+  
+  // 8. Subreddit relevance bonus
+  const relevantSubs = ['business', 'entrepreneur', 'smallbusiness', 'advice', 'AskReddit'];
+  if (relevantSubs.includes(metadata.subreddit)) score += 2;
+  
+  return Math.max(score, 0);
+};
 
 // ===============================================
 // IMPROVED QUERY GENERATION
 // ===============================================
 
 // FIXED: Better strategic queries generation using concise semantic data
-const generateStrategicQueries = (semanticData: any, businessContext: string, domain: string): string[] => {
+const generateStrategicQueriesLegacy = (semanticData: any, businessContext: string, domain: string): string[] => {
   // Use semantic data if available, otherwise fall back to business context
   const searchTerms = semanticData?.searchTerms || [];
   const keyProblems = semanticData?.keyProblems || [];
@@ -338,97 +440,116 @@ const calculateEnhancedRelevanceScore = (text: string, businessContext: string):
 // ===============================================
 
 const performEnhancedCommunityMining = async (businessContext: string, domain: any, semanticData?: any) => {
-  console.log(`🚀 Starting enhanced community mining for: ${businessContext}`);
+  console.log(`🚀 Enhanced community mining: ${businessContext}`);
   
-  const strategicQueries = generateStrategicQueries(semanticData, businessContext, domain.url);
+  const strategicQueries = generateStrategicQueries(semanticData, businessContext);
+  const targetSubreddits = getTargetSubreddits(businessContext);
+  
   console.log(`📋 Generated ${strategicQueries.length} strategic queries`);
+  console.log(`🎯 Targeting ${targetSubreddits.length} relevant subreddits`);
   
   const allRedditData = [];
   let successfulQueries = 0;
-  let failedQueries = 0;
-
-  // FIXED: Reddit mining with better error handling
-  console.log('🔍 Enhanced Reddit mining...');
   
-  // Try different subreddits for better results
-  const targetSubreddits = ['AskReddit', 'business', 'entrepreneur', 'smallbusiness', 'advice'];
-  
-  for (const query of strategicQueries.slice(0, 8)) { // Limit queries to avoid rate limits
+  // Strategy: Try queries across multiple subreddits for better data coverage
+  for (const query of strategicQueries.slice(0, 8)) {
     try {
-      console.log(`📊 Reddit query: "${query}"`);
+      console.log(`🔍 Mining: "${query}"`);
       
       // Try general search first
       let redditData = await searchRedditAPI(query, undefined, {
         sort: 'top',
-        time: 'all',
-        limit: 15
+        time: 'year',
+        limit: 25
       });
       
-      // If no results, try specific subreddits
-      if (redditData.isEmpty || redditData.posts.length === 0) {
-        for (const subreddit of targetSubreddits.slice(0, 2)) { // Try max 2 subreddits
-          console.log(`📊 Trying r/${subreddit} for "${query}"`);
-          redditData = await searchRedditAPI(query, subreddit, {
-            sort: 'top',
-            time: 'all',
-            limit: 10
-          });
-          
-          if (!redditData.isEmpty && redditData.posts.length > 0) {
-            break; // Found results, stop trying subreddits
-          }
-          
-          await new Promise(resolve => setTimeout(resolve, 500));
+      if (!redditData.failed && !redditData.isEmpty) {
+        const results = extractRedditDataEnhanced(redditData, businessContext);
+        if (results.length > 0) {
+          allRedditData.push(...results);
+          successfulQueries++;
+          console.log(`✅ General search: ${results.length} quality results`);
         }
       }
       
-      if (!redditData.failed && !redditData.isEmpty && redditData.posts.length > 0) {
-        const redditResults = extractRedditDataEnhanced(redditData, businessContext);
-        allRedditData.push(...redditResults);
-        successfulQueries++;
-        console.log(`✅ Reddit: ${redditResults.length} quality results for "${query}"`);
-      } else {
-        failedQueries++;
-        console.warn(`❌ Reddit: No quality results for "${query}"`);
+      // If general search didn't yield much, try targeted subreddits
+      if (redditData.isEmpty || (redditData.posts && redditData.posts.length < 10)) {
+        for (const subreddit of targetSubreddits.slice(0, 3)) {
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Rate limiting
+          
+          const subredditData = await searchRedditAPI(query, subreddit, {
+            sort: 'top',
+            time: 'year',
+            limit: 15
+          });
+          
+          if (!subredditData.failed && !subredditData.isEmpty) {
+            const results = extractRedditDataEnhanced(subredditData, businessContext);
+            if (results.length > 0) {
+              allRedditData.push(...results);
+              console.log(`✅ r/${subreddit}: ${results.length} results for "${query}"`);
+              break; // Found good data, move to next query
+            }
+          }
+        }
       }
       
-      // Rate limiting
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Rate limiting between queries
+      await new Promise(resolve => setTimeout(resolve, REDDIT_API_CONFIG.rateLimit));
       
     } catch (error) {
-      failedQueries++;
-      console.error(`❌ Reddit mining error for "${query}":`, error);
+      console.error(`❌ Error mining "${query}":`, error);
     }
   }
-
-  // FIXED: Better data deduplication and quality filtering
+  
+  // ENHANCED: Better deduplication and quality filtering
   const uniqueRedditData = allRedditData
-    .filter((item: any, index: number, arr: any[]) => 
-      index === arr.findIndex((t: any) => t.url === item.url || (t.title === item.title && Math.abs(t.title.length - item.title.length) < 5))
-    )
-    .sort((a: any, b: any) => b.relevanceScore - a.relevanceScore)
-    .slice(0, 20);
-
+    .filter((item: any, index: number, arr: any[]) => {
+      // Remove duplicates by URL and similar titles
+      const isDuplicate = arr.findIndex((other: any, otherIndex: number) => {
+        if (otherIndex >= index) return false;
+        return other.url === item.url || 
+               (other.title === item.title && Math.abs(other.title.length - item.title.length) < 10);
+      }) !== -1;
+      return !isDuplicate;
+    })
+    .sort((a: any, b: any) => {
+      // Prioritize by relevance, then engagement
+      if (b.relevanceScore !== a.relevanceScore) {
+        return b.relevanceScore - a.relevanceScore;
+      }
+      return (b.score + b.comments * 2) - (a.score + a.comments * 2);
+    })
+    .slice(0, 25); // Keep top 25 highest quality posts
+  
   const dataQuality = {
     totalQueries: strategicQueries.length,
     successfulQueries,
-    failedQueries,
+    failedQueries: strategicQueries.length - successfulQueries,
     redditResults: uniqueRedditData.length,
     totalResults: uniqueRedditData.length,
-    averageRelevance: {
-      reddit: uniqueRedditData.length > 0 ? uniqueRedditData.reduce((sum: number, item: any) => sum + item.relevanceScore, 0) / uniqueRedditData.length : 0
-    },
-    qualityRating: uniqueRedditData.length > 10 ? 'High' : 
-                   uniqueRedditData.length > 3 ? 'Medium' : 'Low'
+    averageRelevance: uniqueRedditData.length > 0 ? 
+      uniqueRedditData.reduce((sum: number, item: any) => sum + item.relevanceScore, 0) / uniqueRedditData.length : 0,
+    qualityRating: uniqueRedditData.length > 15 ? 'High' : 
+                   uniqueRedditData.length > 8 ? 'Medium' : 'Low',
+    hasQuestions: uniqueRedditData.filter((item: any) => item.hasQuestion).length,
+    hasProblems: uniqueRedditData.filter((item: any) => item.hasProblem).length,
+    hasSolutions: uniqueRedditData.filter((item: any) => item.hasSolution).length
   };
-
-  console.log(`📈 Community Mining Results:`, dataQuality);
-  console.log(`🎯 Final data: ${uniqueRedditData.length} Reddit posts`);
-
+  
+  console.log(`📈 Mining Results:`, {
+    quality: dataQuality.qualityRating,
+    posts: dataQuality.redditResults,
+    avgRelevance: dataQuality.averageRelevance.toFixed(1),
+    questions: dataQuality.hasQuestions,
+    problems: dataQuality.hasProblems,
+    solutions: dataQuality.hasSolutions
+  });
+  
   return {
     redditData: uniqueRedditData,
     dataQuality,
-    allData: [...uniqueRedditData]
+    allData: uniqueRedditData
   };
 };
 
@@ -436,7 +557,7 @@ const performEnhancedCommunityMining = async (businessContext: string, domain: a
 // 1. FIXED INTENT-BASED PHRASE GENERATION PROMPT
 // ===============================================
 
-const createRealDataPhrasePrompt = (
+const createOptimizedRealDataPhrasePrompt = (
   keyword: any,
   domain: any,
   realQuestions: any[],
@@ -444,167 +565,43 @@ const createRealDataPhrasePrompt = (
   userLanguagePatterns: any,
   semanticContext: string
 ) => `
-# INTENT-FOCUSED PHRASE GENERATOR v6.0
-## Real User Intent Mapping
+Generate 5 natural search phrases for: "${keyword.term}"
 
-**CRITICAL MISSION:** Generate COMPLETE search phrases that users would actually type, organized by specific search intent.
+REAL USER DATA:
+${realQuestions.slice(0, 5).map((q: any) => `• "${q.question}"`).join('\n')}
 
-**TARGET ANALYSIS:**
-• Primary Keyword: "${keyword.term}"
-• Domain: ${domain.url}
-• Context: ${domain.context || 'General business'}
+USER LANGUAGE: ${userLanguagePatterns.solutionSeekers?.slice(0, 3).join(', ') || 'help, find, best'}
 
-**REAL USER DATA:**
-${realQuestions.slice(0, 8).map((q: any) => `• "${q.question}"`).join('\n')}
+INTENT RULES:
+• Informational (40%): how to, what is, why, guide, tips
+• Navigational (20%): best, top, near me, professional
+• Transactional (25%): hire, buy, get, book, contact
+• Commercial (15%): compare, vs, cost, review
 
-**USER LANGUAGE PATTERNS:**
-${userLanguagePatterns.solutionSeekers?.slice(0, 5).join(', ') || 'help, find, looking for'}
+REQUIREMENTS:
+- Any length is acceptable
+- Natural conversational tone
+- Include "${keyword.term}" naturally
+- Proper grammar and punctuation
+- Real user language patterns
+- Prioritize adapting real Reddit questions and language
 
-## INTENT-SPECIFIC GENERATION RULES
-
-### 1. INFORMATIONAL INTENT (40% weight)
-**User Psychology:** "I need to learn/understand something"
-**Required Elements:**
-- Question words: How, What, Why, When, Where
-- Learning indicators: guide, tutorial, tips, learn, understand
-- Problem-solving: help with, fix, solve, improve
-
-**Template Patterns:**
-- "How to [action] ${keyword.term} [for better results]"
-- "What is the best way to [implement/use] ${keyword.term}"
-- "Complete guide to ${keyword.term} [for specific audience]"
-- "Why ${keyword.term} is important for [business outcome]"
-
-### 2. NAVIGATIONAL INTENT (20% weight)
-**User Psychology:** "I know what I want, help me find it"
-**Required Elements:**
-- Quality indicators: best, top, professional, certified
-- Location modifiers: near me, local, in [city]
-- Specific targeting: for [audience], [industry] specific
-
-**Template Patterns:**
-- "Best ${keyword.term} services [in location]"
-- "Top rated ${keyword.term} professionals near me"
-- "Certified ${keyword.term} experts [for industry]"
-- "Professional ${keyword.term} company [location]"
-
-### 3. TRANSACTIONAL INTENT (25% weight)
-**User Psychology:** "I'm ready to take action/buy"
-**Required Elements:**
-- Action words: hire, buy, get, book, order, contact
-- Urgency: now, today, immediate, emergency
-- Service-focused: consultation, quote, appointment
-
-**Template Patterns:**
-- "Hire ${keyword.term} expert [for specific need]"
-- "Get ${keyword.term} consultation [today/now]"
-- "Book ${keyword.term} services [in location]"
-- "Contact ${keyword.term} professional [for project]"
-
-### 4. COMMERCIAL INVESTIGATION (15% weight)
-**User Psychology:** "I'm comparing options before deciding"
-**Required Elements:**
-- Comparison words: vs, compare, which, alternatives
-- Evaluation: reviews, cost, price, worth it
-- Decision support: best choice, right option
-
-**Template Patterns:**
-- "Compare ${keyword.term} options and pricing"
-- "${keyword.term} cost vs alternatives [in location]"
-- "Which ${keyword.term} service is worth it"
-- "Best ${keyword.term} reviews and comparisons"
-
-## OUTPUT FORMAT
-
-Generate EXACTLY 5 complete phrases following this JSON structure:
-
+JSON FORMAT:
 {
   "phrases": [
     {
-      "phrase": "How to implement effective ${keyword.term} strategies for small business growth",
+      "phrase": "How to find reliable ${keyword.term} services that actually work",
       "intent": "Informational",
-      "intentConfidence": 90,
-      "relevanceScore": 85,
-      "conversionPotential": 70,
-      "voiceSearchOptimized": true,
-      "wordCount": 10,
-      "intentJustification": "Uses 'how to' pattern, educational focus, problem-solving orientation",
-      "targetAudience": "small business owners seeking implementation guidance",
-      "searchVolumePrediction": "Medium"
-    },
-    {
-      "phrase": "Best ${keyword.term} services near me for professional results",
-      "intent": "Navigational", 
       "intentConfidence": 85,
       "relevanceScore": 90,
-      "conversionPotential": 80,
-      "voiceSearchOptimized": true,
-      "wordCount": 8,
-      "intentJustification": "Uses 'best' + 'near me' pattern, quality + location focused",
-      "targetAudience": "users ready to find local providers",
-      "searchVolumePrediction": "High"
-    },
-    {
-      "phrase": "Hire ${keyword.term} expert for immediate project consultation",
-      "intent": "Transactional",
-      "intentConfidence": 95,
-      "relevanceScore": 88,
-      "conversionPotential": 95,
-      "voiceSearchOptimized": true,
-      "wordCount": 8,
-      "intentJustification": "Uses 'hire' action word + 'immediate', clear purchase intent",
-      "targetAudience": "users ready to engage services immediately",
-      "searchVolumePrediction": "Medium"
-    },
-    {
-      "phrase": "Compare ${keyword.term} pricing and service packages available",
-      "intent": "Commercial Investigation",
-      "intentConfidence": 88,
-      "relevanceScore": 82,
       "conversionPotential": 75,
       "voiceSearchOptimized": true,
-      "wordCount": 8,
-      "intentJustification": "Uses 'compare' + 'pricing', evaluation-focused",
-      "targetAudience": "users in decision-making phase",
-      "searchVolumePrediction": "Medium"
-    },
-    {
-      "phrase": "What makes ${keyword.term} effective for sustainable business results",
-      "intent": "Informational",
-      "intentConfidence": 85,
-      "relevanceScore": 83,
-      "conversionPotential": 65,
-      "voiceSearchOptimized": true,
-      "wordCount": 9,
-      "intentJustification": "Uses 'what makes' question pattern, benefit-focused",
-      "targetAudience": "users seeking to understand value proposition",
-      "searchVolumePrediction": "Medium"
+      "basedOnData": "User language"
     }
   ]
 }
 
-## CRITICAL REQUIREMENTS
-
-✅ MUST HAVE:
-- Each phrase 8-15 words (voice search optimized)
-- Natural conversational language
-- Clear intent signals in every phrase
-- ${keyword.term} prominently featured
-- Actionable and specific
-- Real user language patterns
-
-❌ AVOID:
-- Keyword stuffing
-- Unnatural corporate language
-- Generic templates
-- Missing intent signals
-- Too short (<6 words) or too long (>16 words)
-- Duplicate intent patterns
-
-**VALIDATION:** Each phrase must sound like something a real person would type into Google when they have that specific intent.
-
-Return ONLY the JSON object.
-`;
+Generate exactly 5 complete, natural phrases.`;
 
 // ===============================================
 // 2. ENHANCED INTENT VALIDATION SYSTEM
@@ -715,11 +712,7 @@ const calculateIntentConfidence = (phrase: string, intent: string) => {
 const validatePhraseQuality = (phrase: string) => {
   const issues = [];
   
-  // Word count check (voice search optimized)
-  const wordCount = phrase.trim().split(/\s+/).length;
-  if (wordCount < 8 || wordCount > 15) {
-    issues.push(`Word count ${wordCount} not optimal for voice search (8-15 words)`);
-  }
+  // Word count check removed: any length is valid
   
   // Intent signal strength
   const hasStrongIntent = /\b(how to|best|top|guide|help|find|buy|hire|compare|review)\b/i.test(phrase);
@@ -760,75 +753,116 @@ const extractEntities = (phrase: string, context: string) => {
 };
 
 // ===============================================
-// ENHANCED PHRASE GENERATION WITH REAL USER DATA
+// ENHANCED PHRASE GENERATION WITH USER DATA
 // ===============================================
 
 // 1. EXTRACT REAL QUESTIONS AND PHRASES FROM COMMUNITY DATA
 const extractRealUserQuestions = (communityData: any) => {
-  const realQuestions: any[] = [];
-  const realPhrases: any[] = [];
-  
-  if (!communityData || !communityData.sources || !communityData.sources.dataPoints) {
-    return { realQuestions: [], realPhrases: [], userLanguagePatterns: [] };
+  if (!communityData?.sources?.dataPoints) {
+    return { realQuestions: [], realPhrases: [], userLanguagePatterns: {} };
   }
   
   const dataPoints = communityData.sources.dataPoints;
+  const realQuestions: any[] = [];
+  const realPhrases: any[] = [];
   
   dataPoints.forEach((item: any) => {
-    // Extract questions from titles and content
-    const combinedText = `${item.title} ${item.content}`.toLowerCase();
+    const combinedText = `${item.title} ${item.content}`;
     
-    // Extract direct questions (with question marks)
-    const directQuestions = combinedText.match(/[^.!?]*\?[^.!?]*/g) || [];
-    directQuestions.forEach((q: string) => {
-      const cleanQuestion = q.trim().replace(/^\W+|\W+$/g, '');
-      if (cleanQuestion.length > 10 && cleanQuestion.length < 150) {
+    // Extract high-value questions (with question marks)
+    const questions = combinedText.match(/[^.!]*\?[^.!]*/g) || [];
+    questions.forEach((q: string) => {
+      const clean = q.trim().replace(/^\W+|\W+$/g, '');
+      if (clean.length > 15 && clean.length < 120) {
         realQuestions.push({
-          question: cleanQuestion,
-          platform: item.platform,
-          relevanceScore: item.relevanceScore || 0,
-          engagement: item.score || item.answers || 0
+          question: clean,
+          relevanceScore: item.relevanceScore,
+          engagement: item.score + item.comments,
+          hasCommercialIntent: /\b(best|price|cost|hire|buy|service)\b/.test(clean.toLowerCase()),
+          hasInformationalIntent: /\b(how|what|why|where|when)\b/.test(clean.toLowerCase()),
+          platform: 'reddit'
         });
       }
     });
     
-    // Extract problem statements and "how to" patterns
-    const problemPatterns = [
-      /how (?:do i|can i|to|can you|do you) ([^.!?]{10,100})/gi,
-      /what (?:is the best|are the best|should i) ([^.!?]{10,100})/gi,
-      /where (?:can i|do i|should i) ([^.!?]{10,100})/gi,
-      /why (?:is|are|do|does) ([^.!?]{10,100})/gi,
-      /when (?:should i|is the best time to) ([^.!?]{10,100})/gi,
-      /which (?:is better|should i choose|one) ([^.!?]{10,100})/gi,
-      /i (?:need help with|want to|am looking for) ([^.!?]{10,100})/gi,
-      /looking for (?:advice|help|tips) (?:on|with|about) ([^.!?]{10,100})/gi,
-      /anyone (?:know|tried|recommend) ([^.!?]{10,100})/gi,
-      /best way to ([^.!?]{10,100})/gi
+    // Extract problem statements and help requests
+    const helpPatterns = [
+      /(?:need help with|looking for|advice on|tips for|guide to) ([^.!?]{10,80})/gi,
+      /(?:how (?:do|can|to)) ([^.!?]{8,60})/gi,
+      /(?:what (?:is|are) the best) ([^.!?]{8,60})/gi,
+      /(?:where can i (?:find|get)) ([^.!?]{8,60})/gi,
+      /(?:struggling with|having trouble with|issues with) ([^.!?]{8,60})/gi
     ];
     
-    problemPatterns.forEach(pattern => {
+    helpPatterns.forEach(pattern => {
       const matches = [...combinedText.matchAll(pattern)];
       matches.forEach(match => {
-        if (match[1] && match[1].trim().length > 5) {
+        if (match[0] && match[0].trim().length > 10) {
           realPhrases.push({
             phrase: match[0].trim(),
-            extractedContext: match[1].trim(),
-            platform: item.platform,
-            relevanceScore: item.relevanceScore || 0,
-            engagement: item.score || item.answers || 0
+            context: match[1]?.trim() || '',
+            relevanceScore: item.relevanceScore,
+            engagement: item.score + item.comments,
+            type: 'help_request'
           });
         }
       });
     });
   });
   
-  // Extract user language patterns
-  const userLanguagePatterns = extractLanguagePatterns(dataPoints);
+  // Sort by engagement and relevance, keep top results
+  realQuestions.sort((a, b) => (b.engagement + b.relevanceScore) - (a.engagement + a.relevanceScore));
+  realPhrases.sort((a, b) => (b.engagement + b.relevanceScore) - (a.engagement + a.relevanceScore));
   
-  return { 
-    realQuestions: realQuestions.slice(0, 20), // Top 20 questions
-    realPhrases: realPhrases.slice(0, 30), // Top 30 phrases
-    userLanguagePatterns 
+  // Extract authentic language patterns
+  const userLanguagePatterns = extractAdvancedLanguagePatterns(dataPoints);
+  
+  return {
+    realQuestions: realQuestions.slice(0, 15),
+    realPhrases: realPhrases.slice(0, 20),
+    userLanguagePatterns
+  };
+};
+
+const extractAdvancedLanguagePatterns = (dataPoints: any[]) => {
+  const patterns = {
+    questionStarters: new Set<string>(),
+    problemDescriptors: new Set<string>(),
+    solutionSeekers: new Set<string>(),
+    qualityIndicators: new Set<string>(),
+    urgencyMarkers: new Set<string>()
+  };
+  
+  dataPoints.forEach((item: any) => {
+    const text = `${item.title} ${item.content}`.toLowerCase();
+    
+    // Extract question starters
+    const questionStarters = text.match(/\b(how do i|what is|where can i|when should i|why does|which is|should i|can someone)\b/g) || [];
+    questionStarters.forEach(starter => patterns.questionStarters.add(starter));
+    
+    // Extract problem language
+    const problemWords = text.match(/\b(struggling with|having trouble|problem with|issue with|can't figure out|need help with|stuck on)\b/g) || [];
+    problemWords.forEach(word => patterns.problemDescriptors.add(word));
+    
+    // Extract solution-seeking language
+    const solutionWords = text.match(/\b(looking for|need to find|want to|trying to|hoping to|seeking|searching for)\b/g) || [];
+    solutionWords.forEach(word => patterns.solutionSeekers.add(word));
+    
+    // Extract quality indicators
+    const qualityWords = text.match(/\b(best|top|excellent|great|amazing|reliable|trusted|proven|effective)\b/g) || [];
+    qualityWords.forEach(word => patterns.qualityIndicators.add(word));
+    
+    // Extract urgency markers
+    const urgencyWords = text.match(/\b(urgent|asap|quickly|fast|immediate|now|today|soon)\b/g) || [];
+    urgencyWords.forEach(word => patterns.urgencyMarkers.add(word));
+  });
+  
+  return {
+    questionStarters: Array.from(patterns.questionStarters).slice(0, 8),
+    problemDescriptors: Array.from(patterns.problemDescriptors).slice(0, 8),
+    solutionSeekers: Array.from(patterns.solutionSeekers).slice(0, 8),
+    qualityIndicators: Array.from(patterns.qualityIndicators).slice(0, 8),
+    urgencyMarkers: Array.from(patterns.urgencyMarkers).slice(0, 5)
   };
 };
 
@@ -934,7 +968,7 @@ Adapted for "SEO services": "How do I find reliable SEO services that actually d
 ✓ Uses authentic community language patterns
 ✓ Addresses real problems found in the data
 ✓ Natural conversational flow
-✓ 8-15 words for voice search optimization
+✓ Any length is acceptable; prioritize clarity and authenticity
 ✓ Clear intent signals
 
 **CRITICAL OUTPUT FORMAT:**
@@ -951,58 +985,7 @@ Return this exact JSON structure:
       "relevanceScore": 92,
       "conversionPotential": 78,
       "voiceSearchOptimized": true,
-      "basedOnRealQuestion": "How to implement diversity strategies",
-      "userLanguageUsed": ["how to", "implement", "effectively"],
-      "platform": "reddit",
-      "naturalness": 95
-    },
-    {
-      "phrase": "What are the best ${keyword.term} practices for small businesses",
-      "intent": "Navigational",
-      "intentConfidence": 80,
-      "relevanceScore": 88,
-      "conversionPotential": 75,
-      "voiceSearchOptimized": true,
-      "basedOnRealQuestion": "Best practices for diversity",
-      "userLanguageUsed": ["best", "practices", "small businesses"],
-      "platform": "reddit",
-      "naturalness": 90
-    },
-    {
-      "phrase": "Why is ${keyword.term} important for company culture",
-      "intent": "Informational",
-      "intentConfidence": 75,
-      "relevanceScore": 85,
-      "conversionPotential": 70,
-      "voiceSearchOptimized": true,
-      "basedOnRealQuestion": "Why diversity matters",
-      "userLanguageUsed": ["why", "important", "company culture"],
-      "platform": "both",
-      "naturalness": 88
-    },
-    {
-      "phrase": "Compare ${keyword.term} training programs and choose the right one",
-      "intent": "Commercial Investigation",
-      "intentConfidence": 70,
-      "relevanceScore": 82,
-      "conversionPotential": 85,
-      "voiceSearchOptimized": true,
-      "basedOnRealQuestion": "Compare training programs",
-      "userLanguageUsed": ["compare", "training programs", "choose"],
-      "platform": "reddit",
-      "naturalness": 92
-    },
-    {
-      "phrase": "Professional ${keyword.term} consulting services for immediate results",
-      "intent": "Transactional",
-      "intentConfidence": 75,
-      "relevanceScore": 80,
-      "conversionPotential": 90,
-      "voiceSearchOptimized": true,
-      "basedOnRealQuestion": "Professional consulting services",
-      "userLanguageUsed": ["professional", "consulting", "immediate results"],
-      "platform": "reddit",
-      "naturalness": 85
+      "basedOnData": "User language"
     }
   ]
 }
@@ -1014,13 +997,12 @@ Return this exact JSON structure:
 const validatePhraseNaturalness = (phrase: string) => {
   const naturalityChecks = {
     hasQuestionWords: /^(how|what|where|when|why|which|who|is|are|can|should|will|do|does)/i.test(phrase),
-    conversationalFlow: !/\b(optimization|maximization|utilization)\b/i.test(phrase), // Avoid overly technical terms
-    naturalLength: phrase.split(' ').length >= 8 && phrase.split(' ').length <= 15,
+    conversationalFlow: !/\b(optimization|maximization|utilization)\b/i.test(phrase),
     noKeywordStuffing: !/(seo|optimization|services|solutions|expert|professional){2,}/i.test(phrase),
     humanLikeLanguage: /\b(help|find|choose|get|need|want|looking for|trying to)\b/i.test(phrase)
   };
   
-  const score = Object.values(naturalityChecks).filter(Boolean).length * 20;
+  const score = Object.values(naturalityChecks).filter(Boolean).length * 25;
   
   return {
     score,
@@ -1028,7 +1010,6 @@ const validatePhraseNaturalness = (phrase: string) => {
     suggestions: {
       addQuestionWord: !naturalityChecks.hasQuestionWords,
       simplifyLanguage: !naturalityChecks.conversationalFlow,
-      adjustLength: !naturalityChecks.naturalLength,
       reduceKeywords: !naturalityChecks.noKeywordStuffing,
       addHumanLanguage: !naturalityChecks.humanLikeLanguage
     }
@@ -1044,14 +1025,13 @@ const generateEnhancedIntentPhrases = async (
   domain: any,
   semanticContext: string,
   communityInsightData: any,
-  competitorAnalysisData: any,
   keywordSearchPatterns: any,
   sendEvent: any
 ) => {
   try {
     console.log(`🎯 Generating intent-based phrases for: ${keyword.term}`);
     
-    // Extract real user data
+    // Extract user data
     const { realQuestions, realPhrases, userLanguagePatterns } = extractRealUserQuestions(communityInsightData);
     
     // Emit extracted Reddit posts for this keyword during phrase generation
@@ -1068,7 +1048,7 @@ const generateEnhancedIntentPhrases = async (
     } catch {}
     
     // Use intent-focused prompt
-    const prompt = createRealDataPhrasePrompt(
+    const prompt = createOptimizedRealDataPhrasePrompt(
       keyword,
       domain,
       realQuestions,
@@ -1078,19 +1058,19 @@ const generateEnhancedIntentPhrases = async (
     );
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4o', // Keep full model for phrase generation quality
       messages: [
         {
           role: 'system',
-          content: 'You are an expert SEO specialist focused on creating intent-based search phrases that real users would type. Always return valid JSON with complete, natural phrases organized by search intent.'
+          content: 'Generate natural search phrases. Focus on conversational language and proper grammar. Return valid JSON only.'
         },
         {
           role: 'user',
           content: prompt
         }
       ],
-      temperature: 0.2, // Lower temperature for more consistent intent focus
-      max_tokens: 2500,
+      temperature: 0.3, // Slightly higher for more natural variation
+      max_tokens: 1500, // Reduced from 2500
       response_format: { type: "json_object" }
     });
 
@@ -1155,7 +1135,7 @@ const generateEnhancedIntentPhrases = async (
             intent: phraseObj.intent,
             intentConfidence: Math.min(100, Math.max(50, phraseObj.intentConfidence || 80)),
             relevanceScore: Math.min(100, Math.max(60, phraseObj.relevanceScore || 85)),
-            sources: realQuestions.length > 0 ? ['Real User Data', 'Intent Analysis'] : ['AI Generated', 'Intent Focused'],
+            sources: realQuestions.length > 0 ? ['User Data', 'Intent Analysis'] : ['AI Generated', 'Intent Focused'],
             trend: 'Rising',
             isSelected: false,
             tokenUsage: Math.floor((completion.usage?.total_tokens || 0) / phraseData.length)
@@ -1200,34 +1180,34 @@ const generateEnhancedIntentPhrases = async (
     // Enhanced fallback with proper intent distribution
     const intentBasedFallback = [
       {
-        phrase: `How to implement ${keyword.term} effectively for better business outcomes`,
+        phrase: `How to choose the right ${keyword.term} for my business needs`,
         intent: 'Informational',
-        intentConfidence: 80,
-        relevanceScore: 85
-      },
-      {
-        phrase: `Best ${keyword.term} services near me for professional results`,
-        intent: 'Navigational',
         intentConfidence: 85,
         relevanceScore: 88
       },
       {
-        phrase: `Hire ${keyword.term} expert for immediate consultation and support`,
-        intent: 'Transactional',
+        phrase: `Best ${keyword.term} services near me with good reviews`,
+        intent: 'Navigational',
         intentConfidence: 90,
+        relevanceScore: 85
+      },
+      {
+        phrase: `What does professional ${keyword.term} cost in ${domain.location || '2024'}`,
+        intent: 'Commercial Investigation',
+        intentConfidence: 85,
         relevanceScore: 82
       },
       {
-        phrase: `Compare ${keyword.term} costs and service options available`,
-        intent: 'Commercial Investigation',
-        intentConfidence: 85,
-        relevanceScore: 80
+        phrase: `Hire experienced ${keyword.term} consultant for immediate results`,
+        intent: 'Transactional',
+        intentConfidence: 92,
+        relevanceScore: 86
       },
       {
-        phrase: `What makes ${keyword.term} essential for business success`,
+        phrase: `Why is ${keyword.term} important for small business growth`,
         intent: 'Informational',
-        intentConfidence: 75,
-        relevanceScore: 83
+        intentConfidence: 80,
+        relevanceScore: 84
       }
     ];
 
@@ -1249,7 +1229,7 @@ const generateEnhancedIntentPhrases = async (
 };
 
 // ===============================================
-// 5. UPDATED ENHANCED PHRASE GENERATION FUNCTION WITH REAL USER DATA (LEGACY)
+// 5. UPDATED ENHANCED PHRASE GENERATION FUNCTION WITH USER DATA (LEGACY)
 // ===============================================
 
 const generateEnhancedPhrases = async (
@@ -1257,17 +1237,16 @@ const generateEnhancedPhrases = async (
   domain: any,
   semanticContext: string,
   communityInsightData: any,
-  competitorAnalysisData: any,
   keywordSearchPatterns: any,
   sendEvent: any
 ) => {
   try {
-    // Extract real user data from community insights
+    // Extract user data from community insights
     const { realQuestions, realPhrases, userLanguagePatterns } = extractRealUserQuestions(communityInsightData);
     
     console.log(`Extracted ${realQuestions.length} real questions and ${realPhrases.length} real phrases for ${keyword.term}`);
     
-    // Use real data if available, otherwise fallback to original method
+    // Use user data if available, otherwise fallback to original method
     let prompt;
     if (realQuestions.length > 0 || realPhrases.length > 0) {
       prompt = createLegacyRealDataPhrasePrompt(
@@ -1278,7 +1257,7 @@ const generateEnhancedPhrases = async (
         userLanguagePatterns,
         semanticContext
       );
-      console.log(`Using real community data for ${keyword.term}`);
+      console.log(`Using community data for ${keyword.term}`);
     } else {
       // Fallback to legacy prompt if no real data
       prompt = createLegacyRealDataPhrasePrompt(
@@ -1289,7 +1268,7 @@ const generateEnhancedPhrases = async (
         {},
         semanticContext
       );
-      console.log(`No real community data found for ${keyword.term}, using fallback method`);
+      console.log(`No community data found for ${keyword.term}, using fallback method`);
     }
 
     const completion = await openai.chat.completions.create({
@@ -1297,7 +1276,7 @@ const generateEnhancedPhrases = async (
       messages: [
         {
           role: 'system',
-          content: 'You are an expert at converting real user questions into SEO-optimized search phrases. Always maintain the authentic, conversational tone of real users. Return valid JSON arrays only.'
+          content: 'You are an expert at converting user questions into search phrases. Maintain authentic, conversational tone. Return valid JSON arrays only.'
         },
         {
           role: 'user',
@@ -1363,9 +1342,9 @@ const generateEnhancedPhrases = async (
           const words = phraseText.trim().split(/\s+/);
           let optimizedPhrase = phraseText;
           
-          // Skip if it's just a single word or very short
-          if (words.length < 3) {
-            console.warn(`Phrase too short at index ${phraseIndex}: "${phraseText}"`);
+          // No minimum word count; accept any non-empty phrase
+          if (phraseText.trim().length === 0) {
+            console.warn(`Empty phrase at index ${phraseIndex}`);
             return;
           }
           
@@ -1393,7 +1372,7 @@ const generateEnhancedPhrases = async (
             intent: phraseObj.intent || 'Informational',
             intentConfidence: Math.min(100, Math.max(50, phraseObj.intentConfidence || 85)),
             relevanceScore: Math.min(100, Math.max(50, phraseObj.relevanceScore || 85)),
-            sources: realQuestions.length > 0 ? ['Real User Questions', 'Community Data'] : ['AI Generated'],
+            sources: realQuestions.length > 0 ? ['User Questions', 'Community Data'] : ['AI Generated'],
             trend: 'Rising',
             isSelected: false,
             tokenUsage: Math.floor((completion.usage?.total_tokens || 0) / phraseData.length)
@@ -1431,7 +1410,7 @@ const generateEnhancedPhrases = async (
   } catch (error) {
     console.error(`Enhanced phrase generation with real data failed for ${keyword.term}:`, error);
     
-    // Enhanced fallback with real user patterns if available
+    // Enhanced fallback with user patterns if available
     const { userLanguagePatterns } = extractRealUserQuestions(communityInsightData);
     
     // Ensure userLanguagePatterns is an object with the expected properties
@@ -1446,34 +1425,34 @@ const generateEnhancedPhrases = async (
     
     const fallbackPhrases = [
       {
-        phrase: `How to ${patterns.solutionSeekers?.[0] || 'find'} ${keyword.term} that actually works`,
+        phrase: `How to choose the right ${keyword.term} for my business needs`,
         intent: 'Informational',
-        intentConfidence: 80,
-        relevanceScore: 85
-      },
-      {
-        phrase: `What are the ${patterns.qualityIndicators?.[0] || 'best'} ${keyword.term} options available`,
-        intent: 'Navigational', 
         intentConfidence: 85,
         relevanceScore: 88
       },
       {
-        phrase: `${patterns.problemDescriptors?.[0] || 'Having trouble with'} ${keyword.term} and need help`,
-        intent: 'Informational',
-        intentConfidence: 75,
+        phrase: `Best ${keyword.term} services near me with good reviews`,
+        intent: 'Navigational',
+        intentConfidence: 90,
+        relevanceScore: 85
+      },
+      {
+        phrase: `What does professional ${keyword.term} cost in ${domain.location || '2024'}`,
+        intent: 'Commercial Investigation',
+        intentConfidence: 85,
         relevanceScore: 82
       },
       {
-        phrase: `Compare ${keyword.term} solutions to choose the right one`,
-        intent: 'Commercial Investigation',
-        intentConfidence: 70,
-        relevanceScore: 80
+        phrase: `Hire experienced ${keyword.term} consultant for immediate results`,
+        intent: 'Transactional',
+        intentConfidence: 92,
+        relevanceScore: 86
       },
       {
-        phrase: `Professional ${keyword.term} services for immediate results`,
-        intent: 'Transactional',
-        intentConfidence: 75,
-        relevanceScore: 83
+        phrase: `Why is ${keyword.term} important for small business growth`,
+        intent: 'Informational',
+        intentConfidence: 80,
+        relevanceScore: 84
       }
     ];
 
@@ -1856,8 +1835,7 @@ router.post('/:domainId/step3/generate', authenticateToken, async (req, res) => 
     // Initialize generation steps according to flowchart
     const generatingSteps = [
       { name: 'Semantic Content Analysis', status: 'pending', progress: 0, description: 'Analyzing brand voice, theme, and target audience' },
-              { name: 'Community Data Mining', status: 'pending', progress: 0, description: 'Extracting real insights from Reddit using Reddit API' },
-      { name: 'Competitor Research', status: 'pending', progress: 0, description: 'Researching competitors mentioned in community discussions' },
+      { name: 'Community Data Mining', status: 'pending', progress: 0, description: 'Extracting real insights from Reddit using Reddit API' },
       { name: 'Search Pattern Analysis', status: 'pending', progress: 0, description: 'Analyzing user search behaviors' },
       { name: 'Creating optimized intent phrases', status: 'pending', progress: 0, description: 'Generating optimized search phrases' },
       { name: 'Intent Classification', status: 'pending', progress: 0, description: 'Classifying generated phrases by intent' },
@@ -1870,9 +1848,7 @@ router.post('/:domainId/step3/generate', authenticateToken, async (req, res) => 
 
     // Initialize data storage arrays
     let communityInsightData: any = null;
-    let competitorAnalysisData: any = null;
     const communityInsights: any[] = [];
-    const competitorAnalysis: any[] = [];
     const searchPatterns: any[] = [];
     const newSearchPatterns: any[] = []; // Separate array for new patterns to insert
 
@@ -1912,56 +1888,33 @@ router.post('/:domainId/step3/generate', authenticateToken, async (req, res) => 
     } else {
       try {
       const semanticPrompt = `
-You are an expert brand strategist specializing in concise community intelligence extraction. Your task is to generate ONLY essential, search-friendly content for community data mining.
+Extract search-friendly business data for Reddit mining:
 
-DOMAIN ANALYSIS TARGET:
-URL: ${domain.url}
-Business Context: ${domain.context || 'Context not provided'}
-Geographic Focus: ${domain.location || 'Global market'}
+DOMAIN: ${domain.url}
+CONTEXT: ${domain.context || 'General business'}
+LOCATION: ${domain.location || 'Global'}
 
-      CRITICAL REQUIREMENT: Generate ONLY concise, search-friendly content that can be used for Reddit queries. Keep each section under 50 words.
-
-OUTPUT FORMAT:
-Return a concise JSON object with search-friendly content:
+Generate concise JSON (max 30 words per field):
 
 {
-  "coreBusiness": "Brief description of what the business does (max 30 words)",
+  "coreBusiness": "What the business does",
   "primaryServices": ["service1", "service2", "service3"],
-  "targetAudience": "Primary customer type (max 20 words)",
-  "location": "${domain.location || 'Global'}",
-  "industry": "Main industry category (max 15 words)",
+  "targetAudience": "Main customer type", 
+  "industry": "Industry category",
   "keyProblems": ["problem1", "problem2", "problem3"],
-  "searchTerms": ["term1", "term2", "term3", "term4", "term5"],
-  "communityTopics": ["topic1", "topic2", "topic3"]
+  "searchTerms": ["term1", "term2", "term3"],
+  "location": "${domain.location || 'Global'}"
 }
 
-RULES:
-- Keep all text under 50 words per field
-- Focus on search-friendly terms
-- Avoid long descriptions
-- Use simple, direct language
-- Prioritize terms people actually search for
-- Include location-specific terms if relevant
-- Focus on problems and solutions people discuss online
-
-EXAMPLE OUTPUT:
-{
-  "coreBusiness": "Digital marketing agency specializing in SEO and reputation management",
-  "primaryServices": ["SEO", "reputation management", "digital marketing"],
-  "targetAudience": "Small businesses needing digital presence",
-  "location": "New York",
-  "industry": "Digital marketing",
-  "keyProblems": ["poor online visibility", "negative reviews", "low website traffic"],
-  "searchTerms": ["SEO services", "reputation management", "digital marketing agency"],
-  "communityTopics": ["SEO tips", "online reputation", "digital marketing"]
-}
+Focus on terms people actually search for.
 `;
 
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-4o-mini', // Use mini for faster, cheaper processing
         messages: [{ role: 'user', content: semanticPrompt }],
-        temperature: 0.3,
-        max_tokens: 1500
+        temperature: 0.2,
+        max_tokens: 800, // Reduced from 1500
+        response_format: { type: "json_object" }
       });
 
       const response = completion.choices[0]?.message?.content;
@@ -2133,226 +2086,64 @@ EXAMPLE OUTPUT:
         if (dataQuality.qualityRating !== 'Low' && uniqueRedditData.length > 5) {
           try {
             const enhancedCommunityAnalysisPrompt = `
-# ELITE COMMUNITY INTELLIGENCE EXTRACTION v2.0
-## Advanced User Intent & Market Intelligence Analysis
+Extract actionable insights from community data:
 
-You are a world-class digital anthropologist and business intelligence expert with deep expertise in community behavior analysis, user psychology, and market intelligence extraction from social platforms.
+BUSINESS: ${domain.url} - ${domain.context || businessContext}
+MARKET: ${domain.location || 'Global'}
+DATA: ${uniqueRedditData.length} Reddit posts, Quality: ${dataQuality.qualityRating}
 
-## DATA INTELLIGENCE BRIEF
-**Target Business:** ${domain.url}
-**Industry Context:** ${domain.context || businessContext}
-**Geographic Market:** ${domain.location || 'Global'}
-**Data Quality:** ${dataQuality.qualityRating} (${dataQuality.successfulQueries}/${dataQuality.totalQueries} successful queries)
-
-## COMMUNITY DATA ANALYZED
-**Reddit Insights:** ${uniqueRedditData.length} high-relevance discussions
-**Average Relevance Score:** Reddit ${dataQuality.averageRelevance.reddit.toFixed(1)}/20
-
-**Top Community Content Sample:**
+TOP DISCUSSIONS:
 ${uniqueRedditData
-  .slice(0, 8)
-  .map((item: any, idx: number) => `${idx + 1}. [REDDIT] ${item.title}\n   Content: "${item.content.substring(0, 150)}..."\n   Relevance: ${item.relevanceScore}/20`)
-  .join('\n\n')}
+  .slice(0, 5)
+  .map((item: any, idx: number) => `${idx + 1}. "${item.title}" - ${item.content.substring(0, 100)}...`)
+  .join('\n')}
 
-## ADVANCED EXTRACTION FRAMEWORK
-
-### 1. USER PSYCHOLOGY INTELLIGENCE
-Extract deep behavioral insights about how users think, feel, and search in this domain:
-- **Pain Point Psychology:** What frustrates users most about current solutions
-- **Decision Making Patterns:** How users evaluate and choose between options
-- **Language Evolution:** How terminology and jargon is evolving in community discussions
-- **Trust Signals:** What makes users trust and recommend solutions
-- **Expertise Hierarchy:** How users recognize and defer to authority in this space
-
-### 2. SEARCH INTENT BEHAVIORAL MAPPING
-Map real community language to search behaviors:
-- **Problem Articulation Patterns:** How users describe their challenges
-- **Solution Seeking Language:** Specific words/phrases users employ when looking for help
-- **Comparison Framework:** How users frame competitive evaluations
-- **Implementation Concerns:** What users worry about when adopting solutions
-- **Success Measurement:** How users define and measure successful outcomes
-
-### 3. COMPETITIVE INTELLIGENCE EXTRACTION
-Extract actionable competitive insights from authentic user discussions:
-- **Brand Mention Context:** When and why users mention specific companies
-- **Switching Triggers:** What causes users to change from one solution to another
-- **Feature Gap Identification:** What users consistently request but don't find
-- **Service Quality Perceptions:** How users perceive different providers
-- **Price Sensitivity Patterns:** How cost factors into user decision making
-
-### 4. MARKET OPPORTUNITY IDENTIFICATION
-Identify untapped opportunities from community frustrations:
-- **Underserved Use Cases:** Specific scenarios lacking adequate solutions
-- **Communication Gaps:** Where current providers fail to connect with users
-- **Innovation Opportunities:** Emerging needs not yet addressed by market
-- **Service Enhancement Areas:** Consistent improvement requests across discussions
-- **Content Gap Analysis:** Information users seek but struggle to find
-
-## OUTPUT SPECIFICATION
-
-Generate comprehensive business intelligence in this exact JSON structure:
+Extract user psychology, search behavior, and market gaps:
 
 {
   "userIntelligence": {
-    "primaryPersonas": [
-      {
-        "personaName": "Descriptive persona name",
-        "painPoints": ["specific frustration 1", "specific frustration 2"],
-        "searchLanguage": ["actual phrases they use", "terminology patterns"],
-        "decisionFactors": ["what influences their choices"],
-        "trustIndicators": ["what builds confidence"],
-        "successMetrics": ["how they measure results"]
-      }
-    ],
-    "psychologyInsights": {
-      "emotionalTriggers": ["fear of failure", "desire for efficiency", "need for control"],
-      "motivationalDrivers": ["save time", "reduce costs", "improve results"],
-      "barriersToPurchase": ["price concerns", "complexity fears", "trust issues"],
-      "conversionCatalysts": ["social proof", "expert endorsement", "risk mitigation"]
-    }
+    "painPoints": ["specific user frustration", "another frustration"],
+    "searchLanguage": ["how users actually search", "common phrases"],
+    "decisionFactors": ["what influences choices", "trust signals"]
   },
   "searchBehaviorIntelligence": {
-    "naturalLanguagePatterns": [
+    "naturalPatterns": [
       {
-        "pattern": "how users naturally ask questions",
-        "frequency": "High|Medium|Low",
-        "intent": "Informational|Navigational|Transactional|Commercial",
-        "examples": ["actual user phrase 1", "actual user phrase 2"]
+        "pattern": "actual user search phrase",
+        "intent": "Informational",
+        "frequency": "High"
       }
     ],
-    "problemFramingLanguage": {
-      "commonPhrases": ["how users describe problems"],
-      "emotionalContext": ["frustrated language patterns"],
-      "urgencyIndicators": ["words showing time sensitivity"],
-      "specificityLevel": ["general vs specific problem descriptions"]
-    },
-    "solutionSeekingBehavior": {
-      "queryStructure": ["how users ask for solutions"],
-      "qualitySignals": ["words indicating desired solution quality"],
-      "comparisonLanguage": ["how users compare options"],
-      "implementationConcerns": ["worries about adopting solutions"]
-    }
-  },
-  "competitiveIntelligence": {
-    "brandPerceptions": {
-      "positiveAssociations": ["what users love about top competitors"],
-      "negativeAssociations": ["what users dislike about competitors"],
-      "neutralMentions": ["factual competitor references"],
-      "migrationTriggers": ["why users switch between solutions"]
-    },
-    "marketGaps": {
-      "serviceGaps": ["services users want but can't find"],
-      "communicationGaps": ["information users need but lack"],
-      "experienceGaps": ["user experience improvements desired"],
-      "pricingGaps": ["pricing models users prefer"]
-    },
-    "competitorWeaknesses": [
-      {
-        "competitor": "competitor name if mentioned",
-        "weaknesses": ["specific user complaints"],
-        "opportunityArea": "how our domain could capitalize"
-      }
-    ]
+    "problemLanguage": ["how users describe problems"],
+    "solutionSeeking": ["how users ask for help"]
   },
   "marketOpportunities": {
-    "contentOpportunities": [
-      {
-        "topic": "specific content topic needed",
-        "userNeed": "what users are looking for",
-        "competitiveGap": "why current content doesn't satisfy",
-        "businessValue": "revenue/engagement potential"
-      }
-    ],
-    "serviceInnovations": [
-      {
-        "innovation": "new service concept",
-        "userDemand": "evidence of user interest",
-        "marketReadiness": "how ready market is for this",
-        "implementationFeasibility": "ease of implementation"
-      }
-    ],
-    "positioningOpportunities": [
-      {
-        "position": "unique market position available",
-        "rationale": "why this position is open",
-        "targetAudience": "who would respond to this positioning",
-        "competitiveAdvantage": "sustainable advantage potential"
-      }
-    ]
+    "contentGaps": ["missing information users need"],
+    "serviceGaps": ["unmet user needs"],
+    "competitorWeaknesses": ["what users complain about"]
   },
   "actionableInsights": {
-    "immediateActions": [
-      {
-        "action": "specific action to take",
-        "impact": "expected business impact",
-        "effort": "implementation difficulty",
-        "timeline": "suggested timeframe"
-      }
-    ],
-    "contentStrategy": {
-      "highPriorityTopics": ["topic 1", "topic 2"],
-      "contentFormats": ["format preferences from community"],
-      "tonalGuidance": ["how users prefer to be communicated with"],
-      "frequencyRecommendations": ["how often to publish content"]
-    },
-    "seoStrategy": {
-      "primaryTargets": ["main SEO opportunity areas"],
-      "longtailOpportunities": ["specific longtail keyword opportunities"],
-      "localSeoInsights": ["local search opportunities if relevant"],
-      "voiceSearchOptimization": ["conversational query opportunities"]
-    }
-  },
-  "dataValidation": {
-    "confidenceLevel": "High|Medium|Low",
-    "dataLimitations": ["any limitations in the data"],
-    "recommendedValidation": ["ways to validate these insights"],
-    "nextSteps": ["recommended follow-up research"]
+    "seoStrategy": ["primary keyword opportunities"],
+    "contentStrategy": ["high-priority topics to create"]
   }
 }
 
-## CRITICAL ANALYSIS REQUIREMENTS
-
-### Quality Standards:
-- Every insight must be traceable to actual community data
-- Avoid generic industry assumptions - focus on specific community evidence
-- Prioritize actionable intelligence over broad observations
-- Identify unique opportunities not obvious from surface-level analysis
-- Connect user language patterns to search behavior implications
-
-### Business Intelligence Focus:
-- How can these insights directly improve SEO performance?
-- What content gaps can be filled based on community needs?
-- Which competitive weaknesses can be exploited?
-- What user language should inform keyword strategy?
-- How can community insights improve conversion rates?
-
-### Strategic Implementation Context:
-Generate insights that will directly inform:
-1. **SEO Content Strategy:** What content to create and how to optimize it
-2. **Keyword Targeting:** Which phrases and language patterns to prioritize
-3. **Competitive Positioning:** How to differentiate from competitors
-4. **User Experience:** How to better serve user needs and intentions
-5. **Conversion Optimization:** How to turn insights into qualified traffic
-
-**CRITICAL:** Base every insight on actual community data provided. Do not make assumptions or add generic industry knowledge. Focus on what real users are saying in real discussions.
-
-Return ONLY the JSON object with no additional explanatory text.
-`;
+Focus on specific, actionable insights from the data.`;
 
             const completion = await openai.chat.completions.create({
-              model: 'gpt-4o',
+              model: 'gpt-4o-mini',
               messages: [
                 {
                   role: 'system',
-                  content: 'You are an expert digital anthropologist specializing in community intelligence extraction for SEO strategy. Always return valid JSON objects only.'
+                  content: 'Extract actionable community insights. Return valid JSON only.'
                 },
                 {
                   role: 'user',
                   content: enhancedCommunityAnalysisPrompt
                 }
               ],
-              temperature: 0.3,
-              max_tokens: 3000,
+              temperature: 0.2,
+              max_tokens: 1500, // Reduced from 3000
               response_format: { type: "json_object" }
             });
 
@@ -2496,361 +2287,12 @@ Return ONLY the JSON object with no additional explanatory text.
       sendEvent('step-update', { index: 1, status: 'completed', progress: 100 });
     }
 
+
+
     // ========================================
-    // STEP 3: COMPETITOR RESEARCH (PER DOMAIN)
+    // STEP 3: SEARCH PATTERN ANALYSIS (PER KEYWORD)
     // ========================================
     sendEvent('step-update', { index: 2, status: 'running', progress: 0 });
-    sendEvent('progress', { 
-      phase: 'competitor_research',
-      message: 'Competitor Research - Researching competitors from community discussions',
-      progress: 33
-    });
-
-    // Check if competitor analysis already exists
-    const existingCompetitorAnalysis = await prisma.competitorAnalysis.findFirst({
-      where: { domainId: domain.id }
-    });
-
-    if (existingCompetitorAnalysis) {
-      console.log('Competitor analysis already exists, using existing data...');
-      competitorAnalysisData = existingCompetitorAnalysis;
-      sendEvent('progress', { 
-        phase: 'competitor_research',
-        message: 'Competitor Research - Using existing data',
-        progress: 100
-      });
-      sendEvent('step-update', { index: 2, status: 'completed', progress: 100 });
-    } else {
-      try {
-      // Get community data for domain
-      const communityContext = communityInsightData ? communityInsightData.summary : 'No community data available';
-
-      const competitorPrompt = `
-# Expert Community-Driven Competitor Intelligence Framework
-
-## Core Intelligence Mission
-Conduct deep competitive analysis based on authentic community discussions, extracting real competitor insights from actual user conversations rather than theoretical market analysis. Focus on discovering competitive landscape through the lens of actual user experiences and recommendations.
-
-## Input Parameters
-**Target Domain:** ${domain.url}  
-**Business Context:** ${domain.context || 'General business services'}  
-**Geographic Market:** ${domain.location || 'Global'}  
-**Semantic Universe:** ${semanticContext}  
-**Community Intelligence Data:** ${communityContext}
-
-## Advanced Competitive Intelligence Framework
-
-### 1. Community-Based Competitor Discovery
-
-#### Direct Competitor Identification:
-- **Brand Mentions:** Companies/services explicitly named in discussions
-- **Recommendation Patterns:** Alternatives suggested by community members
-- **Comparison Contexts:** "X vs Y" discussions and debates
-- **Problem-Solution Mapping:** Services mentioned for solving similar problems
-- **User Migration Stories:** "I switched from X to Y because..." narratives
-
-#### Indirect Competitor Analysis:
-- **Alternative Solutions:** Different approaches to solving same problems
-- **Adjacent Market Players:** Services in related but different categories
-- **DIY/Internal Alternatives:** In-house solutions users mention
-- **Emerging Disruptors:** New players getting community attention
-- **Substitute Products:** Non-obvious alternatives users consider
-
-### 2. Community Sentiment Intelligence
-
-#### Competitor Strength Indicators:
-- **Positive Mentions:** Frequency and context of praise
-- **Recommendation Confidence:** How strongly users advocate
-- **Feature Appreciation:** Specific capabilities users love
-- **Reliability Testimonials:** Uptime, consistency, dependability stories
-- **Success Stories:** Concrete results and outcomes shared
-
-#### Weakness Detection Signals:
-- **Complaint Patterns:** Recurring issues and frustrations
-- **Migration Triggers:** Why users left competitors
-- **Feature Gap Mentions:** "I wish X had Y" discussions
-- **Support Issues:** Customer service and help problems
-- **Pricing Complaints:** Cost-related dissatisfaction
-
-### 3. Market Positioning Intelligence
-
-#### Positioning Analysis Framework:
-- **Value Proposition Clarity:** How competitors are perceived to solve problems
-- **Target Audience Identification:** Who recommends/uses each competitor
-- **Use Case Specialization:** Specific scenarios where competitors excel
-- **Market Segment Focus:** Enterprise, SMB, consumer, niche markets
-- **Geographic Strengths:** Regional or local competitive advantages
-
-#### Differentiation Pattern Recognition:
-- **Unique Selling Points:** What makes each competitor distinct
-- **Feature Differentiation:** Capabilities that set competitors apart
-- **Service Model Variations:** Different approaches to service delivery
-- **Pricing Strategy Insights:** How competitors position on value/cost
-- **Brand Personality Distinctions:** How users perceive competitor brands
-
-## Community Language Mining for Competitive Intelligence
-
-### User Perception Analysis:
-1. **Authority Signals:** Which competitors are seen as industry leaders
-2. **Trust Indicators:** Companies users feel most comfortable recommending
-3. **Innovation Recognition:** Who's seen as cutting-edge or traditional
-4. **Reliability Reputation:** Which competitors are seen as dependable
-5. **Value Perception:** Cost-benefit analysis from user perspectives
-
-### Competitive Context Mapping:
-1. **Decision Frameworks:** How users compare and choose between options
-2. **Evaluation Criteria:** What factors matter most in user decisions
-3. **Deal Breakers:** Features/issues that eliminate competitors from consideration
-4. **Success Metrics:** How users measure competitor performance
-5. **Loyalty Drivers:** What keeps users committed to specific competitors
-
-## Output Specification
-
-Generate comprehensive competitive intelligence in this exact JSON structure:
-
-{
-  "competitors": {
-    "directCompetitors": [
-      {
-        "name": "[Company/Service Name]",
-        "url": "[Website URL if mentioned]",
-        "mentionFrequency": "[Low/Medium/High]",
-        "userSentiment": "[Positive/Neutral/Negative with score 1-10]",
-        "primaryStrengths": ["[strength 1]", "[strength 2]", "..."],
-        "knownWeaknesses": ["[weakness 1]", "[weakness 2]", "..."],
-        "targetAudience": "[Who uses this competitor]",
-        "pricingPosition": "[Premium/Mid-market/Budget/Unknown]",
-        "keyDifferentiators": ["[differentiator 1]", "[differentiator 2]", "..."],
-        "communityQuotes": ["[actual user quote 1]", "[user quote 2]", "..."]
-      }
-    ],
-    "indirectCompetitors": [
-      {
-        "name": "[Alternative Solution/Company]",
-        "category": "[Type of alternative]",
-        "threatLevel": "[High/Medium/Low]",
-        "userAdoption": "[How frequently mentioned as alternative]",
-        "advantages": ["[advantage 1]", "[advantage 2]", "..."],
-        "limitations": ["[limitation 1]", "[limitation 2]", "..."],
-        "migrationTriggers": ["[why users choose this alternative]", "..."]
-      }
-    ]
-  },
-  "analysis": {
-    "marketLandscape": {
-      "dominantPlayers": ["[top competitor 1]", "[top competitor 2]", "..."],
-      "emergingThreats": ["[emerging competitor 1]", "[emerging competitor 2]", "..."],
-      "marketGaps": ["[underserved need 1]", "[underserved need 2]", "..."],
-      "consolidationTrends": ["[trend 1]", "[trend 2]", "..."]
-    },
-    "competitivePositioning": {
-      "premiumSegment": {
-        "leaders": ["[competitor 1]", "[competitor 2]", "..."],
-        "characteristics": ["[characteristic 1]", "[characteristic 2]", "..."],
-        "userProfile": "[who chooses premium options]"
-      },
-      "midMarket": {
-        "leaders": ["[competitor 1]", "[competitor 2]", "..."],
-        "characteristics": ["[characteristic 1]", "[characteristic 2]", "..."],
-        "userProfile": "[who chooses mid-market options]"
-      },
-      "budgetSegment": {
-        "leaders": ["[competitor 1]", "[competitor 2]", "..."],
-        "characteristics": ["[characteristic 1]", "[characteristic 2]", "..."],
-        "userProfile": "[who chooses budget options]"
-      }
-    },
-    "strengthsWeaknessMatrix": {
-      "[Competitor Name]": {
-        "strengths": ["[strength 1]", "[strength 2]", "..."],
-        "weaknesses": ["[weakness 1]", "[weakness 2]", "..."],
-        "userLoyalty": "[High/Medium/Low with explanation]",
-        "migrationVulnerability": ["[vulnerability 1]", "[vulnerability 2]", "..."]
-      }
-    },
-    "featureGapAnalysis": {
-      "commonGaps": ["[gap mentioned across multiple competitors]", "..."],
-      "competitorSpecificGaps": {
-        "[Competitor Name]": ["[specific gap 1]", "[specific gap 2]", "..."]
-      },
-      "innovationOpportunities": ["[opportunity 1]", "[opportunity 2]", "..."]
-    }
-  },
-  "insights": {
-    "keyFindings": ["[major insight 1]", "[major insight 2]", "[major insight 3]"],
-    "competitiveAdvantages": {
-      "potentialAdvantages": ["[advantage our domain could leverage]", "..."],
-      "marketPositioning": "[recommended positioning strategy]",
-      "differentiationStrategy": "[how to stand out from competitors]"
-    },
-    "marketOpportunities": {
-      "underservedSegments": ["[segment 1]", "[segment 2]", "..."],
-      "featureOpportunities": ["[feature gap to fill]", "..."],
-      "serviceGaps": ["[service improvement opportunity]", "..."],
-      "pricingOpportunities": ["[pricing strategy insight]", "..."]
-    },
-    "threats": {
-      "immediateThreats": ["[threat 1]", "[threat 2]", "..."],
-      "emergingThreats": ["[future threat 1]", "[future threat 2]", "..."],
-      "disruptionPotential": ["[disruption scenario 1]", "[disruption scenario 2]", "..."]
-    },
-    "userDecisionFactors": {
-      "primaryDecisionCriteria": ["[factor 1]", "[factor 2]", "..."],
-      "dealBreakers": ["[deal breaker 1]", "[deal breaker 2]", "..."],
-      "loyaltyDrivers": ["[loyalty factor 1]", "[loyalty factor 2]", "..."],
-      "switchingTriggers": ["[trigger 1]", "[trigger 2]", "..."]
-    },
-    "strategicRecommendations": [
-      {
-        "recommendation": "[strategic recommendation]",
-        "rationale": "[why this recommendation based on community insights]",
-        "priority": "[High/Medium/Low]",
-        "implementationComplexity": "[High/Medium/Low]"
-      }
-    ]
-  }
-}
-
-## Advanced Analysis Techniques
-
-### 1. Competitive Sentiment Analysis
-- **Mention Context Analysis:** Positive vs negative mention contexts
-- **Recommendation Patterns:** When users recommend competitors
-- **Problem-Solution Mapping:** Which competitors solve which specific problems
-- **User Journey Integration:** Where competitors appear in user decision processes
-
-### 2. Market Intelligence Extraction
-- **Pricing Intelligence:** Cost-related discussions and comparisons
-- **Feature Comparison Analysis:** Head-to-head capability discussions
-- **Service Quality Assessment:** Support, reliability, and performance insights
-- **Innovation Tracking:** New features and capabilities mentioned
-
-### 3. Strategic Gap Identification
-- **Unmet Needs Discovery:** Problems no competitor adequately solves
-- **Service Enhancement Opportunities:** Improvements users consistently request
-- **Market Positioning Gaps:** Underserved audience segments
-- **Differentiation Possibilities:** Unique value propositions not being offered
-
-## Community Data Mining Framework
-
-### Quote Extraction Guidelines:
-- Extract authentic user statements about competitors
-- Preserve original language and context
-- Focus on specific, actionable insights
-- Include both positive and negative perspectives
-- Maintain anonymity while capturing sentiment
-
-### Pattern Recognition:
-- Identify recurring themes across multiple discussions
-- Map user journey touchpoints with competitors
-- Track evolution of competitive landscape over time
-- Recognize emerging trends and shifts
-
-## Quality Assurance Standards
-
-Ensure analysis meets these criteria:
-- [ ] All insights backed by community evidence
-- [ ] Competitor information based on actual mentions, not assumptions
-- [ ] User quotes authentic and contextually relevant
-- [ ] Market gaps identified through community frustrations
-- [ ] Strategic recommendations actionable and specific
-- [ ] Threat assessment realistic and evidence-based
-- [ ] Opportunities aligned with community needs
-
-## Strategic Implementation Framework
-
-**For Product Strategy:** Use feature gap analysis to inform development priorities
-**For Marketing Position:** Leverage differentiation insights for messaging strategy
-**For Competitive Response:** Apply threat analysis for defensive planning
-**For Market Entry:** Utilize opportunity identification for market approach
-
-Remember: This analysis should reveal the competitive landscape as experienced by real users, not as portrayed in marketing materials. Focus on authentic community perceptions and experiences to uncover actionable competitive intelligence.
-`;
-
-              const completion = await openai.chat.completions.create({
-          model: 'gpt-4o',
-          messages: [{ role: 'user', content: competitorPrompt }],
-          temperature: 0.3,
-          max_tokens: 2000
-        });
-
-      const response = completion.choices[0]?.message?.content;
-      if (response && response.trim()) {
-        // NEW: emit debug raw AI response for competitor research
-        try {
-          sendEvent('debug', {
-            type: 'ai',
-            stage: 'competitor_research',
-            responseRaw: response
-          });
-        } catch {}
-        const competitorData = parseAIResponse(response, {
-          competitors: [],
-          analysis: 'Failed to parse competitor data',
-          insights: 'No competitor insights available'
-        });
-
-        // Store competitor analysis data for domain
-        competitorAnalysisData = {
-          domainId: domain.id,
-          competitors: competitorData.competitors || [],
-          marketInsights: competitorData.insights || {},
-          strategicRecommendations: competitorData.analysis || {},
-          competitiveAnalysis: competitorData.analysis || {},
-          competitorList: Array.isArray(competitorData.competitors) ? competitorData.competitors.join(', ') : ''
-        };
-
-        totalTokenUsage += completion.usage?.total_tokens || 0;
-      } else {
-        console.warn(`Empty or null response for competitor research, using fallback data`);
-        // Create fallback competitor analysis data
-        competitorAnalysisData = {
-          domainId: domain.id,
-          competitors: [],
-          marketInsights: { error: 'No competitor data available' },
-          strategicRecommendations: { error: 'Failed to research competitors' },
-          competitiveAnalysis: { error: 'Failed to research competitors' },
-          competitorList: ''
-        };
-      }
-    } catch (error) {
-      console.error(`Error researching competitors for domain: ${domain.url}:`, error);
-      // Create fallback competitor analysis data
-      competitorAnalysisData = {
-        domainId: domain.id,
-        competitors: [],
-        marketInsights: { error: 'No competitor data available' },
-        strategicRecommendations: { error: 'Failed to research competitors' },
-        competitiveAnalysis: { error: 'Failed to research competitors' },
-        competitorList: ''
-      };
-    }
-
-      // Store competitor analysis for domain
-      try {
-        await retryOperation(async () => {
-          return await prisma.competitorAnalysis.create({
-            data: competitorAnalysisData
-          });
-        });
-        console.log(`Successfully stored competitor analysis for domain: ${domain.url}`);
-      } catch (error) {
-        console.error('Error storing competitor analysis:', error);
-        throw new Error(`Failed to store competitor analysis: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
-
-      sendEvent('progress', { 
-        phase: 'competitor_research',
-        message: 'Competitor Research completed',
-        progress: 100
-      });
-      sendEvent('step-update', { index: 2, status: 'completed', progress: 100 });
-    }
-
-    // ========================================
-    // STEP 4: SEARCH PATTERN ANALYSIS (PER KEYWORD)
-    // ========================================
-    sendEvent('step-update', { index: 3, status: 'running', progress: 0 });
     sendEvent('progress', { 
       phase: 'search_patterns',
       message: 'Search Pattern Analysis - Analyzing user search behaviors for keywords',
@@ -2892,231 +2334,60 @@ Remember: This analysis should reveal the competitive landscape as experienced b
         const communityContext = communityInsightData ? communityInsightData.summary : 'No community data available';
 
         const patternPrompt = `
-# Expert-Level Search Behavior Pattern Analysis Framework
+Analyze search behavior for: "${keyword.term}"
 
-## Core Mission
-Conduct comprehensive search behavior intelligence analysis to decode how users actually search for content/services that our domain should serve. Transform raw community insights into actionable search pattern intelligence.
+CONTEXT: ${domain.context || 'General business'}
+COMMUNITY DATA: ${communityContext}
 
-## Input Parameters
-**Target Keyword Concept:** ${keyword.term}  
-**Domain URL:** ${domain.url}  
-**Business Context:** ${domain.context || 'General business services'}  
-**Geographic Market:** ${domain.location || 'Global'}  
-**Semantic Universe:** ${semanticContext}  
-**Community Intelligence:** ${communityContext}
-
-## Advanced Pattern Recognition Framework
-
-### 1. Search Intent Behavioral Mapping
-
-#### Informational Intent Patterns:
-- **Learning Trajectory Signals:** "how to", "what is", "why does", "when to", "where can I learn"
-- **Problem-Discovery Indicators:** "help with", "understand", "explain", "difference between"
-- **Educational Depth Markers:** "beginner guide", "advanced techniques", "step-by-step", "tutorial"
-- **Research Validation Queries:** "is it true that", "does it really work", "proven methods"
-
-#### Navigational Intent Patterns:
-- **Brand/Service Seeking:** "[brand] official", "find [service] near [location]", "[company] contact"
-- **Local Discovery Signals:** "near me", "[city] + [service]", "local [provider]", "in [area]"
-- **Specific Resource Hunting:** "[tool] login", "[platform] dashboard", "official [service] site"
-
-#### Transactional Intent Patterns:
-- **Purchase Readiness:** "buy", "order", "purchase", "get quote", "pricing", "cost"
-- **Service Booking:** "book appointment", "schedule", "reserve", "sign up"
-- **Download/Access Actions:** "download", "get access", "try free", "start trial"
-- **Immediate Action Triggers:** "now", "today", "urgent", "emergency"
-
-#### Commercial Investigation Patterns:
-- **Comparison Shopping:** "vs", "versus", "compare", "which is better", "alternatives to"
-- **Quality Assessment:** "best", "top rated", "reviews", "testimonials", "ratings"
-- **Value Analysis:** "worth it", "price comparison", "cheapest", "most affordable"
-- **Social Proof Seeking:** "recommended", "popular", "most used", "trusted"
-
-### 2. Advanced Search Modifier Intelligence
-
-#### Temporal Modifiers:
-- **Urgency Indicators:** "urgent", "emergency", "asap", "same day", "immediate"
-- **Planning Signals:** "2024", "next year", "upcoming", "future", "planning"
-- **Recency Requirements:** "latest", "new", "recent", "updated", "current"
-
-#### Geographic Qualifiers:
-- **Proximity Patterns:** "near me", "nearby", "close", "local", "in [radius]"
-- **Location Specificity:** "[city]", "[state]", "[neighborhood]", "[zip code]"
-- **Regional Variations:** "[region] style", "[area] specific", "for [location] residents"
-
-#### Quality Filters:
-- **Performance Standards:** "best", "top", "highest rated", "premium", "professional"
-- **Reliability Markers:** "trusted", "certified", "licensed", "verified", "guaranteed"
-- **Experience Level:** "beginner", "advanced", "expert", "intermediate"
-
-### 3. Behavioral Journey Pattern Analysis
-
-#### Awareness Stage Patterns:
-- Problem recognition queries
-- Educational content consumption
-- General information gathering
-- Symptom/challenge identification
-
-#### Consideration Stage Patterns:
-- Solution comparison behaviors
-- Feature evaluation queries
-- Provider research patterns
-- Reviews and testimonials seeking
-
-#### Decision Stage Patterns:
-- Pricing and availability checks
-- Contact information searches
-- Booking/purchase-ready queries
-- Local provider verification
-
-#### Post-Purchase Patterns:
-- Support and help queries
-- Advanced usage questions
-- Loyalty and repeat engagement
-- Referral and recommendation patterns
-
-## Community Intelligence Integration Framework
-
-### Pattern Extraction from Community Data:
-1. **Language Patterns:** Extract actual terminology users employ
-2. **Problem Articulation:** Identify how users describe their challenges
-3. **Solution Seeking Behavior:** Understand how users ask for help
-4. **Recommendation Patterns:** Analyze how users seek and give advice
-5. **Discussion Triggers:** Identify topics that generate engagement
-6. **Expertise Signals:** Recognize authority and credibility indicators
-
-## Output Specification
-
-Generate comprehensive analysis in this exact JSON structure:
+Map how users search for this concept:
 
 {
   "patterns": {
     "intentDistribution": {
       "informational": {
-        "percentage": "[0-100]",
-        "topModifiers": ["[modifier 1]", "[modifier 2]", "..."],
-        "searchExamples": ["[example query 1]", "[example query 2]", "..."],
-        "userMindset": "[description of user psychology]"
+        "percentage": 40,
+        "searchExamples": ["how to ${keyword.term}", "what is ${keyword.term}"],
+        "userMindset": "Learning and understanding"
       },
       "navigational": {
-        "percentage": "[0-100]",
-        "topModifiers": ["[modifier 1]", "[modifier 2]", "..."],
-        "searchExamples": ["[example query 1]", "[example query 2]", "..."],
-        "userMindset": "[description of user psychology]"
+        "percentage": 25,
+        "searchExamples": ["best ${keyword.term} services", "${keyword.term} near me"],
+        "userMindset": "Finding specific providers"
       },
       "transactional": {
-        "percentage": "[0-100]",
-        "topModifiers": ["[modifier 1]", "[modifier 2]", "..."],
-        "searchExamples": ["[example query 1]", "[example query 2]", "..."],
-        "userMindset": "[description of user psychology]"
+        "percentage": 25,
+        "searchExamples": ["hire ${keyword.term} expert", "buy ${keyword.term}"],
+        "userMindset": "Ready to purchase"
       },
       "commercialInvestigation": {
-        "percentage": "[0-100]",
-        "topModifiers": ["[modifier 1]", "[modifier 2]", "..."],
-        "searchExamples": ["[example query 1]", "[example query 2]", "..."],
-        "userMindset": "[description of user psychology]"
+        "percentage": 10,
+        "searchExamples": ["${keyword.term} cost", "compare ${keyword.term}"],
+        "userMindset": "Comparing options"
       }
-    },
-    "temporalPatterns": {
-      "seasonalTrends": ["[pattern 1]", "[pattern 2]", "..."],
-      "dailyPatterns": ["[pattern 1]", "[pattern 2]", "..."],
-      "urgencyPatterns": ["[pattern 1]", "[pattern 2]", "..."]
-    },
-    "geographicPatterns": {
-      "localModifiers": ["[modifier 1]", "[modifier 2]", "..."],
-      "regionalVariations": ["[variation 1]", "[variation 2]", "..."],
-      "proximitySignals": ["[signal 1]", "[signal 2]", "..."]
-    },
-    "userJourneyPatterns": {
-      "awarenessQueries": ["[query 1]", "[query 2]", "..."],
-      "considerationQueries": ["[query 1]", "[query 2]", "..."],
-      "decisionQueries": ["[query 1]", "[query 2]", "..."],
-      "loyaltyQueries": ["[query 1]", "[query 2]", "..."]
-    },
-    "volumeDistribution": {
-      "highVolumePatterns": ["[pattern 1]", "[pattern 2]", "..."],
-      "longTailOpportunities": ["[opportunity 1]", "[opportunity 2]", "..."],
-      "emergingTrends": ["[trend 1]", "[trend 2]", "..."]
     }
   },
   "summary": {
-    "dominantIntent": "[primary search intent with explanation]",
-    "keyInsights": ["[insight 1]", "[insight 2]", "[insight 3]"],
-    "searcherProfile": "[detailed user persona description]",
-    "contentOpportunities": ["[opportunity 1]", "[opportunity 2]", "..."],
-    "competitiveGaps": ["[gap 1]", "[gap 2]", "..."]
-  },
-  "communityDerivedPatterns": {
-    "languagePatterns": ["[pattern 1]", "[pattern 2]", "..."],
-    "problemFraming": ["[how users describe problems]", "..."],
-    "solutionSeeking": ["[how users ask for solutions]", "..."],
-    "authoritySignals": ["[what indicates expertise]", "..."],
-    "engagementTriggers": ["[what generates discussion]", "..."],
-    "recommendationBehavior": ["[how users give/seek recommendations]", "..."]
+    "dominantIntent": "Primary search intent with explanation",
+    "searcherProfile": "Who searches for this and why",
+    "contentOpportunities": ["content gap 1", "content gap 2"]
   },
   "userQuestions": {
-    "frequentQuestions": ["[question 1]", "[question 2]", "..."],
-    "advancedQuestions": ["[complex question 1]", "[complex question 2]", "..."],
-    "problemSolving": ["[problem-focused question 1]", "..."],
-    "comparisonQuestions": ["[comparison question 1]", "..."],
-    "implementationQuestions": ["[how-to question 1]", "..."],
-    "emergingConcerns": ["[new/trending question 1]", "..."]
+    "frequentQuestions": ["What users commonly ask"],
+    "problemSolving": ["Help-seeking questions"],
+    "comparisonQuestions": ["Evaluation questions"]
   }
 }
 
-## Advanced Analysis Techniques
+Base analysis on actual community discussions and user behavior.
 
-### 1. Semantic Clustering Analysis
-- Group related search concepts
-- Identify synonym and variant patterns  
-- Map semantic relationships
-- Discover content gaps
-
-### 2. Intent Confidence Scoring
-- Measure clarity of user intent signals
-- Identify mixed-intent opportunities
-- Score commercial vs informational balance
-- Map intent evolution through funnel
-
-### 3. Community Language Mining
-- Extract authentic user vocabulary
-- Identify jargon and terminology patterns
-- Map expertise level indicators
-- Discover emotional triggers and motivators
-
-### 4. Competitive Pattern Intelligence
-- Identify underserved search patterns
-- Discover content gap opportunities
-- Map competitor strengths/weaknesses
-- Find differentiation opportunities
-
-## Quality Assurance Framework
-
-Ensure analysis meets these standards:
-- [ ] All patterns backed by community data evidence
-- [ ] Search examples sound authentic and user-generated
-- [ ] Intent distribution adds up to 100%
-- [ ] Patterns align with business context and semantic universe
-- [ ] Geographic relevance appropriately weighted
-- [ ] User psychology insights are actionable
-- [ ] Community language authentically captured
-- [ ] Emerging trends identified and validated
-
-## Strategic Implementation Notes
-
-**For Content Strategy:** Use pattern analysis to inform content calendar and topic prioritization
-**For SEO Planning:** Leverage intent distribution for keyword strategy and content optimization  
-**For User Experience:** Apply journey patterns to improve site navigation and conversion paths
-**For Competitive Analysis:** Exploit identified gaps for differentiation opportunities
-
-Remember: This analysis should reveal not just what users search for, but WHY they search, WHEN they search, and HOW they think about their problems and solutions.
-`;
+Return valid JSON only.`;
 
         const completion = await openai.chat.completions.create({
-          model: 'gpt-4o',
+          model: 'gpt-4o-mini',
           messages: [{ role: 'user', content: patternPrompt }],
-          temperature: 0.3,
-          max_tokens: 2000
+          temperature: 0.2,
+          max_tokens: 1200, // Reduced from 2000
+          response_format: { type: "json_object" }
         });
 
         const response = completion.choices[0]?.message?.content;
@@ -3197,12 +2468,12 @@ Remember: This analysis should reveal not just what users search for, but WHY th
       message: 'Search Pattern Analysis completed',
       progress: 100
     });
-    sendEvent('step-update', { index: 3, status: 'completed', progress: 100 });
+    sendEvent('step-update', { index: 2, status: 'completed', progress: 100 });
 
     // ========================================
-    // STEP 5: CREATING OPTIMIZED INTENT PHRASES
+    // STEP 4: CREATING OPTIMIZED INTENT PHRASES
     // ========================================
-    sendEvent('step-update', { index: 4, status: 'running', progress: 0 });
+    sendEvent('step-update', { index: 3, status: 'running', progress: 0 });
     sendEvent('progress', { 
       phase: 'phrase_generation',
       message: 'Creating optimized intent phrases - Generating phrases using all context',
@@ -3292,7 +2563,6 @@ Remember: This analysis should reveal not just what users search for, but WHY th
       try {
         // Get all context data for this keyword
         const keywordCommunityData = communityInsightData;
-        const keywordCompetitorData = competitorAnalysisData;
         const keywordSearchPatterns = searchPatterns.find(pattern => pattern.keywordId === keyword.id);
 
         // Use the enhanced intent-based phrase generation function
@@ -3301,7 +2571,6 @@ Remember: This analysis should reveal not just what users search for, but WHY th
           domain,
           semanticContext,
           keywordCommunityData,
-          keywordCompetitorData,
           keywordSearchPatterns,
           sendEvent
         );
@@ -3326,34 +2595,34 @@ Remember: This analysis should reveal not just what users search for, but WHY th
         // Continue with other keywords even if one fails - add multiple fallback phrases
         const fallbackPhrases = [
           {
-            phrase: `How to implement ${keyword.term} effectively for better business results`,
-            intent: 'Informational',
-            intentConfidence: 75,
-            relevanceScore: 80
-          },
-          {
-            phrase: `Best practices for ${keyword.term} optimization and implementation`,
-            intent: 'Navigational',
-            intentConfidence: 80,
-            relevanceScore: 85
-          },
-          {
-            phrase: `Compare ${keyword.term} solutions and choose the right approach`,
-            intent: 'Commercial Investigation',
-            intentConfidence: 70,
-            relevanceScore: 82
-          },
-          {
-            phrase: `Complete guide to ${keyword.term} strategies and techniques`,
+            phrase: `How to choose the right ${keyword.term} for my business needs`,
             intent: 'Informational',
             intentConfidence: 85,
             relevanceScore: 88
           },
           {
-            phrase: `Professional ${keyword.term} services and expert consultation`,
+            phrase: `Best ${keyword.term} services near me with good reviews`,
+            intent: 'Navigational',
+            intentConfidence: 90,
+            relevanceScore: 85
+          },
+          {
+            phrase: `What does professional ${keyword.term} cost in ${domain.location || '2024'}`,
+            intent: 'Commercial Investigation',
+            intentConfidence: 85,
+            relevanceScore: 82
+          },
+          {
+            phrase: `Hire experienced ${keyword.term} consultant for immediate results`,
             intent: 'Transactional',
-            intentConfidence: 75,
-            relevanceScore: 83
+            intentConfidence: 92,
+            relevanceScore: 86
+          },
+          {
+            phrase: `Why is ${keyword.term} important for small business growth`,
+            intent: 'Informational',
+            intentConfidence: 80,
+            relevanceScore: 84
           }
         ];
 
@@ -3429,12 +2698,12 @@ Remember: This analysis should reveal not just what users search for, but WHY th
       message: `Phrase Generation completed - ${phrasesToInsert.length} phrases generated`,
       progress: 100
     });
-    sendEvent('step-update', { index: 4, status: 'completed', progress: 100 });
+    sendEvent('step-update', { index: 3, status: 'completed', progress: 100 });
 
     // ========================================
-    // STEP 6: INTENT CLASSIFICATION (Integrated with phrase generation)
+    // STEP 5: INTENT CLASSIFICATION (Integrated with phrase generation)
     // ========================================
-    sendEvent('step-update', { index: 5, status: 'running', progress: 0 });
+    sendEvent('step-update', { index: 4, status: 'running', progress: 0 });
     sendEvent('progress', { 
       phase: 'intent_classification',
       message: 'Intent Classification - Classifying generated phrases by intent',
@@ -3449,12 +2718,12 @@ Remember: This analysis should reveal not just what users search for, but WHY th
       message: 'Intent Classification completed',
       progress: 100
     });
-    sendEvent('step-update', { index: 5, status: 'completed', progress: 100 });
+    sendEvent('step-update', { index: 4, status: 'completed', progress: 100 });
 
     // ========================================
-    // STEP 7: RELEVANCE SCORE (Integrated with phrase generation)
+    // STEP 6: RELEVANCE SCORE (Integrated with phrase generation)
     // ========================================
-    sendEvent('step-update', { index: 6, status: 'running', progress: 0 });
+    sendEvent('step-update', { index: 5, status: 'running', progress: 0 });
     sendEvent('progress', { 
       phase: 'relevance_scoring',
       message: 'Relevance Score - Computing semantic relevance scores',
@@ -3469,7 +2738,7 @@ Remember: This analysis should reveal not just what users search for, but WHY th
       message: 'Relevance Score completed',
       progress: 100
     });
-    sendEvent('step-update', { index: 6, status: 'completed', progress: 100 });
+    sendEvent('step-update', { index: 5, status: 'completed', progress: 100 });
 
     // ========================================
     // COMPLETION
@@ -3521,5 +2790,176 @@ Remember: This analysis should reveal not just what users search for, but WHY th
     res.end();
   }
 });
+
+// ===============================================
+// ENHANCED PHRASE GENERATION WITH REAL DATA
+// ===============================================
+
+const createDataDrivenPhrasePrompt = (
+  keyword: any,
+  domain: any,
+  realQuestions: any[],
+  realPhrases: any[],
+  userLanguagePatterns: any,
+  semanticContext: string
+) => `
+Generate 5 natural search phrases based on user data (any length is fine):
+
+TARGET: "${keyword.term}"
+
+USER QUESTIONS (most engaged):
+${realQuestions.slice(0, 8).map((q: any, i: number) => 
+  `${i+1}. "${q.question}" (${q.engagement} engagement)`
+).join('\n')}
+
+USER LANGUAGE PATTERNS:
+- Questions: ${userLanguagePatterns.questionStarters?.join(', ') || 'how do i, what is, where can i'}
+- Problems: ${userLanguagePatterns.problemDescriptors?.join(', ') || 'struggling with, need help'}
+- Solutions: ${userLanguagePatterns.solutionSeekers?.join(', ') || 'looking for, trying to'}
+- Quality: ${userLanguagePatterns.qualityIndicators?.join(', ') || 'best, top, reliable'}
+
+REQUIREMENTS:
+✓ Use user language from data above
+✓ Include "${keyword.term}" naturally
+✓ Sound like actual search queries
+✓ Any length is acceptable; prioritize clarity and authenticity
+✓ Mix of intents: 40% Informational, 30% Navigational, 20% Transactional, 10% Commercial
+
+JSON FORMAT:
+{
+  "phrases": [
+    {
+      "phrase": "How do I find reliable ${keyword.term} near me",
+      "intent": "Navigational",
+      "intentConfidence": 85,
+      "relevanceScore": 90,
+      "basedOnData": "User question pattern"
+    }
+  ]
+}
+
+Make phrases based on the user data patterns above. Any length is fine.`;
+
+const generateDataDrivenPhrases = async (
+  keyword: any,
+  domain: any,
+  communityData: any,
+  sendEvent: any
+) => {
+  try {
+    // Extract real user insights
+    const { realQuestions, realPhrases, userLanguagePatterns } = extractRealUserQuestions(communityData);
+    
+    console.log(`📊 Real data for "${keyword.term}": ${realQuestions.length} questions, ${realPhrases.length} phrases`);
+    
+    const prompt = createDataDrivenPhrasePrompt(
+      keyword,
+      domain,
+      realQuestions,
+      realPhrases,
+      userLanguagePatterns,
+      ''
+    );
+    
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini', // Faster, cheaper for phrase generation
+      messages: [
+        {
+          role: 'system',
+          content: 'Generate natural search phrases (any length). Use authentic language patterns from the data. Return valid JSON only.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.4, // Slightly higher for natural variation
+      max_tokens: 1000, // Reduced for shorter responses
+      response_format: { type: "json_object" }
+    });
+    
+    const response = completion.choices[0]?.message?.content;
+    
+    if (response?.trim()) {
+      const phraseData = parseAIResponse(response, null);
+      
+      if (phraseData?.phrases && Array.isArray(phraseData.phrases)) {
+        const validatedPhrases = phraseData.phrases
+          .filter((p: any) => p.phrase && p.phrase.trim().split(/\s+/).length >= 6 && p.phrase.trim().split(/\s+/).length <= 12)
+          .map((phraseObj: any) => ({
+            domainId: domain.id,
+            keywordId: keyword.id,
+            phrase: phraseObj.phrase,
+            intent: phraseObj.intent || 'Informational',
+            intentConfidence: Math.min(95, Math.max(70, phraseObj.intentConfidence || 85)),
+            relevanceScore: Math.min(95, Math.max(75, phraseObj.relevanceScore || 85)),
+            sources: realQuestions.length > 0 ? ['User Data', 'Language Patterns'] : ['AI Generated'],
+            trend: 'Rising',
+            isSelected: false,
+            tokenUsage: Math.floor((completion.usage?.total_tokens || 0) / phraseData.phrases.length)
+          }));
+        
+        console.log(`✅ Generated ${validatedPhrases.length} data-driven phrases for "${keyword.term}"`);
+        return { phrasesToInsert: validatedPhrases, tokenUsage: completion.usage?.total_tokens || 0 };
+      }
+    }
+    
+    throw new Error('No valid phrases generated from real data');
+    
+  } catch (error) {
+    console.error(`❌ Data-driven phrase generation failed for ${keyword.term}:`, error);
+    
+    // Enhanced fallback using any available data patterns
+    const { userLanguagePatterns } = extractRealUserQuestions(communityData);
+    
+    const fallbackPhrases = [
+      {
+        phrase: `How to choose ${keyword.term} services`,
+        intent: 'Informational',
+        intentConfidence: 80,
+        relevanceScore: 85
+      },
+      {
+        phrase: `Best ${keyword.term} near me`,
+        intent: 'Navigational', 
+        intentConfidence: 85,
+        relevanceScore: 82
+      },
+      {
+        phrase: `${keyword.term} cost and pricing guide`,
+        intent: 'Commercial Investigation',
+        intentConfidence: 80,
+        relevanceScore: 80
+      },
+      {
+        phrase: `Professional ${keyword.term} consultation`,
+        intent: 'Transactional',
+        intentConfidence: 85,
+        relevanceScore: 83
+      },
+      {
+        phrase: `What is ${keyword.term} and benefits`,
+        intent: 'Informational',
+        intentConfidence: 75,
+        relevanceScore: 78
+      }
+    ];
+    
+    const phrasesToInsert = fallbackPhrases.map(fallback => ({
+      domainId: domain.id,
+      keywordId: keyword.id,
+      phrase: fallback.phrase,
+      intent: fallback.intent,
+      intentConfidence: fallback.intentConfidence,
+      relevanceScore: fallback.relevanceScore,
+      sources: ['Enhanced Fallback'],
+      trend: 'Rising',
+      isSelected: false,
+      tokenUsage: 0
+    }));
+    
+    return { phrasesToInsert, tokenUsage: 0 };
+  }
+};
 
 export default router;

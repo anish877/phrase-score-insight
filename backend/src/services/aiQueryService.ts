@@ -7,13 +7,13 @@ const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 // Function to extract real data from AI response
 function extractRealDataFromResponse(response: string, phrase: string, domain?: string) {
     // Extract URLs from the response
-    const urlRegex = /https?:\/\/[^\s\n]+/g;
+    const urlRegex = /https?:\/\/[^\s\n)\]}"']+/g;
     const urls = response.match(urlRegex) || [];
     
     // Extract domains from URLs
     const domains = urls.map(url => {
         try {
-            return new URL(url).hostname;
+            return new URL(url).hostname.toLowerCase().replace(/^www\./, '');
         } catch {
             return '';
         }
@@ -22,26 +22,36 @@ function extractRealDataFromResponse(response: string, phrase: string, domain?: 
     // Enhanced confidence calculation based on response quality
     const responseLength = response.length;
     const hasUrls = urls.length > 0;
-    const hasDomainMentions = domain ? response.toLowerCase().includes(domain.toLowerCase()) : false;
+    const domainLower = (domain || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '');
+    const hasDomainMentions = domainLower ? (response.toLowerCase().includes(domainLower)) : false;
     const hasProfessionalTerms = /(solution|service|platform|tool|software|technology|implementation|strategy|enterprise|saas|cloud|ai|ml|analytics)/i.test(response);
-    const hasMetrics = /(\d+%|\d+ percent|\d+ percent|increase|improvement|growth|efficiency|roi|revenue|cost|savings)/i.test(response);
+    const hasMetrics = /(\d+%|\d+ percent|increase|improvement|growth|efficiency|roi|revenue|cost|savings)/i.test(response);
     const hasIndustryTerms = /(industry|market|trend|analysis|research|study|report|benchmark|best practice)/i.test(response);
     const hasTechnicalTerms = /(api|integration|architecture|framework|methodology|workflow|automation)/i.test(response);
     const hasConversationalTone = /(I'd|I would|you might|you should|here are|let me|great|excellent|helpful)/i.test(response);
     const hasSpecificAdvice = /(recommend|suggest|consider|try|check out|look into|start with)/i.test(response);
     
-    let confidence = 75; // Base confidence
-    if (responseLength > 300) confidence += 10;
-    if (responseLength > 500) confidence += 8;
-    if (hasUrls) confidence += 10;
+    // Calibrate confidence to avoid inflation to 95 for most cases
+    let confidence = 50; // base
+    if (responseLength > 300) confidence += 6;
+    if (responseLength > 600) confidence += 5;
+    if (hasUrls) confidence += Math.min(15, urls.length * 4);
+    if (domains.length >= 3) confidence += 5;
     if (hasDomainMentions) confidence += 8;
-    if (hasProfessionalTerms) confidence += 5;
-    if (hasMetrics) confidence += 5;
-    if (hasIndustryTerms) confidence += 5;
-    if (hasTechnicalTerms) confidence += 5;
-    if (hasConversationalTone) confidence += 8;
-    if (hasSpecificAdvice) confidence += 7;
-    confidence = Math.min(confidence, 95);
+    if (hasProfessionalTerms) confidence += 4;
+    if (hasMetrics) confidence += 4;
+    if (hasIndustryTerms) confidence += 3;
+    if (hasTechnicalTerms) confidence += 3;
+    if (hasConversationalTone) confidence += 2;
+    if (hasSpecificAdvice) confidence += 3;
+
+    // If there is no tangible evidence, cap more aggressively
+    if (!hasUrls && !hasDomainMentions) {
+        confidence = Math.min(confidence, 70);
+    }
+
+    // Final clamp
+    confidence = Math.max(25, Math.min(confidence, 92));
     
     // Enhanced sources extraction based on content analysis
     const sources: string[] = [];
@@ -111,7 +121,7 @@ function extractRealDataFromResponse(response: string, phrase: string, domain?: 
     const competitorUrls = urls.slice(0, 5); // Take first 5 URLs as competitors
     
     // Enhanced competitor match score calculation
-    let competitorMatchScore = 65; // Base score
+    let competitorMatchScore = 60; // Base score tuned slightly lower
     if (domains.length > 0) {
         // Higher score if more domains found
         competitorMatchScore += Math.min(domains.length * 4, 15);
@@ -120,15 +130,15 @@ function extractRealDataFromResponse(response: string, phrase: string, domain?: 
         competitorMatchScore += 8;
     }
     if (response.toLowerCase().includes('market leader') || response.toLowerCase().includes('top') || response.toLowerCase().includes('best') || response.toLowerCase().includes('leading')) {
-        competitorMatchScore += 6;
+        competitorMatchScore += 5;
     }
     if (response.toLowerCase().includes('enterprise') || response.toLowerCase().includes('saas') || response.toLowerCase().includes('platform') || response.toLowerCase().includes('solution')) {
-        competitorMatchScore += 4;
-    }
-    if (response.toLowerCase().includes('recommend') || response.toLowerCase().includes('suggest') || response.toLowerCase().includes('consider')) {
         competitorMatchScore += 3;
     }
-    competitorMatchScore = Math.min(competitorMatchScore, 95);
+    if (response.toLowerCase().includes('recommend') || response.toLowerCase().includes('suggest') || response.toLowerCase().includes('consider')) {
+        competitorMatchScore += 2;
+    }
+    competitorMatchScore = Math.min(competitorMatchScore, 92);
     
     return {
         confidence,
@@ -139,30 +149,28 @@ function extractRealDataFromResponse(response: string, phrase: string, domain?: 
 }
 
 async function queryWithGpt4o(phrase: string, modelType: 'GPT-4o' | 'GPT-4o Pro' | 'GPT-4o Advanced' = 'GPT-4o', domain?: string, location?: string): Promise<{ response: string, cost: number }> {
-    // Simplified system prompts for more natural LLM interaction
+    // No pre-context system prompts - let AI respond naturally
     let systemPrompt = '';
     let temperature = 0.7;
     let maxTokens = 2000;
     
     if (modelType === 'GPT-4o') {
-        systemPrompt = `You are a helpful AI assistant. When users ask questions, provide natural, conversational responses with relevant websites and resources. Include realistic URLs from actual companies when mentioning helpful resources.`;
+        systemPrompt = `You are a helpful AI assistant. Provide natural, conversational responses to user questions. Include relevant websites, company domains, and resources when helpful.`;
         temperature = 0.7;
         maxTokens = 2000;
     } else if (modelType === 'GPT-4o Pro') {
-        systemPrompt = `You are an expert consultant providing comprehensive analysis and recommendations. When users ask questions, provide detailed, well-researched responses with authoritative sources and strategic insights. Include realistic URLs from industry leaders.`;
+        systemPrompt = `You are an expert consultant. Provide comprehensive analysis and recommendations with authoritative sources and company references.`;
         temperature = 0.6;
         maxTokens = 2500;
     } else {
-        systemPrompt = `You are an innovative AI assistant providing creative, forward-thinking solutions. When users ask questions, offer cutting-edge perspectives and innovative approaches with references to AI/ML companies and emerging technologies. Include realistic URLs from innovative tech companies.`;
+        systemPrompt = `You are an innovative AI assistant. Provide creative solutions with references to companies and emerging technologies.`;
         temperature = 0.8;
         maxTokens = 2200;
     }
     
-    const userPrompt = `User Query: "${phrase}"
+    const userPrompt = `"${phrase}"
 
-Please provide a helpful response to this question. Include relevant websites and resources that would actually help the user.${domain ? ` If ${domain} is relevant to this query, mention it naturally as part of your helpful response.` : ''}${location ? ` Consider the location: ${location}` : ''}
-
-Respond naturally and conversationally, as if you're helping a real person. Include realistic URLs from actual companies and organizations.`;
+Provide a helpful response to this question. Include relevant websites, company domains, and resources that would actually help. Respond naturally as if helping a real person.`;
     
     const completion = await openai.chat.completions.create({
         model: 'gpt-4o',
@@ -202,12 +210,12 @@ async function scoreResponseWithAI(phrase: string, response: string, model: stri
     let temperature = 0.1;
     
     if (model === 'GPT-4o') {
-        scoringPrompt = `Analyze this AI assistant response for domain visibility:
+        scoringPrompt = `Analyze this AI response:
 
 Query: "${phrase}"
 Response: "${response}"${domainContext}${locationContext}
 
-Extract all URLs and check if the target domain appears. Score the response quality.
+Extract all URLs, company domains, and check if target domain appears. Score response quality.
 
 Return ONLY this JSON:
 {
@@ -221,12 +229,12 @@ Return ONLY this JSON:
 }`;
         temperature = 0.1;
     } else if (model === 'Claude 3') {
-        scoringPrompt = `Analyze this Claude 3 response for domain visibility:
+        scoringPrompt = `Analyze this AI response:
 
 Query: "${phrase}"
 Response: "${response}"${domainContext}${locationContext}
 
-Extract all URLs and check if the target domain appears. Score the comprehensive analysis quality.
+Extract all URLs, company domains, and check if target domain appears. Score analysis quality.
 
 Return ONLY this JSON:
 {
@@ -240,12 +248,12 @@ Return ONLY this JSON:
 }`;
         temperature = 0.2;
     } else {
-        scoringPrompt = `Analyze this Gemini 1.5 response for domain visibility:
+        scoringPrompt = `Analyze this AI response:
 
 Query: "${phrase}"
 Response: "${response}"${domainContext}${locationContext}
 
-Extract all URLs and check if the target domain appears. Score the innovative approach quality.
+Extract all URLs, company domains, and check if target domain appears. Score response quality.
 
 Return ONLY this JSON:
 {
@@ -263,7 +271,7 @@ Return ONLY this JSON:
     const completion = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [
-            { role: 'system', content: 'You are a helpful assistant.' },
+            { role: 'system', content: 'You are an analysis assistant. Extract URLs, domains, and score responses.' },
             { role: 'user', content: scoringPrompt }
         ],
         max_tokens: 400,
@@ -274,18 +282,59 @@ Return ONLY this JSON:
         const jsonMatch = scoringText.match(/\{[\s\S]*\}/);
         const jsonText = jsonMatch ? jsonMatch[0] : scoringText;
         const scores = JSON.parse(jsonText);
-        // Extract real data from the response
+        // Extract evidence from the actual response
         const extractedData = extractRealDataFromResponse(response, phrase, domain);
+
+        // Derive presence and rank strictly from URLs/domains in the response
+        let presence = scores.presence === 1 ? 1 : 0;
+        let domainRank = scores.domainRank || 0;
+        let foundDomains: string[] = [];
+        if (domain) {
+            const urlRegex = /https?:\/\/[^\s\)\]}"']+/g;
+            const urls: string[] = response.match(urlRegex) || [];
+            const allDomains: string[] = urls.map(u => {
+                try { return new URL(u).hostname.toLowerCase().replace(/^www\./, ''); } catch { return ''; }
+            }).filter(Boolean);
+            const target = domain.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '');
+            for (let i = 0; i < allDomains.length; i++) {
+                const d = allDomains[i];
+                if (d === target || d.endsWith('.' + target) || target.endsWith('.' + d)) {
+                    presence = 1;
+                    domainRank = i + 1; // 1-based
+                    break;
+                }
+            }
+            foundDomains = Array.from(new Set(allDomains));
+        }
         
+        // Reweight scores: prioritize visibility first, then rank
+        const baseRel = Math.min(Math.max(Math.round(scores.relevance || 3), 1), 5);
+        const baseOverall = Math.min(Math.max(Math.round(scores.overall || 3), 1), 5);
+        const finalRelevance = presence ? Math.min(5, baseRel + 1) : Math.max(1, baseRel - 1);
+        const finalOverall = presence
+          ? (domainRank <= 1 ? 5 : domainRank <= 3 ? Math.max(4, baseOverall) : domainRank <= 5 ? Math.max(4, baseOverall - 0) : Math.max(3, baseOverall - 1))
+          : Math.max(2, baseOverall - 1);
+
+        // Calibrate final confidence based on evidence and visibility
+        let finalConfidence = extractedData.confidence;
+        if (presence) finalConfidence += 5;
+        if (domainRank && domainRank > 0) {
+          if (domainRank === 1) finalConfidence += 5;
+          else if (domainRank <= 3) finalConfidence += 3;
+        }
+        const hasUrls = (foundDomains && foundDomains.length > 0);
+        if (!hasUrls) finalConfidence -= 10;
+        finalConfidence = Math.max(20, Math.min(95, Math.round(finalConfidence)));
+
         return {
-            presence: scores.presence === 1 ? 1 : 0,
-            relevance: Math.min(Math.max(Math.round(scores.relevance || 3), 1), 5),
+            presence,
+            relevance: finalRelevance,
             accuracy: Math.min(Math.max(Math.round(scores.accuracy || 3), 1), 5),
             sentiment: Math.min(Math.max(Math.round(scores.sentiment || 3), 1), 5),
-            overall: Math.min(Math.max(Math.round(scores.overall || 3), 1), 5),
-            domainRank: scores.domainRank || 0,
-            foundDomains: scores.foundDomains || [],
-            confidence: extractedData.confidence,
+            overall: finalOverall,
+            domainRank,
+            foundDomains,
+            confidence: finalConfidence,
             sources: extractedData.sources,
             competitorUrls: extractedData.competitorUrls,
             competitorMatchScore: extractedData.competitorMatchScore
@@ -313,67 +362,39 @@ Return ONLY this JSON:
             // Extract domains from URLs
             const allDomains = urls.map(url => {
                 try {
-                    return new URL(url).hostname;
+                    return new URL(url).hostname.toLowerCase().replace(/^www\./, '');
                 } catch {
                     return '';
                 }
             }).filter(hostname => hostname.length > 0);
             
-            console.log('Backend domain detection:', {
-                targetDomain: domain,
-                allDomains,
-                response: response.substring(0, 200)
-            });
-            
             // Check if target domain appears in the extracted domains
             const targetDomain = domain.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '');
-            const matchingDomain = allDomains.find(foundDomain => {
+            const matchingIndex = allDomains.findIndex(foundDomain => {
                 const cleanFoundDomain = foundDomain.toLowerCase().replace(/^www\./, '');
-                
-                // Exact match
-                if (cleanFoundDomain === targetDomain) return true;
-                
-                // Subdomain match (e.g., blog.example.com matches example.com)
-                if (cleanFoundDomain.endsWith('.' + targetDomain)) return true;
-                
-                // Parent domain match (e.g., example.com matches blog.example.com)
-                if (targetDomain.endsWith('.' + cleanFoundDomain)) return true;
-                
-                return false;
+                return (
+                  cleanFoundDomain === targetDomain ||
+                  cleanFoundDomain.endsWith('.' + targetDomain) ||
+                  targetDomain.endsWith('.' + cleanFoundDomain)
+                );
             });
             
-            domainPresence = matchingDomain ? 1 : 0;
-            
-            // Only include the target domain in foundDomains if it's actually found
-            if (domainPresence && matchingDomain) {
-                foundDomains = [matchingDomain];
-                
-                // Find the rank of the target domain
-                for (let i = 0; i < allDomains.length; i++) {
-                    const foundDomain = allDomains[i].toLowerCase().replace(/^www\./, '');
-                    if (foundDomain === targetDomain || 
-                        foundDomain.endsWith('.' + targetDomain) || 
-                        targetDomain.endsWith('.' + foundDomain)) {
-                        domainRank = i + 1;
-                        break;
-                    }
-                }
+            domainPresence = matchingIndex >= 0 ? 1 : 0;
+            if (domainPresence) {
+              domainRank = matchingIndex + 1;
+              foundDomains = Array.from(new Set(allDomains));
             } else {
-                // If target domain is not found, foundDomains should be empty
-                foundDomains = [];
-                domainRank = 0;
+              foundDomains = [];
+              domainRank = 0;
             }
-            
-            console.log('Backend domain detection result:', {
-                domainPresence,
-                domainRank,
-                foundDomains,
-                matchingDomain
-            });
         }
         
         // Extract real data from the response for fallback case
         const extractedData = extractRealDataFromResponse(response, phrase, domain);
+        let finalConfidence = extractedData.confidence;
+        if (domainPresence) finalConfidence += 5;
+        if (!foundDomains.length) finalConfidence -= 10;
+        finalConfidence = Math.max(20, Math.min(95, Math.round(finalConfidence)));
         
         return {
             presence: domainPresence,
@@ -383,7 +404,7 @@ Return ONLY this JSON:
             overall: hasRelevantInfo && hasSubstantialContent ? 4 : 2,
             domainRank: domainRank,
             foundDomains: foundDomains,
-            confidence: extractedData.confidence,
+            confidence: finalConfidence,
             sources: extractedData.sources,
             competitorUrls: extractedData.competitorUrls,
             competitorMatchScore: extractedData.competitorMatchScore

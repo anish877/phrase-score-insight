@@ -71,7 +71,7 @@ const Index = () => {
 
   const prevStep = async () => {
     if (currentStep > 0) {
-      try {
+    try {
         setCurrentStep(currentStep - 1);
       } catch (error) {
         console.error('Failed to save progress:', error);
@@ -118,17 +118,17 @@ const Index = () => {
             <div>
               <h1 className="text-xl font-medium text-gray-900">Domain Analysis</h1>
               <p className="text-sm text-gray-500 mt-1">Step {currentStep + 1} of {steps.length}</p>
-            </div>
-            
+        </div>
+
             {/* Clean Step Progress */}
             <div className="flex items-center space-x-2">
-              {steps.map((step, index) => (
+            {steps.map((step, index) => (
                 <div key={index} className="flex items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-all ${
                     index < currentStep ? 'bg-gray-900 text-white' :
                     index === currentStep ? 'bg-gray-100 text-gray-900 ring-2 ring-gray-200' :
                     'bg-gray-50 text-gray-400'
-                  }`}>
+                }`}>
                     {index < currentStep ? '✓' : index + 1}
                   </div>
                   {index < steps.length - 1 && (
@@ -138,8 +138,8 @@ const Index = () => {
                   )}
                 </div>
               ))}
-            </div>
-          </div>
+                </div>
+              </div>
           
           {/* Minimal Progress Bar */}
           <div className="mt-4">
@@ -150,74 +150,74 @@ const Index = () => {
               ></div>
             </div>
           </div>
+          </div>
         </div>
-      </div>
 
       {/* Clean Content Area */}
       <div className="max-w-6xl mx-auto">
-        {currentStep === 0 && (
-          <DomainSubmission
-            domain={domain}
-            setDomain={setDomain}
-            onNext={nextStep}
-            customPaths={customPaths}
-            setCustomPaths={setCustomPaths}
-            subdomains={subdomains}
-            setSubdomains={setSubdomains}
-            priorityUrls={priorityUrls}
-            setPriorityUrls={setPriorityUrls}
-            priorityPaths={priorityPaths}
-            setPriorityPaths={setPriorityPaths}
-            location={location}
-            setLocation={setLocation}
-          />
-        )}
-        
-        {currentStep === 1 && (
-          <DomainExtraction
-            key={`domain-extraction-${domainId}`}
-            domain={domain}
-            subdomains={subdomains}
-            setDomainId={setDomainId}
-            domainId={domainId}
-            setBrandContext={setBrandContext}
-            onNext={nextStep}
-            onPrev={prevStep}
-            customPaths={customPaths}
-            priorityUrls={priorityUrls}
-            priorityPaths={priorityPaths}
-            location={location}
-          />
-        )}
-        
-        {currentStep === 2 && (
-          <Step3Results
-            domainId={domainId}
-            onNext={(data) => {
-              nextStep();
-            }}
-            onBack={prevStep}
-          />
-        )}
-        
-        {currentStep === 3 && (
-          <AIQueryResults
-            domainId={domainId}
-            setQueryResults={setQueryResults}
-            setQueryStats={setQueryStats}
-            onNext={nextStep}
-            onPrev={prevStep}
-            location={location}
-          />
-        )}
+          {currentStep === 0 && (
+            <DomainSubmission
+              domain={domain}
+              setDomain={setDomain}
+              onNext={nextStep}
+              customPaths={customPaths}
+              setCustomPaths={setCustomPaths}
+              subdomains={subdomains}
+              setSubdomains={setSubdomains}
+              priorityUrls={priorityUrls}
+              setPriorityUrls={setPriorityUrls}
+              priorityPaths={priorityPaths}
+              setPriorityPaths={setPriorityPaths}
+              location={location}
+              setLocation={setLocation}
+            />
+          )}
+          
+          {currentStep === 1 && (
+            <DomainExtraction
+              key={`domain-extraction-${domainId}`}
+              domain={domain}
+              subdomains={subdomains}
+              setDomainId={setDomainId}
+              domainId={domainId}
+              setBrandContext={setBrandContext}
+              onNext={nextStep}
+              onPrev={prevStep}
+              customPaths={customPaths}
+              priorityUrls={priorityUrls}
+              priorityPaths={priorityPaths}
+              location={location}
+            />
+          )}
+          
+          {currentStep === 2 && (
+            <Step3Results
+              domainId={domainId}
+              onNext={(data) => {
+                nextStep();
+              }}
+              onBack={prevStep}
+            />
+          )}
+          
+          {currentStep === 3 && (
+            <AIQueryResults
+              domainId={domainId}
+              setQueryResults={setQueryResults}
+              setQueryStats={setQueryStats}
+              onNext={nextStep}
+              onPrev={prevStep}
+              location={location}
+            />
+          )}
 
-        {currentStep === 4 && (
-          <Step4Report
-            domainId={domainId}
-            onBack={prevStep}
-            onComplete={completeAnalysis}
-          />
-        )}
+          {currentStep === 4 && (
+            <Step4Report
+              domainId={domainId}
+              onBack={prevStep}
+              onComplete={completeAnalysis}
+            />
+          )}
       </div>
     </div>
   );

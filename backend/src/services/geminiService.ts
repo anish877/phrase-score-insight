@@ -14,6 +14,12 @@ export interface ExtractionResult {
   analyzedUrls: string[];
   extractedContext: string;
   tokenUsage?: number;
+  metadata?: {
+    domainsAnalyzed: number;
+    contentQuality: number;
+    crawlEfficiency: number;
+    locationContext: boolean;
+  };
 }
 
 export interface CrawlProgress {
@@ -358,72 +364,289 @@ export async function crawlAndExtractWithGpt4o(
   onProgress?: ProgressCallback,
   customPaths?: string[],
   priorityUrls?: string[],
-  location?: string // Add location param
+  location?: string,
+  options?: {
+    maxPages?: number;
+    maxTokens?: number;
+    contentQualityThreshold?: number;
+    parallelDomains?: boolean;
+  }
 ): Promise<ExtractionResult> {
   try {
-    // Support both string and array for backward compatibility
     const domainList = Array.isArray(domains) ? domains : [domains];
     const primaryDomain = domainList[0];
+    
+    const {
+      maxPages = 20,
+      maxTokens = 150000, // Leave room for response
+      contentQualityThreshold = 100, // Min chars for quality content
+      parallelDomains = true
+    } = options || {};
 
     onProgress?.({
       phase: 'ai_processing',
-      step: 'Running advanced AI analysis for brand context extraction...',
-      progress: 60,
+      step: 'Initializing intelligent crawling strategy...',
+      progress: 10,
       stats: { pagesScanned: 0, analyzedUrls: [] }
     });
 
-    // Crawl all domains and collect content
-    let allContentBlocks: string[] = [];
-    let totalPages = 0;
-    let totalTokens = 0;
-    let analyzedUrls: string[] = [];
+    // Batch fetch domain contexts
+    const domainRecords = await prisma.domain.findMany({
+      where: { 
+        OR: domainList.map(domain => ({ url: { contains: domain } }))
+      },
+      select: { url: true, locationContext: true }
+    });
 
-    for (const domain of domainList) {
-      const { contentBlocks, urls } = await crawlWebsiteWithProgress(
-        domain, 
-        8, 
-        onProgress, 
-        customPaths, 
-        priorityUrls
-      );
-      allContentBlocks.push(...contentBlocks);
-      totalPages += urls.length;
-      analyzedUrls.push(...urls);
-    }
+    const domainContextMap = new Map(
+      domainRecords.map(record => [record.url, record.locationContext])
+    );
 
     onProgress?.({
       phase: 'ai_processing',
-      step: 'Extracting brand context and market positioning insights...',
+      step: 'Executing parallel domain analysis...',
+      progress: 30,
+      stats: { pagesScanned: 0, analyzedUrls: [] }
+    });
+
+    // Parallel or sequential crawling based on options
+    let allCrawlResults: Array<{contentBlocks: string[], urls: string[]}>;
+    
+    if (parallelDomains && domainList.length > 1) {
+      // Parallel crawling for multiple domains
+      const crawlPromises = domainList.map(domain => 
+        crawlWebsiteWithProgress(
+          domain, 
+          Math.ceil(maxPages / domainList.length), // Distribute pages across domains
+          undefined, // Don't pass progress to avoid conflicts
+          customPaths, 
+          priorityUrls
+        )
+      );
+      allCrawlResults = await Promise.all(crawlPromises);
+    } else {
+      // Sequential crawling
+      allCrawlResults = [];
+      for (const domain of domainList) {
+        const result = await crawlWebsiteWithProgress(
+          domain, 
+          maxPages, 
+          onProgress, 
+          customPaths, 
+          priorityUrls
+        );
+        allCrawlResults.push(result);
+      }
+    }
+
+    // Aggregate results with smart prioritization
+    const { prioritizedContent, analyzedUrls, totalPages } = 
+      prioritizeAndFilterContent(allCrawlResults, {
+        maxPages,
+        maxTokens,
+        contentQualityThreshold,
+        priorityUrls: priorityUrls || []
+      });
+
+    onProgress?.({
+      phase: 'ai_processing',
+      step: 'Generating comprehensive business intelligence...',
       progress: 70,
       stats: { pagesScanned: totalPages, analyzedUrls }
     });
 
-    // Use GPT-4o for AI analysis
-    const locationContext = location ? `\nLocation: ${location}` : '';
-    // Deduplicate and limit content blocks
-    const uniqueBlocks = Array.from(new Set(allContentBlocks)).slice(0, 20);
-    
-    // Get location context from database if available
-    let locationDomainContext = '';
-    try {
-      const domainRecord = await prisma.domain.findFirst({
-        where: { url: { contains: primaryDomain } },
-        select: { locationContext: true }
+    // Build enhanced context
+    const locationDomainContext = buildLocationContext(domainContextMap, domainList);
+    const enhancedPrompt = buildAnalysisPrompt({
+      primaryDomain,
+      location,
+      contentBlocks: prioritizedContent,
+      locationDomainContext,
+      totalPages,
+      analyzedUrls
+    });
+
+    // Validate token count before API call
+    let promptToUse = enhancedPrompt;
+    const estimatedTokens = estimateTokenCount(enhancedPrompt);
+    if (estimatedTokens > maxTokens) {
+      console.warn(`Prompt too long (${estimatedTokens} tokens), truncating content`);
+      const truncatedContent = truncateToTokenLimit(prioritizedContent, Math.floor(maxTokens * 0.7));
+      promptToUse = buildAnalysisPrompt({
+        primaryDomain,
+        location,
+        contentBlocks: truncatedContent,
+        locationDomainContext,
+        totalPages,
+        analyzedUrls
       });
-      if (domainRecord?.locationContext) {
-        locationDomainContext = `\n\n**LOCATION-DOMAIN CONTEXT:**
-${domainRecord.locationContext}`;
+    }
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { 
+          role: 'system', 
+          content: 'You are an expert business analyst specializing in brand context extraction for SEO and marketing purposes. Provide specific, actionable insights based on actual website content.' 
+        },
+        { role: 'user', content: promptToUse }
+      ],
+      max_tokens: 2500, // Increased for comprehensive analysis
+      temperature: 0.2 // Lower for more consistent results
+    });
+
+    const totalTokens = completion.usage?.total_tokens || 0;
+    const extractedContext = completion.choices[0].message?.content || 'No context extracted';
+
+    onProgress?.({
+      phase: 'validation',
+      step: 'Finalizing analysis and quality validation...',
+      progress: 95,
+      stats: { pagesScanned: totalPages, analyzedUrls }
+    });
+
+    // Enhanced result with metadata
+    const finalResult: ExtractionResult = {
+      pagesScanned: totalPages,
+      analyzedUrls: analyzedUrls,
+      extractedContext: extractedContext,
+      tokenUsage: totalTokens,
+      metadata: {
+        domainsAnalyzed: domainList.length,
+        contentQuality: calculateContentQualityScore(prioritizedContent),
+        crawlEfficiency: totalPages > 0 ? (prioritizedContent.length / totalPages) : 0,
+        locationContext: !!location
       }
-    } catch (error) {
-      console.warn('Could not fetch location context from database:', error);
+    };
+
+    return finalResult;
+
+  } catch (error) {
+    console.error('Enhanced crawling error:', error);
+    
+    // Enhanced error handling with recovery strategies
+    if (error instanceof Error) {
+      if (error.message.includes('token')) {
+        throw new Error(`Token limit exceeded. Try reducing content scope or increasing maxTokens option.`);
+      }
+      if (error.message.includes('rate limit')) {
+        throw new Error(`API rate limit reached. Please wait before retrying.`);
+      }
     }
     
-    const analysisPrompt = `You are an expert business intelligence analyst and SEO strategist. Conduct a comprehensive domain analysis that will serve as the foundation for all subsequent AI-powered analysis phases.
+    throw new Error(`Crawling failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+// Helper functions for optimization
+function prioritizeAndFilterContent(
+  crawlResults: Array<{contentBlocks: string[], urls: string[]}>,
+  options: {
+    maxPages: number;
+    maxTokens: number;
+    contentQualityThreshold: number;
+    priorityUrls: string[];
+  }
+) {
+  let allContent: Array<{content: string, url: string, priority: number}> = [];
+  let allUrls: string[] = [];
+
+  // Combine and score content
+  crawlResults.forEach(result => {
+    result.contentBlocks.forEach((content, index) => {
+      const url = result.urls[index] || '';
+      const priority = calculateContentPriority(content, url, options.priorityUrls);
+      
+      if (content.length >= options.contentQualityThreshold) {
+        allContent.push({ content, url, priority });
+      }
+    });
+    allUrls.push(...result.urls);
+  });
+
+  // Sort by priority and deduplicate
+  const uniqueContent = deduplicateContent(allContent);
+  const sortedContent = uniqueContent
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, options.maxPages);
+
+  return {
+    prioritizedContent: sortedContent.map(item => item.content),
+    analyzedUrls: [...new Set(allUrls)],
+    totalPages: allUrls.length
+  };
+}
+
+function calculateContentPriority(
+  content: string, 
+  url: string, 
+  priorityUrls: string[]
+): number {
+  let score = 0;
+  
+  // Priority URL bonus
+  if (priorityUrls.some(pUrl => url.includes(pUrl))) {
+    score += 100;
+  }
+  
+  // Content quality factors
+  score += Math.min(content.length / 100, 50); // Length score (max 50)
+  score += (content.match(/\b(about|service|product|solution)\b/gi) || []).length * 5;
+  score += url.includes('/about') ? 20 : 0;
+  score += url === '/' || url.endsWith('/') ? 15 : 0; // Homepage bonus
+  
+  // Penalize thin content
+  if (content.length < 200) score -= 20;
+  
+  return score;
+}
+
+function deduplicateContent(
+  contentArray: Array<{content: string, url: string, priority: number}>
+): Array<{content: string, url: string, priority: number}> {
+  const seen = new Set<string>();
+  return contentArray.filter(item => {
+    // Simple similarity check - could be enhanced with fuzzy matching
+    const signature = item.content.substring(0, 200).toLowerCase();
+    if (seen.has(signature)) {
+      return false;
+    }
+    seen.add(signature);
+    return true;
+  });
+}
+
+function buildLocationContext(
+  domainContextMap: Map<string, string | null>, 
+  domainList: string[]
+): string {
+  const contexts = domainList
+    .map(domain => domainContextMap.get(domain))
+    .filter(Boolean) as string[];
+  
+  return contexts.length > 0 
+    ? `\n\n**LOCATION-DOMAIN CONTEXT:**\n${contexts.join('\n\n')}`
+    : '';
+}
+
+function buildAnalysisPrompt(params: {
+  primaryDomain: string;
+  location?: string;
+  contentBlocks: string[];
+  locationDomainContext: string;
+  totalPages: number;
+  analyzedUrls: string[];
+}): string {
+  const { primaryDomain, location, contentBlocks, locationDomainContext, totalPages, analyzedUrls } = params;
+  
+  return `You are an expert business intelligence analyst and SEO strategist. Conduct a comprehensive domain analysis that will serve as the foundation for all subsequent AI-powered analysis phases.
 
 **ANALYSIS CONTEXT:**
 Domain: ${primaryDomain}
 Location: ${location || 'Global'}
-Content Blocks: ${uniqueBlocks.length} pages analyzed${locationDomainContext}
+Pages Analyzed: ${totalPages}
+Content Blocks: ${contentBlocks.length} high-quality pages
+Sample URLs: ${analyzedUrls.slice(0, 5).join(', ')}${analyzedUrls.length > 5 ? '...' : ''}${locationDomainContext}
 
 **COMPREHENSIVE BUSINESS INTELLIGENCE FRAMEWORK:**
 
@@ -483,7 +706,7 @@ Content Blocks: ${uniqueBlocks.length} pages analyzed${locationDomainContext}
    - **Local SEO**: Location-based opportunities if applicable
 
 **WEBSITE CONTENT ANALYSIS:**
-${uniqueBlocks.join('\n\n')}
+${contentBlocks.join('\n\n')}
 
 **OUTPUT REQUIREMENTS:**
 Provide a comprehensive, structured analysis that serves as the foundation for:
@@ -505,57 +728,36 @@ Provide a comprehensive, structured analysis that serves as the foundation for:
 - Provide location-specific recommendations when applicable
 
 This analysis will be used by subsequent AI phases for keyword generation, competitor analysis, intent classification, and phrase generation. Ensure all insights are accurate, realistic, and actionable for SEO strategy development.`;
+}
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: 'You are an expert business analyst specializing in brand context extraction for SEO and marketing purposes.' },
-        { role: 'user', content: analysisPrompt }
-      ],
-      max_tokens: 2000,
-      temperature: 0.3
-    });
-    totalTokens += completion.usage?.total_tokens || 0;
+function estimateTokenCount(text: string): number {
+  // Rough estimation: ~4 characters per token
+  return Math.ceil(text.length / 4);
+}
 
-    const extractedContext = completion.choices[0].message?.content || 'No context extracted';
-
-    onProgress?.({
-      phase: 'validation',
-      step: 'Validating analysis results and quality assurance checks...',
-      progress: 85,
-      stats: { pagesScanned: totalPages, analyzedUrls }
-    });
-
-
-
-    onProgress?.({
-      phase: 'validation',
-      step: 'Quality assurance and data validation in progress...',
-      progress: 90,
-      stats: { pagesScanned: totalPages, analyzedUrls }
-    });
-
-    // Validate and normalize the result using real AI-generated data
-    const finalResult: ExtractionResult = {
-      pagesScanned: totalPages,
-      analyzedUrls: analyzedUrls,
-      extractedContext: extractedContext,
-      tokenUsage: totalTokens
-    };
-
-    onProgress?.({
-      phase: 'validation',
-      step: 'Finalizing comprehensive brand analysis and preparing insights...',
-      progress: 95,
-      stats: { pagesScanned: totalPages, analyzedUrls }
-    });
-
-    return finalResult;
-
-  } catch (error) {
-    console.error('GPT-4o extraction error:', error);
-    throw new Error(`Failed to extract context: ${error instanceof Error ? error.message : 'Unknown error'}`);
+function truncateToTokenLimit(contentBlocks: string[], maxTokens: number): string[] {
+  let currentTokens = 0;
+  const result: string[] = [];
+  
+  for (const block of contentBlocks) {
+    const blockTokens = estimateTokenCount(block);
+    if (currentTokens + blockTokens > maxTokens) {
+      break;
+    }
+    result.push(block);
+    currentTokens += blockTokens;
   }
+  
+  return result;
+}
+
+function calculateContentQualityScore(contentBlocks: string[]): number {
+  if (contentBlocks.length === 0) return 0;
+  
+  const avgLength = contentBlocks.reduce((sum, block) => sum + block.length, 0) / contentBlocks.length;
+  const uniquenessScore = contentBlocks.length / new Set(contentBlocks).size;
+  
+  return Math.min(100, (avgLength / 10) + (uniquenessScore * 20));
 }
 
 export async function generatePhrases(keyword: string, domain?: string, context?: string, location?: string): Promise<{ phrases: string[], tokenUsage: number }> {
@@ -808,177 +1010,169 @@ export async function generateKeywordsForDomain(domain: string, context: string,
         select: { locationContext: true }
       });
       if (domainRecord?.locationContext) {
-        locationDomainContext = `\n\n**LOCATION-DOMAIN CONTEXT:**
-${domainRecord.locationContext}`;
+        locationDomainContext = `\nLocation Context: ${domainRecord.locationContext}`;
       }
     } catch (error) {
       console.warn('Could not fetch location context from database:', error);
     }
 
-    const prompt = `You are an expert SEO keyword researcher with Ahrefs-level expertise. Generate 30-40 highly targeted, intent-based keywords for SEO analysis and testing. These should be individual keyword terms (not sentences) that would be used in SEO tools like Ahrefs, SEMrush, or Google Keyword Planner.
+    // Streamlined, Ahrefs-focused prompt
+    const prompt = `Generate 35 SEO keywords with Ahrefs-quality metrics for: ${domain}
 
-**ANALYSIS CONTEXT:**
-Domain: ${domain}
-Business Context: ${context}
-Location: ${location || 'Global'}
-Location Context: ${locationContext}${locationDomainContext}
+Business: ${context}${locationContext}${locationDomainContext}
 
-**KEYWORD GENERATION REQUIREMENTS FOR SEO ANALYSIS:**
+Requirements:
+- Mix of 1-6 word phrases
+- Realistic search volumes (10-100K range)
+- Proper intent classification
+- Accurate difficulty + CPC correlation
 
-1. **SEARCH INTENT CLASSIFICATION** (Must be one of: Informational, Commercial, Transactional, Navigational):
-   - **Informational** (30%): "how to", "what is", "guide", "tutorial", "learn", "tips"
-   - **Commercial** (25%): "best", "review", "compare", "vs", "top", "alternative"
-   - **Transactional** (30%): "buy", "price", "cost", "near me", "contact", "hire"
-   - **Navigational** (15%): brand names, specific company searches, "official"
+Intent Distribution:
+- Informational (25%): how to, what is, guide, tips
+- Commercial (35%): best, review, compare, top
+- Transactional (30%): buy, price, near me, hire
+- Navigational (10%): brand, company names
 
-2. **KEYWORD TYPES TO INCLUDE**:
-   - **Short-tail** (1-2 words): High volume, competitive
-   - **Medium-tail** (3-4 words): Balanced volume/competition
-   - **Long-tail** (5+ words): Lower volume, less competitive
-   - **Question-based**: "how to", "what is", "why do", "when to"
-   - **Location-based**: "[service] near me", "[city] [service]", "[location] area"
-   - **Comparison**: "vs", "alternative to", "better than", "instead of"
-   - **Problem-solution**: "fix", "solve", "help with", "solution for"
+Volume Ranges:
+- 10-500: Long-tail, specific
+- 500-5K: Medium competition 
+- 5K-20K: Competitive
+- 20K-100K: High competition
 
-3. **VOLUME ESTIMATION** (Realistic for SEO analysis):
-   - **1-500**: Very low volume (long-tail, specific, niche terms)
-   - **501-2,000**: Low volume (niche terms, specific use cases)
-   - **2,001-10,000**: Medium volume (moderate competition, industry terms)
-   - **10,001-50,000**: High volume (competitive terms, broad industry)
-   - **50,001+**: Very high volume (highly competitive, major terms)
+Difficulty Logic:
+- Low (0-30): New terms, long-tail, local
+- Medium (31-60): Established, moderate competition
+- High (61-100): Popular, highly competitive
 
-4. **COMPETITION ANALYSIS** (Must be: Low, Medium, High):
-   - **Low**: New/emerging terms, specific niches, long-tail phrases
-   - **Medium**: Established terms, moderate competition, industry-specific
-   - **High**: Popular terms, high competition, broad market terms
+CPC Logic:
+- $0.50-2.00: Informational, low commercial intent
+- $2.00-5.00: Commercial research, comparisons
+- $5.00-12.00: High-intent transactional
+- Location keywords: +20-50% CPC premium
 
-5. **CPC ESTIMATION** (Realistic cost per click):
-   - **$0.10-$1.00**: Informational, low commercial intent, long-tail
-   - **$1.00-$3.00**: Mixed intent, moderate commercial value, medium-tail
-   - **$3.00-$7.00**: Commercial intent, high value, competitive terms
-   - **$7.00-$15.00**: High commercial intent, premium services, broad terms
+Return JSON only:
+[{"term":"keyword","volume":1200,"difficulty":"Medium","cpc":3.45,"intent":"Commercial"}]
 
-6. **LOCATION HANDLING** (if location provided):
-   - Include 30% location-specific keywords: "[service] in [location]", "[location] [service]"
-   - Include 20% "near me" variations: "[service] near me", "best [service] near me"
-   - Include 50% general terms without location for broader reach
-   - Only include location when it naturally fits the keyword intent
+Focus on:
+✓ Industry-specific terminology
+✓ Customer pain points
+✓ Service variations
+✓ Competitor comparisons
+✓ Location modifiers (if provided)
+✓ Problem-solution matches
+✓ Buyer journey stages
 
-7. **BUSINESS CONTEXT INTEGRATION**:
-   - Keywords must reflect the actual business type and services
-   - Include industry-specific terminology and expertise areas
-   - Consider target market and customer pain points
-   - Reflect unique value propositions and differentiators
-   - Align with identified content themes and authority areas
-
-**OUTPUT FORMAT FOR SEO ANALYSIS:**
-Return ONLY a JSON array with this exact structure for SEO analysis:
-[
-  {
-    "term": "exact keyword phrase",
-    "volume": 2500,
-    "difficulty": "Medium",
-    "cpc": 3.50,
-    "intent": "Commercial"
-  }
-]
-
-**SEO ANALYSIS REQUIREMENTS:**
-- Each keyword must have realistic volume numbers (no random data)
-- Intent must be one of: Informational, Commercial, Transactional, Navigational
-- Difficulty must be one of: Low, Medium, High
-- CPC must be realistic based on commercial intent and competition
-- Keywords should be diverse and cover different search intents
-- Include location-specific variations when location is provided
-- Ensure keywords are relevant to the business context and domain analysis
-- Keywords should be individual terms/phrases, not full sentences
-
-**QUALITY STANDARDS:**
-- Keywords must be directly relevant to the business and services
-- Include a strategic mix of short-tail and long-tail keywords
-- Ensure keywords reflect real user search behavior and intent
-- Focus on terms that would drive qualified, converting traffic
-- Align with identified content themes and target audience
-- Consider competitive positioning and market gaps
-- Include industry-specific terminology and expertise areas
-- Avoid generic terms unless highly relevant to the business model
-- Keywords should be suitable for SEO testing and analysis tools
-
-This keyword generation will be used for SEO analysis and testing. Ensure all keywords are actionable, realistic, and aligned with the comprehensive business analysis.`;
+No explanations, JSON only.`;
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [
-        { role: 'system', content: 'You are an expert SEO specialist who generates high-value keywords with realistic metrics based on real-world search data and competition analysis.' },
+        { role: 'system', content: 'You are an SEO data analyst who generates precise keyword metrics matching Ahrefs standards. Output clean JSON arrays only.' },
         { role: 'user', content: prompt }
       ],
-      max_tokens: 2000,
-      temperature: 0.5
+      max_tokens: 1500, // Reduced for faster response
+      temperature: 0.3 // Lower for more consistent data
     });
+
     const text = completion.choices[0].message?.content;
     if (!text) throw new Error('Empty response from GPT-4o API');
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    
+    // Extract JSON more efficiently
+    const jsonMatch = text.match(/\[[\s\S]*?\]/);
     if (!jsonMatch) {
-      console.error('No JSON array found in response:', text);
+      console.error('No JSON found in response');
       return { keywords: generateDomainFallbackKeywords(domain, context), tokenUsage: completion.usage?.total_tokens || 0 };
     }
+
     try {
       const keywords = JSON.parse(jsonMatch[0]);
       if (!Array.isArray(keywords)) {
-        throw new Error('Response is not an array');
+        throw new Error('Invalid JSON structure');
       }
-      // Validate and normalize each keyword with improved difficulty logic
+
+      // Enhanced validation and normalization
+      const validatedKeywords = keywords.map((kw: any) => {
+        const term = String(kw.term || '').trim();
+        if (!term) return null;
+
+        // Realistic volume bounds
+        let volume = Math.max(10, Math.min(100000, Number(kw.volume) || 1000));
+        
+        // Validate difficulty
+        let difficulty = kw.difficulty;
+        if (!['Low', 'Medium', 'High'].includes(difficulty)) {
+          // Auto-assign based on volume and keyword characteristics
+          const termLower = term.toLowerCase();
+          const wordCount = term.split(/\s+/).length;
+          
+          if (volume < 500 || wordCount >= 5 || termLower.includes('near me')) {
+            difficulty = 'Low';
+          } else if (volume < 5000 || wordCount >= 3) {
+            difficulty = 'Medium';
+          } else {
+            difficulty = 'High';
+          }
+        }
+
+        // Validate and correlate CPC with difficulty and intent
+        let cpc = Math.max(0.25, Math.min(15.00, Number(kw.cpc) || 2.00));
+        
+        // Intent-based CPC adjustment
+        const intent = ['Informational', 'Commercial', 'Transactional', 'Navigational'].includes(kw.intent) 
+          ? kw.intent 
+          : determineIntent(term);
+
+        // CPC correlation with difficulty and intent
+        if (difficulty === 'High' && intent === 'Transactional') cpc = Math.max(cpc, 4.00);
+        if (difficulty === 'Low' && intent === 'Informational') cpc = Math.min(cpc, 3.00);
+        if (term.toLowerCase().includes('near me') && location) cpc *= 1.3; // Location premium
+
+        return {
+          term,
+          volume,
+          difficulty,
+          cpc: Math.round(cpc * 100) / 100,
+          intent
+        };
+      }).filter(Boolean) as Array<{ term: string, volume: number, difficulty: string, cpc: number, intent: string }>;
+
       return {
-        keywords: keywords.map((kw: any) => {
-          const term = String(kw.term || '').trim();
-          const volume = Math.max(100, Math.min(50000, Number(kw.volume) || 1000));
-          
-          // Improved difficulty calculation based on volume and term characteristics
-          let difficulty = kw.difficulty;
-          if (!['Low', 'Medium', 'High'].includes(difficulty)) {
-            if (volume <= 1000) difficulty = 'Low';
-            else if (volume <= 10000) difficulty = 'Medium';
-            else difficulty = 'High';
-          }
-          
-          // Determine intent based on keyword characteristics
-          let intent = kw.intent;
-          if (!['Informational', 'Commercial', 'Transactional', 'Navigational'].includes(intent)) {
-            const termLower = term.toLowerCase();
-            if (termLower.includes('how to') || termLower.includes('what is') || termLower.includes('guide') || termLower.includes('learn')) {
-              intent = 'Informational';
-            } else if (termLower.includes('best') || termLower.includes('review') || termLower.includes('compare') || termLower.includes('vs')) {
-              intent = 'Commercial';
-            } else if (termLower.includes('buy') || termLower.includes('price') || termLower.includes('near me') || termLower.includes('contact')) {
-              intent = 'Transactional';
-            } else {
-              intent = 'Commercial'; // Default to commercial
-            }
-          }
-          
-          // Adjust CPC based on difficulty and commercial intent
-          let cpc = Math.max(0.50, Math.min(15.00, Number(kw.cpc) || 2.50));
-          if (difficulty === 'High') cpc = Math.max(cpc, 3.00);
-          if (difficulty === 'Low') cpc = Math.min(cpc, 5.00);
-          
-          return {
-            term,
-            volume,
-            difficulty,
-            cpc: Math.round(cpc * 100) / 100, // Round to 2 decimal places
-            intent
-          };
-        }).filter(kw => kw.term.length > 0),
+        keywords: validatedKeywords.slice(0, 35), // Ensure we return max 35
         tokenUsage: completion.usage?.total_tokens || 0
       };
+
     } catch (parseError) {
-      console.error('Failed to parse keywords JSON:', parseError);
+      console.error('JSON parse error:', parseError);
       return { keywords: generateDomainFallbackKeywords(domain, context), tokenUsage: completion.usage?.total_tokens || 0 };
     }
+
   } catch (error) {
     console.error('Keyword generation error:', error);
     return { keywords: generateDomainFallbackKeywords(domain, context), tokenUsage: 0 };
   }
+}
+
+// Helper function for intent determination
+function determineIntent(term: string): string {
+  const termLower = term.toLowerCase();
+  
+  // Informational patterns
+  if (termLower.match(/(how to|what is|guide|tutorial|learn|tips|why|when|where)/)) {
+    return 'Informational';
+  }
+  
+  // Transactional patterns
+  if (termLower.match(/(buy|price|cost|hire|contact|near me|book|order|get quote)/)) {
+    return 'Transactional';
+  }
+  
+  // Commercial patterns
+  if (termLower.match(/(best|review|compare|vs|top|alternative|rating)/)) {
+    return 'Commercial';
+  }
+  
+  // Default to Commercial for middle-funnel terms
+  return 'Commercial';
 }
 
 function generateDomainFallbackKeywords(domain: string, context: string): Array<{ term: string, volume: number, difficulty: string, cpc: number, intent: string }> {

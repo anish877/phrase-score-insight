@@ -94,7 +94,6 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
   const [generatingSteps, setGeneratingSteps] = useState([
     { name: 'Semantic Content Analysis', status: 'pending', progress: 0, description: 'Analyzing brand voice, theme, and target audience' },
     { name: 'Community Data Mining', status: 'pending', progress: 0, description: 'Extracting real insights from Reddit using Reddit API' },
-    { name: 'Competitor Research', status: 'pending', progress: 0, description: 'Researching competitors mentioned in community discussions' },
     { name: 'Search Pattern Analysis', status: 'pending', progress: 0, description: 'Analyzing user search behaviors' },
     { name: 'Creating optimized intent phrases', status: 'pending', progress: 0, description: 'Generating optimized search phrases' },
     { name: 'Intent Classification', status: 'pending', progress: 0, description: 'Classifying generated phrases by intent' },
@@ -348,7 +347,6 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
     setGeneratingSteps([
       { name: 'Semantic Content Analysis', status: 'running', progress: 0, description: 'Analyzing brand voice, theme, and target audience' },
       { name: 'Community Data Mining', status: 'pending', progress: 0, description: 'Extracting real insights from Reddit using Reddit API' },
-      { name: 'Competitor Research', status: 'pending', progress: 0, description: 'Researching competitors mentioned in community discussions' },
       { name: 'Search Pattern Analysis', status: 'pending', progress: 0, description: 'Analyzing user search behaviors' },
       { name: 'Creating optimized intent phrases', status: 'pending', progress: 0, description: 'Generating optimized search phrases' },
       { name: 'Intent Classification', status: 'pending', progress: 0, description: 'Classifying generated phrases by intent' },
@@ -441,11 +439,10 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
                 const phaseMap: { [key: string]: number } = {
                   'semantic_analysis': 0,
                   'community_mining': 1,
-                  'competitor_research': 2,
-                  'search_patterns': 3,
-                  'phrase_generation': 4,
-                  'intent_classification': 5,
-                  'relevance_scoring': 6
+                  'search_patterns': 2,
+                  'phrase_generation': 3,
+                  'intent_classification': 4,
+                  'relevance_scoring': 5
                 };
                 
                 if (phase && phaseMap[phase] !== undefined) {
@@ -1293,22 +1290,7 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
                                   </div>
                                 </>
                               )}
-                              {step.name === 'Competitor Research' && (
-                                <>
-                                  <div className="w-full flex-shrink-0 text-center">
-                                    <h4 className="text-xs font-medium text-blue-800 mb-1">Identifying Competitors</h4>
-                                    <p className="text-xs text-blue-600">Finding market rivals</p>
-                                  </div>
-                                  <div className="w-full flex-shrink-0 text-center">
-                                    <h4 className="text-xs font-medium text-blue-800 mb-1">Strategy Analysis</h4>
-                                    <p className="text-xs text-blue-600">Analyzing competitor approaches</p>
-                                  </div>
-                                  <div className="w-full flex-shrink-0 text-center">
-                                    <h4 className="text-xs font-medium text-blue-800 mb-1">Gap Identification</h4>
-                                    <p className="text-xs text-blue-600">Finding market opportunities</p>
-                                  </div>
-                                </>
-                              )}
+
                               {step.name === 'Search Pattern Analysis' && (
                                 <>
                                   <div className="w-full flex-shrink-0 text-center">
@@ -1556,7 +1538,7 @@ export default function Step3Results({ domainId, onNext, onBack }: Step3Props) {
                 </div>
               </div>
               <div className="mt-3 text-xs text-blue-600">
-                Generated using community insights, competitor analysis, and search pattern optimization
+                Generated using community insights and search pattern optimization
               </div>
             </div>
           )}

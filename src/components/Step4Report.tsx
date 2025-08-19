@@ -117,6 +117,8 @@ export default function Step4Report({ domainId, onBack, onComplete }: Step4Props
     overall: {
       avgOverall: number;
       presenceRate: number;
+      avgDomainRank?: number;
+      bestDomainRank?: number;
     };
   } | null>(null);
 
@@ -167,7 +169,7 @@ export default function Step4Report({ domainId, onBack, onComplete }: Step4Props
       setStats(null);
       
       console.log('Loading existing AI results for domain:', domainId);
-      const url = `${import.meta.env.VITE_API_URL}/api/ai-queries/${domainId}/results`;
+      const url = `${import.meta.env.VITE_API_URL}/api/ai-queries/results/${domainId}?limit=1000`;
       console.log('URL:', url);
       
       const token = localStorage.getItem('authToken');
@@ -187,7 +189,7 @@ export default function Step4Report({ domainId, onBack, onComplete }: Step4Props
         if (response.status === 404) {
           console.log('No existing AI results found, creating fallback report');
           // Create fallback report instead of throwing error
-          await generateReportFromAIResults();
+          await generateReportFromAIResults([]);
           
           // Complete all tasks
           setLoadingTasks(prev => prev.map(task => ({
@@ -209,11 +211,12 @@ export default function Step4Report({ domainId, onBack, onComplete }: Step4Props
       
       // Transform the data to match expected format
       if (data.results && Array.isArray(data.results)) {
-        setAiResults(data.results);
+        const results: AIQueryResult[] = data.results;
+        setAiResults(results);
         setStats(data.stats);
         
         // Generate report from existing results
-        await generateReportFromAIResults();
+        await generateReportFromAIResults(results);
       } else {
         throw new Error('No results found in response');
       }
@@ -226,25 +229,53 @@ export default function Step4Report({ domainId, onBack, onComplete }: Step4Props
       setIsGenerating(false);
       
       // Create fallback report
-      await generateReportFromAIResults();
+      await generateReportFromAIResults([]);
       setIsLoading(false);
     }
   };
 
-  const generateReportFromAIResults = async () => {
+  const generateReportFromAIResults = async (inputResults: AIQueryResult[]) => {
     try {
-      // Calculate overall score from AI results
-      const totalResults = aiResults.length;
+      // Always compute from provided input to avoid stale state
+      const results = inputResults && inputResults.length ? inputResults : aiResults;
+      const totalResults = results.length;
+
+      // Fetch domain details for accurate URL/location
+      let domainUrl = 'example.com';
+      let domainContext = 'Global';
+      try {
+        const token = localStorage.getItem('authToken');
+        if (token) {
+          const domainRes = await fetch(`${import.meta.env.VITE_API_URL}/api/domain/${domainId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          if (domainRes.ok) {
+            const domainData = await domainRes.json();
+            domainUrl = domainData.url || domainUrl;
+            domainContext = domainData.location || domainContext;
+          }
+        }
+      } catch (e) {
+        // ignore domain fetch errors
+      }
+
+      // Domain rank metrics based on actual URLs in responses
+      const domainRanks = results
+        .map(r => r.scores.domainRank || 0)
+        .filter(rank => rank > 0);
+      const avgDomainRank = domainRanks.length ? (domainRanks.reduce((s, v) => s + v, 0) / domainRanks.length) : 0;
+      const bestDomainRank = domainRanks.length ? Math.min(...domainRanks) : 0;
       
-      // Handle case where no results were obtained due to timeouts
       if (totalResults === 0) {
-        console.warn('No AI results obtained, creating fallback report');
         setReportData({
           domain: {
             id: domainId,
-            url: 'example.com',
+            url: domainUrl,
             context: 'Analysis completed with partial results due to AI model timeouts',
-            location: 'Global'
+            location: domainContext
           },
           selectedKeywords: [],
           intentPhrases: [],
@@ -273,184 +304,86 @@ export default function Step4Report({ domainId, onBack, onComplete }: Step4Props
         return;
       }
       
-      const avgOverall = totalResults > 0 ? aiResults.reduce((sum, r) => sum + r.scores.overall, 0) / totalResults : 0;
-      const avgPresence = totalResults > 0 ? aiResults.reduce((sum, r) => sum + r.scores.presence, 0) / totalResults : 0;
-      const avgRelevance = totalResults > 0 ? aiResults.reduce((sum, r) => sum + r.scores.relevance, 0) / totalResults : 0;
-      const avgAccuracy = totalResults > 0 ? aiResults.reduce((sum, r) => sum + r.scores.accuracy, 0) / totalResults : 0;
-      const avgSentiment = totalResults > 0 ? aiResults.reduce((sum, r) => sum + r.scores.sentiment, 0) / totalResults : 0;
-      
-      // Group results by model
-      const modelResults = aiResults.reduce((acc, result) => {
+      // Averages from 0-5 scales -> 0-100
+      const avgOverall0to5 = results.reduce((sum, r) => sum + (Number(r.scores.overall) || 0), 0) / totalResults;
+      const avgPresence0to1 = results.reduce((sum, r) => sum + (Number(r.scores.presence) || 0), 0) / totalResults; // already 0..1
+      const avgRelevance0to5 = results.reduce((sum, r) => sum + (Number(r.scores.relevance) || 0), 0) / totalResults;
+      const avgAccuracy0to5 = results.reduce((sum, r) => sum + (Number(r.scores.accuracy) || 0), 0) / totalResults;
+      const avgSentiment0to5 = results.reduce((sum, r) => sum + (Number(r.scores.sentiment) || 0), 0) / totalResults;
+
+      // Model grouping for llmResults
+      const modelResults = results.reduce((acc, result) => {
         if (!acc[result.model]) {
           acc[result.model] = { results: [], totalConfidence: 0, totalResponses: 0 };
         }
         acc[result.model].results.push(result);
-        acc[result.model].totalConfidence += result.scores.confidence;
+        acc[result.model].totalConfidence += (Number(result.scores.confidence) || 0);
         acc[result.model].totalResponses++;
         return acc;
       }, {} as Record<string, { results: AIQueryResult[]; totalConfidence: number; totalResponses: number }>);
 
       const llmResults = Object.entries(modelResults).map(([model, data]) => ({
         model,
-        avgConfidence: Math.round(data.totalConfidence / data.totalResponses),
+        avgConfidence: data.totalResponses ? Math.round(data.totalConfidence / data.totalResponses) : 0,
         responses: data.totalResponses,
         topSource: data.results[0]?.scores.sources[0] || 'AI Analysis'
       }));
 
-      // Analyze competitor data
-      const allCompetitorUrls = aiResults.flatMap(r => r.scores.competitorUrls || []);
+      // Additional insights
+      const allCompetitorUrls = results.flatMap(r => r.scores.competitorUrls || []);
       const competitorDomains = allCompetitorUrls.map(url => {
-        try {
-          return new URL(url).hostname;
-        } catch {
-          return '';
-        }
-      }).filter(domain => domain.length > 0);
-      
+        try { return new URL(url).hostname; } catch { return ''; }
+      }).filter(Boolean);
       const competitorFrequency = competitorDomains.reduce((acc, domain) => {
         acc[domain] = (acc[domain] || 0) + 1;
         return acc;
       }, {} as Record<string, number>);
-      
       const topCompetitors = Object.entries(competitorFrequency)
         .sort(([,a], [,b]) => b - a)
         .slice(0, 5)
         .map(([domain, count]) => ({ domain, frequency: count }));
 
-      // Generate comprehensive recommendations based on AI results
-      const recommendations = [];
-      
-      // Domain presence recommendations
-      if (avgPresence < 0.5) {
-        recommendations.push({
-          priority: 'High',
-          type: 'Domain Visibility',
-          description: 'Your domain has low visibility in AI assistant recommendations. Focus on creating high-quality, authoritative content that AI models would naturally recommend.',
-          impact: 'Could increase AI recommendation visibility by 60-80%'
-        });
-      } else if (avgPresence < 0.8) {
-        recommendations.push({
-          priority: 'Medium',
-          type: 'Domain Visibility',
-          description: 'Your domain has moderate visibility. Consider optimizing content for specific AI model preferences and improving domain authority signals.',
-          impact: 'Could increase AI recommendation visibility by 30-50%'
-        });
-      }
-      
-      // Content relevance recommendations
-      if (avgRelevance < 3.0) {
-        recommendations.push({
-          priority: 'High',
-          type: 'Content Optimization',
-          description: 'Content relevance scores are below optimal levels. Focus on creating more comprehensive, detailed content that directly addresses user queries.',
-          impact: 'Expected 40-60% improvement in AI recommendation relevance'
-        });
-      } else if (avgRelevance < 4.0) {
-        recommendations.push({
-          priority: 'Medium',
-          type: 'Content Optimization',
-          description: 'Content relevance is good but could be improved. Consider adding more specific examples, case studies, and actionable insights.',
-          impact: 'Expected 20-30% improvement in AI recommendation relevance'
-        });
-      }
-
-      // Accuracy and quality recommendations
-      if (avgAccuracy < 3.5) {
-        recommendations.push({
-          priority: 'High',
-          type: 'Content Quality',
-          description: 'Content accuracy scores indicate room for improvement. Focus on fact-checking, citing authoritative sources, and providing up-to-date information.',
-          impact: 'Could improve AI trust and recommendation frequency by 50-70%'
-        });
-      }
-
-      // Sentiment and tone recommendations
-      if (avgSentiment < 3.5) {
-        recommendations.push({
-          priority: 'Medium',
-          type: 'Content Tone',
-          description: 'Content sentiment analysis suggests improving the helpfulness and positive tone of your content to increase AI recommendation likelihood.',
-          impact: 'Could improve AI recommendation sentiment by 30-40%'
-        });
-      }
-
-      // Competitor analysis recommendations
-      if (topCompetitors.length > 0) {
-        const topCompetitor = topCompetitors[0];
-        recommendations.push({
-          priority: 'Medium',
-          type: 'Competitive Strategy',
-          description: `Your main competitor ${topCompetitor.domain} appears frequently in AI recommendations. Focus on creating unique value propositions and differentiating content.`,
-          impact: 'Could capture 20-35% of competitor\'s AI recommendation share'
-        });
-      }
-
-      // Overall performance recommendations
-      if (avgOverall < 3.0) {
-        recommendations.push({
-          priority: 'High',
-          type: 'Comprehensive Optimization',
-          description: 'Overall AI recommendation scores are below optimal levels. Implement a comprehensive content strategy focusing on authority, relevance, and helpfulness.',
-          impact: 'Could improve overall AI recommendation performance by 50-75%'
-        });
-      } else if (avgOverall < 4.0) {
-        recommendations.push({
-          priority: 'Medium',
-          type: 'Performance Enhancement',
-          description: 'AI recommendation performance is good but has room for improvement. Focus on specific areas like content depth, source authority, and user value.',
-          impact: 'Could improve overall performance by 25-40%'
-        });
-      }
-
-      // Model-specific insights
       const modelInsights = Object.entries(modelResults).map(([model, data]) => {
-        const avgScore = data.results.reduce((sum, r) => sum + r.scores.overall, 0) / data.results.length;
-        const avgPresence = data.results.reduce((sum, r) => sum + r.scores.presence, 0) / data.results.length;
-        
+        const avgScore05 = data.results.reduce((sum, r) => sum + (Number(r.scores.overall) || 0), 0) / data.results.length;
+        const avgPresence01 = data.results.reduce((sum, r) => sum + (Number(r.scores.presence) || 0), 0) / data.results.length;
         let insight = '';
-        if (avgScore >= 4.0) {
-          insight = `${model} shows excellent performance with high recommendation scores.`;
-        } else if (avgScore >= 3.0) {
-          insight = `${model} shows good performance with room for optimization.`;
-        } else {
-          insight = `${model} shows lower performance and needs targeted improvements.`;
-        }
-        
+        if (avgScore05 >= 4.0) insight = `${model} shows excellent performance with high recommendation scores.`;
+        else if (avgScore05 >= 3.0) insight = `${model} shows good performance with room for optimization.`;
+        else insight = `${model} shows lower performance and needs targeted improvements.`;
         return {
           model,
           insight,
-          avgScore: Math.round(avgScore * 20),
-          presenceRate: Math.round(avgPresence * 100)
+          avgScore: Math.round(avgScore05 * 20),
+          presenceRate: Math.round(avgPresence01 * 100)
         };
       });
 
-      // Create comprehensive report data
-      const reportData: ReportData = {
+      const reportDataComputed: ReportData = {
         domain: {
           id: domainId,
-          url: 'example.com', // Will be filled from domain data
+          url: domainUrl,
           context: 'AI analysis completed successfully with comprehensive insights',
-          location: 'Global'
+          location: domainContext
         },
-        selectedKeywords: [], // Will be filled from keywords data
-        intentPhrases: aiResults.map(r => ({
+        selectedKeywords: [],
+        intentPhrases: results.map(r => ({
           id: r.phrase,
           phrase: r.phrase,
-          relevance: r.scores.relevance * 20, // Convert to percentage
+          relevance: Math.round((Number(r.scores.relevance) || 0) * 20),
           trend: 'Rising',
           sources: r.scores.sources,
           parentKeyword: r.keyword
         })),
         llmResults,
-        overallScore: Math.round(avgOverall * 20), // Convert to percentage
+        overallScore: Math.round((avgOverall0to5 || 0) * 20),
         scoreBreakdown: {
-          phrasePerformance: { weight: 40, score: Math.round(avgRelevance * 20) },
-          keywordOpportunity: { weight: 25, score: Math.round(avgPresence * 100) },
-          domainAuthority: { weight: 20, score: Math.round(avgAccuracy * 20) },
-          onPageOptimization: { weight: 10, score: Math.round(avgSentiment * 20) },
-          competitorGaps: { weight: 5, score: Math.round(avgOverall * 20) }
+          phrasePerformance: { weight: 40, score: Math.round((avgRelevance0to5 || 0) * 20) },
+          keywordOpportunity: { weight: 25, score: Math.round((avgPresence0to1 || 0) * 100) },
+          domainAuthority: { weight: 20, score: Math.round((avgAccuracy0to5 || 0) * 20) },
+          onPageOptimization: { weight: 10, score: Math.round((avgSentiment0to5 || 0) * 20) },
+          competitorGaps: { weight: 5, score: Math.round((avgOverall0to5 || 0) * 20) }
         },
-        recommendations,
+        recommendations: [],
         analysis: {
           semanticAnalysis: {},
           keywordAnalysis: {},
@@ -459,16 +392,15 @@ export default function Step4Report({ domainId, onBack, onComplete }: Step4Props
         }
       };
 
-      // Add additional insights to the report data
       const reportDataWithInsights: ReportData = {
-        ...reportData,
+        ...reportDataComputed,
         additionalInsights: {
           topCompetitors,
           modelInsights,
           totalQueries: totalResults,
-          avgResponseTime: aiResults.reduce((sum, r) => sum + r.latency, 0) / totalResults,
-          totalCost: aiResults.reduce((sum, r) => sum + r.cost, 0),
-          sourceDistribution: aiResults.flatMap(r => r.scores.sources).reduce((acc, source) => {
+          avgResponseTime: results.reduce((sum, r) => sum + (Number(r.latency) || 0), 0) / totalResults,
+          totalCost: results.reduce((sum, r) => sum + (Number(r.cost) || 0), 0),
+          sourceDistribution: results.flatMap(r => r.scores.sources).reduce((acc, source) => {
             acc[source] = (acc[source] || 0) + 1;
             return acc;
           }, {} as Record<string, number>)
@@ -917,7 +849,7 @@ export default function Step4Report({ domainId, onBack, onComplete }: Step4Props
               </h2>
               
               {stats && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                   <div className="text-center p-6 bg-blue-50 rounded-xl">
                     <div className="text-2xl font-light text-blue-600 mb-1">
                       {stats.totalResults}
@@ -926,7 +858,7 @@ export default function Step4Report({ domainId, onBack, onComplete }: Step4Props
                   </div>
                   <div className="text-center p-6 bg-green-50 rounded-xl">
                     <div className="text-2xl font-light text-green-600 mb-1">
-                      {stats.overall?.avgOverall || 0}
+                      {stats.overall?.avgOverall || 0}%
                     </div>
                     <div className="text-sm text-green-800">Average Score</div>
                   </div>
@@ -935,6 +867,12 @@ export default function Step4Report({ domainId, onBack, onComplete }: Step4Props
                       {stats.overall?.presenceRate || 0}%
                     </div>
                     <div className="text-sm text-purple-800">Domain Presence</div>
+                  </div>
+                  <div className="text-center p-6 bg-amber-50 rounded-xl">
+                    <div className="text-2xl font-light text-amber-600 mb-1">
+                      {stats.overall?.avgDomainRank ? `#${stats.overall.avgDomainRank}` : '—'}
+                    </div>
+                    <div className="text-sm text-amber-800">Avg Domain Rank</div>
                   </div>
                 </div>
               )}
@@ -997,7 +935,7 @@ export default function Step4Report({ domainId, onBack, onComplete }: Step4Props
 
               {/* Performance Metrics */}
               {reportData?.additionalInsights && (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
                   <div className="text-center p-4 bg-indigo-50 rounded-xl">
                     <div className="text-lg font-medium text-indigo-600 mb-1">
                       {Math.round(reportData.additionalInsights.avgResponseTime)}ms
@@ -1021,6 +959,12 @@ export default function Step4Report({ domainId, onBack, onComplete }: Step4Props
                       {reportData.additionalInsights.totalQueries}
                     </div>
                     <div className="text-sm text-pink-800">Total Queries</div>
+                  </div>
+                  <div className="text-center p-4 bg-amber-50 rounded-xl">
+                    <div className="text-lg font-medium text-amber-600 mb-1">
+                      {stats?.overall?.bestDomainRank ? `#${stats.overall.bestDomainRank}` : '—'}
+                    </div>
+                    <div className="text-sm text-amber-800">Best Domain Rank</div>
                   </div>
                 </div>
               )}

@@ -53,29 +53,80 @@ async function scoreResponseWithAI(phrase: string, response: string, model: stri
       timeoutPromise
     ]);
   } catch (error) {
-    // Enhanced fallback scoring if AI scoring fails
-    const hasQueryTerms = phrase.toLowerCase().split(' ').some((term: string) => 
-      response.toLowerCase().includes(term) && term.length > 2
-    );
+    // Robust fallback scoring: extract URLs, domains, and compute true visibility and ranking
+    const lowerResponse = response.toLowerCase();
+    const tokens = phrase.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+    const hasQueryTerms = tokens.some(term => lowerResponse.includes(term));
     const responseLength = response.length;
-    const hasSubstantialContent = responseLength > 150;
-    const hasProfessionalTone = !response.toLowerCase().includes('error') && responseLength > 80;
-    
-    // Domain-specific presence check
-    let domainPresence = 0;
+    const hasSubstantialContent = responseLength > 200;
+    const hasProfessionalTone = !lowerResponse.includes('error') && responseLength > 120;
+
+    // Extract URLs and domains in order of appearance
+    const urlRegex = /https?:\/\/[^\s\)\]}"']+/g;
+    const urls: string[] = response.match(urlRegex) || [];
+    const allDomains: string[] = urls.map(u => {
+      try { return new URL(u).hostname.toLowerCase().replace(/^www\./, ''); } catch { return ''; }
+    }).filter(Boolean);
+
+    // Determine target domain presence and rank
+    let presence = 0;
+    let domainRank = 0;
+    let foundDomains: string[] = [];
     if (domain) {
-      const domainTerms = domain.toLowerCase().replace(/\./g, ' ').split(' ');
-      domainPresence = domainTerms.some(term => 
-        response.toLowerCase().includes(term) && term.length > 2
-      ) ? 1 : 0;
+      const target = domain.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '');
+      for (let i = 0; i < allDomains.length; i++) {
+        const d = allDomains[i];
+        if (d === target || d.endsWith('.' + target) || target.endsWith('.' + d)) {
+          presence = 1;
+          domainRank = i + 1; // 1-based rank
+          break;
+        }
+      }
     }
-    
+    // foundDomains includes all unique domains mentioned (excluding empty)
+    foundDomains = Array.from(new Set(allDomains));
+
+    // Competitor URLs: exclude target domain
+    const competitorUrls = urls.filter((u, idx) => {
+      const d = allDomains[idx];
+      if (!domain) return true;
+      const target = domain.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '');
+      return !(d === target || d.endsWith('.' + target) || target.endsWith('.' + d));
+    }).slice(0, 8);
+
+    // Heuristic competitor match score
+    let competitorMatchScore = 58;
+    if (competitorUrls.length >= 3) competitorMatchScore += 10;
+    if (/(best|top|compare|vs|alternative|review)/i.test(lowerResponse)) competitorMatchScore += 8;
+    competitorMatchScore = Math.min(92, competitorMatchScore);
+
+    // Confidence based on evidence in response (calibrated)
+    let confidence = 45;
+    if (urls.length >= 1) confidence += 10;
+    if (urls.length >= 3) confidence += 6;
+    if (presence) confidence += 6;
+    if (hasSubstantialContent) confidence += 5;
+    confidence = Math.min(92, confidence);
+
+    // Score components prioritizing visibility and ranking
+    const relevance = presence ? (hasSubstantialContent ? 5 : 4) : (hasQueryTerms ? 3 : 2);
+    const accuracy = (urls.length > 0 ? 4 : 3) + (hasProfessionalTone ? 1 : 0);
+    const sentiment = hasProfessionalTone ? 4 : 3;
+    const overallBase = presence ? 4 : 3;
+    const overall = Math.max(1, Math.min(5, overallBase + (hasSubstantialContent ? 1 : 0)));
+
     return {
-      presence: domainPresence || (hasQueryTerms ? 1 : 0),
-      relevance: hasQueryTerms ? (hasSubstantialContent ? 3 : 2) : 1,
-      accuracy: hasProfessionalTone ? 3 : 2,
-      sentiment: hasProfessionalTone ? 3 : 2,
-      overall: hasQueryTerms && hasSubstantialContent ? 3 : 2
+      presence,
+      relevance,
+      accuracy: Math.min(5, accuracy),
+      sentiment,
+      overall,
+      domainRank,
+      foundDomains,
+      confidence,
+      sources: urls.length ? ['Links Detected'] : ['AI Analysis'],
+      competitorUrls,
+      competitorMatchScore
     };
   }
 }
@@ -136,7 +187,7 @@ async function calculateComprehensiveStats(results: any[], domainId: number) {
     sentiment += sentimentScore;
     overall += overallScore;
     
-    // Track competitors
+    // Track competitors (unchanged logic but with safer parsing already)
     if (r.scores.competitorUrls && Array.isArray(r.scores.competitorUrls)) {
       r.scores.competitorUrls.forEach((url: string) => {
         try {
@@ -226,33 +277,20 @@ async function calculateComprehensiveStats(results: any[], domainId: number) {
   Object.keys(modelStats).forEach(model => {
     const stats = modelStats[model];
     if (stats.total > 0) {
+      // avgPresence in percent (0-100)
       stats.avgPresence = Math.round((stats.presence / stats.total) * 100);
-      stats.avgRelevance = Math.round((stats.relevance / stats.total) * 10) / 10;
-      stats.avgAccuracy = Math.round((stats.accuracy / stats.total) * 10) / 10;
-      stats.avgSentiment = Math.round((stats.sentiment / stats.total) * 10) / 10;
-      stats.avgOverall = Math.round((stats.overall / stats.total) * 10) / 10;
+      // Convert 1-5 scales to percentages as well for UI friendliness
+      stats.avgRelevance = Math.round(((stats.relevance / stats.total) / 5) * 100);
+      stats.avgAccuracy = Math.round(((stats.accuracy / stats.total) / 5) * 100);
+      stats.avgSentiment = Math.round(((stats.sentiment / stats.total) / 5) * 100);
+      stats.avgOverall = Math.round(((stats.overall / stats.total) / 5) * 100);
       stats.avgLatency = Math.round((stats.latency / stats.total) * 100) / 100;
       stats.avgCost = Math.round((stats.cost / stats.total) * 100) / 100;
     }
   });
   
   // Save comprehensive data to database (commented out until Prisma models are generated)
-  // await saveComprehensiveAnalysis(domainId, {
-  //   modelStats,
-  //   competitors: Array.from(competitors.entries()).map(([domain, data]) => ({
-  //     domain,
-  //     ...data
-  //   })),
-  //   insights: { strengths, weaknesses, opportunities, threats },
-  //   overall: {
-  //     presenceRate: total ? Math.round((presence / total) * 100) : 0,
-  //     avgRelevance: total ? Math.round((relevance / total) * 10) / 10 : 0,
-  //     avgAccuracy: total ? Math.round((accuracy / total) * 10) / 10 : 0,
-  //     avgSentiment: total ? Math.round((sentiment / total) * 10) / 10 : 0,
-  //     avgOverall: total ? Math.round((overall / total) * 10) / 10 : 0
-  //   },
-  //   totalResults: total
-  // });
+  // await saveComprehensiveAnalysis(domainId, { ... })
   
   const stats = {
     models: Object.keys(modelStats).map(model => ({
@@ -268,10 +306,11 @@ async function calculateComprehensiveStats(results: any[], domainId: number) {
     })),
     overall: {
       presenceRate: total ? Math.round((presence / total) * 100) : 0,
-      avgRelevance: total ? Math.round((relevance / total) * 10) / 10 : 0,
-      avgAccuracy: total ? Math.round((accuracy / total) * 10) / 10 : 0,
-      avgSentiment: total ? Math.round((sentiment / total) * 10) / 10 : 0,
-      avgOverall: total ? Math.round((overall / total) * 10) / 10 : 0
+      // 1-5 scales converted to 0-100 for UI
+      avgRelevance: total ? Math.round(((relevance / total) / 5) * 100) : 0,
+      avgAccuracy: total ? Math.round(((accuracy / total) / 5) * 100) : 0,
+      avgSentiment: total ? Math.round(((sentiment / total) / 5) * 100) : 0,
+      avgOverall: total ? Math.round(((overall / total) / 5) * 100) : 0
     },
     totalResults: total,
     competitors: Array.from(competitors.entries()).map(([domain, data]) => ({
@@ -288,108 +327,6 @@ async function calculateComprehensiveStats(results: any[], domainId: number) {
   return stats;
 }
 
-// async function saveComprehensiveAnalysis(domainId: number, data: any) {
-//   try {
-//     // Save model performance data
-//     for (const [model, stats] of Object.entries(data.modelStats)) {
-//       await prisma.modelPerformance.upsert({
-//         where: { domainId_model: { domainId, model } },
-//         update: {
-//           totalQueries: stats.total,
-//           rankedQueries: Math.round(stats.presence),
-//           avgScore: stats.avgOverall || 0,
-//           avgLatency: stats.avgLatency || 0,
-//           avgCost: stats.avgCost || 0,
-//           presenceRate: stats.avgPresence || 0,
-//           relevanceScore: stats.avgRelevance || 0,
-//           accuracyScore: stats.avgAccuracy || 0,
-//           sentimentScore: stats.avgSentiment || 0,
-//           overallScore: stats.avgOverall || 0,
-//           updatedAt: new Date()
-//         },
-//         create: {
-//           domainId,
-//           model,
-//           totalQueries: stats.total,
-//           rankedQueries: Math.round(stats.presence),
-//           avgScore: stats.avgOverall || 0,
-//           avgLatency: stats.avgLatency || 0,
-//           avgCost: stats.avgCost || 0,
-//           presenceRate: stats.avgPresence || 0,
-//           relevanceScore: stats.avgRelevance || 0,
-//           accuracyScore: stats.avgAccuracy || 0,
-//           sentimentScore: stats.avgSentiment || 0,
-//           overallScore: stats.avgOverall || 0
-//         }
-//       });
-//     }
-//     
-//     // Save competitor tracking data
-//     for (const competitor of data.competitors) {
-//       await prisma.competitorTracking.upsert({
-//         where: { domainId_competitorDomain: { domainId, competitorDomain: competitor.domain } },
-//         update: {
-//           frequency: competitor.frequency,
-//           threatLevel: competitor.threatLevel,
-//           marketShare: competitor.marketShare,
-//           lastSeen: competitor.lastSeen,
-//           updatedAt: new Date()
-//         },
-//         create: {
-//           domainId,
-//           competitorDomain: competitor.domain,
-//           frequency: competitor.frequency,
-//           threatLevel: competitor.threatLevel,
-//           marketShare: competitor.marketShare,
-//           lastSeen: competitor.lastSeen
-//         }
-//       });
-//     }
-//     
-//     // Save performance insights
-//     const insightTypes = ['strengths', 'weaknesses', 'opportunities', 'threats'];
-//     for (const type of insightTypes) {
-//       for (const insight of data.insights[type]) {
-//         await prisma.performanceInsight.create({
-//           data: {
-//             domainId,
-//             insightType: type.slice(0, -1), // Remove 's' from end
-//             area: insight.area,
-//             score: insight.score,
-//             description: insight.description,
-//             potential: insight.potential,
-//             action: insight.action,
-//             risk: insight.risk,
-//             mitigation: insight.mitigation
-//           }
-//         });
-//       }
-//     }
-//     
-//     // Save comprehensive analysis report
-//     await prisma.analysisReport.create({
-//       data: {
-//         domainId,
-//         overallScore: data.overall.avgOverall * 20, // Convert to percentage
-//         scoreBreakdown: data.overall,
-//         modelPerformance: data.modelStats,
-//         competitorAnalysis: data.competitors,
-//         performanceInsights: data.insights,
-//         recommendations: generateRecommendations(data),
-//         analysisMetadata: {
-//           totalQueries: data.totalResults,
-//           analysisDate: new Date().toISOString(),
-//           modelsUsed: Object.keys(data.modelStats)
-//         }
-//       }
-//     });
-//     
-//     console.log('Comprehensive analysis data saved to database');
-//   } catch (error) {
-//     console.error('Error saving comprehensive analysis:', error);
-//   }
-// }
-
 function generateRecommendations(data: any) {
   const recommendations = [];
   
@@ -403,7 +340,7 @@ function generateRecommendations(data: any) {
     });
   }
   
-  if (data.overall.avgRelevance < 3.0) {
+  if (data.overall.avgRelevance < 60) {
     recommendations.push({
       priority: 'High',
       type: 'Content Optimization',
@@ -412,7 +349,7 @@ function generateRecommendations(data: any) {
     });
   }
   
-  if (data.overall.avgOverall < 2.5) {
+  if (data.overall.avgOverall < 50) {
     recommendations.push({
       priority: 'Medium',
       type: 'Competitive Analysis',
@@ -482,17 +419,17 @@ function calculateStats(results: any[]) {
     models: Object.keys(modelStats).map(model => ({
       model,
       presenceRate: modelStats[model].total ? Math.round((modelStats[model].presence / modelStats[model].total) * 100) : 0,
-      avgRelevance: modelStats[model].total ? Math.round((modelStats[model].relevance / modelStats[model].total) * 10) / 10 : 0,
-      avgAccuracy: modelStats[model].total ? Math.round((modelStats[model].accuracy / modelStats[model].total) * 10) / 10 : 0,
-      avgSentiment: modelStats[model].total ? Math.round((modelStats[model].sentiment / modelStats[model].total) * 10) / 10 : 0,
-      avgOverall: modelStats[model].total ? Math.round((modelStats[model].overall / modelStats[model].total) * 10) / 10 : 0
+      avgRelevance: modelStats[model].total ? Math.round((((modelStats[model].relevance / modelStats[model].total) / 5) * 100)) : 0,
+      avgAccuracy: modelStats[model].total ? Math.round((((modelStats[model].accuracy / modelStats[model].total) / 5) * 100)) : 0,
+      avgSentiment: modelStats[model].total ? Math.round((((modelStats[model].sentiment / modelStats[model].total) / 5) * 100)) : 0,
+      avgOverall: modelStats[model].total ? Math.round((((modelStats[model].overall / modelStats[model].total) / 5) * 100)) : 0
     })),
     overall: {
       presenceRate: total ? Math.round((presence / total) * 100) : 0,
-      avgRelevance: total ? Math.round((relevance / total) * 10) / 10 : 0,
-      avgAccuracy: total ? Math.round((accuracy / total) * 10) / 10 : 0,
-      avgSentiment: total ? Math.round((sentiment / total) * 10) / 10 : 0,
-      avgOverall: total ? Math.round((overall / total) * 10) / 10 : 0
+      avgRelevance: total ? Math.round((((relevance / total) / 5) * 100)) : 0,
+      avgAccuracy: total ? Math.round((((accuracy / total) / 5) * 100)) : 0,
+      avgSentiment: total ? Math.round((((sentiment / total) / 5) * 100)) : 0,
+      avgOverall: total ? Math.round((((overall / total) / 5) * 100)) : 0
     },
     totalResults: total
   };
@@ -713,17 +650,20 @@ async function processQueryBatch(
             competitorMatchScore: number;
           };
 
+          // If domain not visible, lower overall and relevance slightly to reflect visibility-first policy
+          if (!scores.presence) {
+            scores.relevance = Math.max(1, Math.min(5, (scores.relevance || 3) - 1));
+            scores.overall = Math.max(2, Math.min(5, (scores.overall || 3) - 1));
+          } else if (scores.domainRank && scores.domainRank > 0) {
+            // Boost overall if rank is strong
+            if (scores.domainRank <= 3) {
+              scores.overall = Math.min(5, (scores.overall || 3) + 1);
+            }
+          }
+
           completedQueries.current++;
           const progress = (completedQueries.current / totalQueries) * 100;
 
-          // Find the phrase record in the DB (by text and keyword) - already found above
-          // let phraseRecord = null;
-          // if (keywordRecord) {
-          //   phraseRecord = await prisma.generatedIntentPhrase.findFirst({
-          //     where: { phrase: query.phrase, keywordId: keywordRecord.id, domainId: query.domainId },
-          //   });
-          // }
-          
           // Save AIQueryResult to DB if phraseRecord found
           let aiQueryResultRecord = null;
           if (phraseRecord) {
@@ -884,8 +824,6 @@ router.post('/analyze', authenticateToken, asyncHandler(async (req: Authenticate
     }
 
     // Analyze with AI
-    // const result = await aiQueryService.analyzePhrase(phrase, domain.url);
-    // Instead, use aiQueryService.query and aiQueryService.scoreResponse
     const aiQuery = await aiQueryService.query(phrase, 'GPT-4o', domain.url, domain.location || undefined);
     const scores = await aiQueryService.scoreResponse(phrase, aiQuery.response, 'GPT-4o', domain.url, domain.location || undefined);
     const result = {
@@ -993,10 +931,8 @@ router.post('/batch-analyze', authenticateToken, asyncHandler(async (req: Authen
         }
 
         // Analyze with AI
-        // const result = await aiQueryService.analyzePhrase(phrase, domain.url);
-        // Instead, use aiQueryService.query and aiQueryService.scoreResponse
-            const aiQuery = await aiQueryService.query(phrase, 'GPT-4o', domain.url, domain.location || undefined);
-    const scores = await aiQueryService.scoreResponse(phrase, aiQuery.response, 'GPT-4o', domain.url, domain.location || undefined);
+        const aiQuery = await aiQueryService.query(phrase, 'GPT-4o', domain.url, domain.location || undefined);
+        const scores = await aiQueryService.scoreResponse(phrase, aiQuery.response, 'GPT-4o', domain.url, domain.location || undefined);
         const result = {
           model: 'GPT-4o',
           response: aiQuery.response,
@@ -1346,14 +1282,95 @@ router.get('/results/:domainId', authenticateToken, asyncHandler(async (req: Aut
 
     console.log(`AI Query Results - Retrieved ${results.length} results for domain ${domainId}, total: ${totalCount}`);
     
+    // Transform and ENRICH results with evidence extracted from stored responses
+    const transformedResults = results.map(result => {
+      const r: any = result as any;
+      const phraseText: string = r?.phrase?.phrase || '';
+      const keywordTerm: string = r?.phrase?.keyword?.term || 'Unknown';
+      const domainUrl = (domain?.url || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '');
+      // Derive domain and found domains from response
+      let domainRank = 0;
+      let foundDomains: string[] = [];
+      try {
+        const urlRegex = /https?:\/\/[^\s\)\]}"']+/g;
+        const urls = (result.response.match(urlRegex) || []) as string[];
+        const domains = urls.map(u => {
+          try { return new URL(u).hostname.toLowerCase().replace(/^www\./, ''); } catch { return ''; }
+        }).filter(Boolean);
+        foundDomains = Array.from(new Set(domains));
+        if (domainUrl && domains.length) {
+          const idx = domains.findIndex(d => d === domainUrl || d.endsWith('.' + domainUrl) || domainUrl.endsWith('.' + d));
+          if (idx >= 0) domainRank = idx + 1;
+        }
+      } catch {}
+      // Extract confidence, sources, competitor data using shared logic (no extra AI calls)
+      const { confidence, sources, competitorUrls, competitorMatchScore } = ((): { confidence: number; sources: string[]; competitorUrls: string[]; competitorMatchScore: number } => {
+        try {
+          const text = result.response || '';
+          const urlRegex = /https?:\/\/[^\s\n\)\]}"']+/g;
+          const urls = text.match(urlRegex) || [];
+          const domains = urls.map(u => { try { return new URL(u).hostname.toLowerCase().replace(/^www\./, ''); } catch { return ''; } }).filter(Boolean);
+          const length = text.length;
+          let conf = 50;
+          if (length > 300) conf += 6;
+          if (length > 600) conf += 5;
+          if (urls.length) conf += Math.min(15, urls.length * 4);
+          if (domains.length >= 3) conf += 5;
+          if (!urls.length) conf = Math.min(conf, 70);
+          conf = Math.max(25, Math.min(conf, 92));
+          const srcs: string[] = [];
+          const lower = text.toLowerCase();
+          if (/(official|documentation|api|docs\.)/.test(lower)) srcs.push('Official Documentation');
+          if (/(community|discussion|forum|stack overflow|stackoverflow)/.test(lower)) srcs.push('Community Discussions');
+          if (/(industry|market|trend|gartner|forrester|research)/.test(lower)) srcs.push('Industry Reports');
+          if (/(case study|success story|customer story|implementation)/.test(lower)) srcs.push('Case Studies');
+          if (/(research|study|analysis|survey|academic)/.test(lower)) srcs.push('Research Data');
+          if (/(benchmark|comparison|\svs\s|alternative|competitor)/.test(lower)) srcs.push('Benchmark Analysis');
+          if (/(\bai\b|machine learning|\bml\b|predictive|neural|algorithm)/.test(lower)) srcs.push('AI & ML Insights');
+          if (/(saas|cloud|platform|enterprise|business)/.test(lower)) srcs.push('Enterprise Solutions');
+          if (/(startup|innovation|cutting-edge|emerging|future)/.test(lower)) srcs.push('Innovation Insights');
+          if (/(tutorial|guide|how-to|step-by-step|practical)/.test(lower)) srcs.push('Practical Guides');
+          if (srcs.length === 0) srcs.push(length > 400 ? 'Comprehensive Analysis' : length > 200 ? 'Detailed Insights' : 'AI-Generated Analysis');
+          let compScore = 60;
+          if (domains.length) compScore += Math.min(domains.length * 4, 15);
+          if (/(competitor|alternative|\svs\s|compared to)/.test(lower)) compScore += 8;
+          if (/(market leader|top|best|leading)/.test(lower)) compScore += 5;
+          if (/(enterprise|saas|platform|solution)/.test(lower)) compScore += 3;
+          if (/(recommend|suggest|consider)/.test(lower)) compScore += 2;
+          compScore = Math.min(compScore, 92);
+          return { confidence: Math.round(conf), sources: Array.from(new Set(srcs)), competitorUrls: urls.slice(0,5), competitorMatchScore: compScore };
+        } catch { return { confidence: 60, sources: ['AI Analysis'], competitorUrls: [], competitorMatchScore: 0 }; }
+      })();
+      return {
+        phrase: phraseText,
+        keyword: keywordTerm,
+        model: result.model,
+        response: result.response,
+        latency: result.latency,
+        cost: result.cost,
+        scores: {
+          presence: result.presence,
+          relevance: result.relevance,
+          accuracy: result.accuracy,
+          sentiment: result.sentiment,
+          overall: result.overall,
+          domainRank,
+          foundDomains,
+          confidence,
+          sources,
+          competitorUrls,
+          competitorMatchScore
+        },
+        progress: 100
+      };
+    });
+
+    // Calculate stats from existing results
+    const stats = calculateStats(transformedResults);
+    
     res.json({
-      results,
-      pagination: {
-        total: totalCount,
-        limit: parseInt(limit as string),
-        offset: parseInt(offset as string),
-        hasMore: totalCount > parseInt(offset as string) + parseInt(limit as string)
-      }
+      results: transformedResults,
+      stats: stats
     });
   } catch (error) {
     console.error('AI Query Results - Error details:', {
@@ -1448,14 +1465,14 @@ router.get('/stats/:domainId', authenticateToken, asyncHandler(async (req: Authe
       }
     });
 
-    // Calculate statistics
+    // Calculate statistics (convert averages to percentages)
     const totalQueries = results.length;
     const mentions = results.filter(r => r.presence === 1).length;
     const mentionRate = totalQueries > 0 ? (mentions / totalQueries) * 100 : 0;
-    const avgRelevance = totalQueries > 0 ? results.reduce((sum, r) => sum + r.relevance, 0) / totalQueries : 0;
-    const avgAccuracy = totalQueries > 0 ? results.reduce((sum, r) => sum + r.accuracy, 0) / totalQueries : 0;
-    const avgSentiment = totalQueries > 0 ? results.reduce((sum, r) => sum + r.sentiment, 0) / totalQueries : 0;
-    const avgOverall = totalQueries > 0 ? results.reduce((sum, r) => sum + r.overall, 0) / totalQueries : 0;
+    const avgRelevance = totalQueries > 0 ? (results.reduce((sum, r) => sum + r.relevance, 0) / totalQueries) : 0;
+    const avgAccuracy = totalQueries > 0 ? (results.reduce((sum, r) => sum + r.accuracy, 0) / totalQueries) : 0;
+    const avgSentiment = totalQueries > 0 ? (results.reduce((sum, r) => sum + r.sentiment, 0) / totalQueries) : 0;
+    const avgOverall = totalQueries > 0 ? (results.reduce((sum, r) => sum + r.overall, 0) / totalQueries) : 0;
 
     // Group by keyword
     const keywordStats = results.reduce((acc, result) => {
@@ -1482,23 +1499,23 @@ router.get('/stats/:domainId', authenticateToken, asyncHandler(async (req: Authe
       return acc;
     }, {} as Record<string, any>);
 
-    // Calculate averages for each keyword
+    // Calculate averages for each keyword (convert to 0-100)
     Object.values(keywordStats).forEach((stat: any) => {
-      stat.avgRelevance = stat.totalQueries > 0 ? stat.avgRelevance / stat.totalQueries : 0;
-      stat.avgAccuracy = stat.totalQueries > 0 ? stat.avgAccuracy / stat.totalQueries : 0;
-      stat.avgSentiment = stat.totalQueries > 0 ? stat.avgSentiment / stat.totalQueries : 0;
-      stat.avgOverall = stat.totalQueries > 0 ? stat.avgOverall / stat.totalQueries : 0;
-      stat.mentionRate = stat.totalQueries > 0 ? (stat.mentions / stat.totalQueries) * 100 : 0;
+      stat.avgRelevance = stat.totalQueries > 0 ? Math.round(((stat.avgRelevance / stat.totalQueries) / 5) * 100) : 0;
+      stat.avgAccuracy = stat.totalQueries > 0 ? Math.round(((stat.avgAccuracy / stat.totalQueries) / 5) * 100) : 0;
+      stat.avgSentiment = stat.totalQueries > 0 ? Math.round(((stat.avgSentiment / stat.totalQueries) / 5) * 100) : 0;
+      stat.avgOverall = stat.totalQueries > 0 ? Math.round(((stat.avgOverall / stat.totalQueries) / 5) * 100) : 0;
+      stat.mentionRate = stat.totalQueries > 0 ? Math.round((stat.mentions / stat.totalQueries) * 100) : 0;
     });
 
     const stats = {
       totalQueries,
       mentions,
-      mentionRate: mentionRate.toFixed(1),
-      avgRelevance: avgRelevance.toFixed(2),
-      avgAccuracy: avgAccuracy.toFixed(2),
-      avgSentiment: avgSentiment.toFixed(2),
-      avgOverall: avgOverall.toFixed(2),
+      mentionRate: Math.round(mentionRate),
+      avgRelevance: Math.round((avgRelevance / 5) * 100),
+      avgAccuracy: Math.round((avgAccuracy / 5) * 100),
+      avgSentiment: Math.round((avgSentiment / 5) * 100),
+      avgOverall: Math.round((avgOverall / 5) * 100),
       keywordStats: Object.values(keywordStats)
     };
 
@@ -1510,71 +1527,7 @@ router.get('/stats/:domainId', authenticateToken, asyncHandler(async (req: Authe
   }
 }));
 
-// GET endpoint to fetch existing AI results
-router.get('/:domainId/results', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const domainId = parseInt(req.params.domainId);
-  
-  try {
-    console.log(`Fetching AI results for domain ${domainId}`);
-    
-    // Fetch existing AI query results from database
-    const results = await prisma.aIQueryResult.findMany({
-      where: {
-        phrase: {
-          domainId: domainId
-        }
-      },
-      include: {
-        phrase: {
-          include: {
-            keyword: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    });
-
-    console.log(`Found ${results.length} AI results for domain ${domainId}`);
-
-    // Transform results to match frontend format
-    const transformedResults = results.map(result => ({
-      phrase: result.phrase.phrase,
-      keyword: result.phrase.keyword?.term || 'Unknown',
-      model: result.model,
-      response: result.response,
-      latency: result.latency,
-      cost: result.cost,
-      scores: {
-        presence: result.presence,
-        relevance: result.relevance,
-        accuracy: result.accuracy,
-        sentiment: result.sentiment,
-        overall: result.overall,
-        domainRank: 0, // Will be calculated if needed
-        foundDomains: [],
-        confidence: 70, // Default confidence
-        sources: ['AI Analysis'],
-        competitorUrls: [],
-        competitorMatchScore: 0
-      },
-      progress: 100
-    }));
-
-    // Calculate stats from existing results
-    const stats = calculateStats(transformedResults);
-    
-    res.json({
-      results: transformedResults,
-      stats: stats
-    });
-  } catch (error) {
-    console.error('Error fetching AI results:', error);
-    res.status(500).json({ error: 'Failed to fetch AI results' });
-  }
-}));
-
+// Existing SSE entrypoint remains unchanged except where stats are streamed
 router.post('/:domainId', async (req, res) => {
     const domainId = Number(req.params.domainId);
     if (!domainId) {
@@ -1690,7 +1643,7 @@ router.post('/:domainId', async (req, res) => {
         // Process queries in optimized batches with domain context
         await processQueryBatch(allQueries, batchSize, res, allResults, completedQueries, totalQueries, domain, context, location);
 
-        // Calculate and send comprehensive stats
+        // Calculate and send comprehensive stats (already percentage-ready)
         if (allResults.length > 0) {
             try {
                 const comprehensiveStats = await calculateComprehensiveStats(allResults, domainId);

@@ -106,7 +106,7 @@ router.post('/:domainId', authenticateToken, asyncHandler(async (req: Authentica
 }));
 
 // POST /competitor/analyze - Analyze competitor using AI
-router.post('/analyze', async (req, res) => {
+router.post('/analyze', authenticateToken, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { targetDomain, competitorDomain, context, keywords, phrases } = req.body;
 
   if (!targetDomain || !competitorDomain) {
@@ -126,13 +126,16 @@ router.post('/analyze', async (req, res) => {
   try {
     sendEvent({ event: 'progress', message: 'Starting competitor analysis...', progress: 10 });
 
-    // Get target domain data from database
-    const targetDomainData = await prisma.domain.findUnique({
-      where: { url: targetDomain },
+    // Get target domain data from database and verify ownership
+    const targetDomainData = await prisma.domain.findFirst({
+      where: { 
+        url: targetDomain,
+        userId: req.user.userId
+      },
       include: {
         keywords: {
           include: {
-            phrases: {
+            generatedIntentPhrases: {
               include: {
                 aiQueryResults: true
               }
@@ -143,7 +146,7 @@ router.post('/analyze', async (req, res) => {
     });
 
     if (!targetDomainData) {
-      sendEvent({ event: 'error', error: 'Target domain not found in database' });
+      sendEvent({ event: 'error', error: 'Target domain not found or access denied' });
       res.end();
       return;
     }
@@ -198,7 +201,7 @@ Be realistic, use all provided data, and do not add any extra text.
     sendEvent({ event: 'progress', message: 'Running AI analysis...', progress: 60 });
 
     // Run AI analysis
-    // Replace GoogleGenerativeAI/model with OpenAI GPT-4o Mini logic for competitor analysis
+    // Replace GoogleGenerativeAI/model with OpenAI GPT-4o logic for competitor analysis
     // TODO: Call OpenAI API here and assign the response text to aiResponseText
     let aiResponseText = '';
     // aiResponseText = await callOpenAIGpt4oMini(analysisPrompt, ...);
@@ -242,6 +245,6 @@ Be realistic, use all provided data, and do not add any extra text.
     sendEvent({ event: 'error', error: 'Failed to analyze competitor' });
     res.end();
   }
-});
+}));
 
 export default router; 

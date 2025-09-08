@@ -1,22 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import type { CSSObjectWithLabel } from 'react-select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle, Globe, Shield, TrendingUp, Clock, Plus, Upload, History, ArrowRight } from 'lucide-react';
+import { CheckCircle, Globe, Shield, TrendingUp, Plus, Upload, ArrowRight, MapPin, Settings, Info, Lightbulb } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import Select from 'react-select';
 import countryList from 'react-select-country-list';
-import { City, Country } from 'country-state-city';
+import { City, Country, State } from 'country-state-city';
+import type { CSSObjectWithLabel } from 'react-select';
 
 interface DomainSubmissionProps {
   domain: string;
   setDomain: (domain: string) => void;
-  onNext: () => void;
+  onNext: (domainId?: number) => void;
   customPaths?: string[];
   setCustomPaths?: (paths: string[]) => void;
   subdomains?: string[];
@@ -29,21 +28,10 @@ interface DomainSubmissionProps {
   setLocation?: (location: string) => void;
 }
 
-interface DomainVersion {
-  id: number;
-  version: number;
-  name: string;
-  createdAt: string;
-  hasAnalysis: boolean;
-  lastCrawl?: string;
-}
-
 interface DomainCheckResult {
   exists: boolean;
   domainId?: number;
   url?: string;
-  currentVersion?: number;
-  versions?: DomainVersion[];
   hasCurrentAnalysis?: boolean;
   lastAnalyzed?: string;
 }
@@ -67,18 +55,76 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
   const [priorityUrls, setPriorityUrlsState] = useState<string[]>(priorityUrlsProp || []);
   const [priorityPaths, setPriorityPathsState] = useState<string[]>(priorityPathsProp || []);
   const [isLoading, setIsLoading] = useState(false);
-  const [domainCheckResult, setDomainCheckResult] = useState<DomainCheckResult | null>(null);
-  const [showVersionDialog, setShowVersionDialog] = useState(false);
-  const [versionName, setVersionName] = useState('');
-  const [isCreatingVersion, setIsCreatingVersion] = useState(false);
   const { toast } = useToast();
   const [selectedCountry, setSelectedCountry] = useState<{ value: string; label: string } | null>(null);
+  const [selectedState, setSelectedState] = useState<{ value: string; label: string } | null>(null);
   const [selectedCity, setSelectedCity] = useState<{ value: string; label: string } | null>(null);
-  const countryOptions = countryList().getData();
-  const cityOptions = selectedCountry
-    ? City.getCitiesOfCountry(selectedCountry.value).map(city => ({ value: city.name, label: city.name }))
-    : [];
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [customKeywords, setCustomKeywords] = useState('');
+  const [intentPhrases, setIntentPhrases] = useState('');
+  const [chatModel, setChatModel] = useState('GPT-4o');
+  const [runAllModels, setRunAllModels] = useState(false);
+  const [domainError, setDomainError] = useState('');
+  const [loadingSteps, setLoadingSteps] = useState([
+    { name: 'Domain Validation', status: 'pending', progress: 0 },
+    { name: 'SSL Certificate Check', status: 'pending', progress: 0 },
+    { name: 'Server Response Analysis', status: 'pending', progress: 0 },
+    { name: 'Geo-location Configuration', status: 'pending', progress: 0 }
+  ]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Carousel control state
+  const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
+
+  const chatModels = ['GPT-4o', 'Claude 3', 'Gemini 1.5'];
   const [location, setLocationState] = useState<string>(locationProp || '');
+
+  // Load custom keywords and phrases from localStorage on component mount
+  useEffect(() => {
+    const savedCustomKeywords = localStorage.getItem('customKeywords');
+    const savedIntentPhrases = localStorage.getItem('intentPhrases');
+    
+    if (savedCustomKeywords) {
+      setCustomKeywords(savedCustomKeywords);
+    }
+    
+    if (savedIntentPhrases) {
+      setIntentPhrases(savedIntentPhrases);
+    }
+  }, []);
+
+  // Save custom keywords and phrases to localStorage when they change
+  useEffect(() => {
+    if (customKeywords) {
+      localStorage.setItem('customKeywords', customKeywords);
+    }
+  }, [customKeywords]);
+
+  useEffect(() => {
+    if (intentPhrases) {
+      localStorage.setItem('intentPhrases', intentPhrases);
+    }
+  }, [intentPhrases]);
+
+  // Get real country, state, and city data
+  const countryOptions = Country.getAllCountries().map(country => ({
+    value: country.isoCode,
+    label: country.name
+  }));
+
+  const stateOptions = selectedCountry
+    ? State.getStatesOfCountry(selectedCountry.value).map(state => ({
+        value: state.isoCode,
+        label: state.name
+      }))
+    : [];
+
+  const cityOptions = selectedState && selectedCountry
+    ? City.getCitiesOfState(selectedCountry.value, selectedState.value).map(city => ({
+        value: city.name,
+        label: city.name
+      }))
+    : [];
 
   // Sync with parent state
   useEffect(() => {
@@ -88,128 +134,45 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
     if (setLocationProp) setLocationProp(location);
   }, [customPaths, priorityUrls, priorityPaths, setCustomPathsProp, setPriorityUrlsProp, setPriorityPathsProp, location, setLocationProp]);
 
-  // Update location state when both are selected
+  // Update location state when location fields are selected
   useEffect(() => {
-    if (selectedCountry && selectedCity) {
-      setLocationState(`${selectedCity.label}, ${selectedCountry.label}`);
-    } else {
-      setLocationState('');
-    }
-    // eslint-disable-next-line
-  }, [selectedCountry, selectedCity]);
+    const locationParts: string[] = [];
+    if (selectedCity) locationParts.push(selectedCity.label);
+    if (selectedState) locationParts.push(selectedState.label);
+    if (selectedCountry) locationParts.push(selectedCountry.label);
+    
+    setLocationState(locationParts.join(', '));
+  }, [selectedCountry, selectedState, selectedCity]);
+
+  // Auto-advance carousel to show running task
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const runningTaskIndex = loadingSteps.findIndex(task => task.status === 'running');
+      if (runningTaskIndex !== -1) {
+        setCurrentTaskIndex(runningTaskIndex);
+      }
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [loadingSteps]);
 
   const validateDomain = (value: string) => {
-    // Only allow domains, not full URLs
-    const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}$/;
-    return domainRegex.test(value);
+    const domainRegex = /^(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/;
+    if (!value) {
+      setDomainError('Domain is required');
+      return false;
+    }
+    if (!domainRegex.test(value)) {
+      setDomainError('Please enter a valid domain (e.g., example.com)');
+      return false;
+    }
+    setDomainError('');
+    return true;
   };
 
   const handleDomainChange = (value: string) => {
     setDomain(value);
-    setDomainCheckResult(null);
-  };
-
-  const isFullUrl = (domain: string) => domain.startsWith('http://') || domain.startsWith('https://');
-
-  const validatePriorityUrl = (value: string) => {
-    const urlRegex = /^https?:\/\/[^\s/$.?#].[^\s]*$/;
-    return urlRegex.test(value);
-  };
-
-  const addPriorityUrl = (raw: string) => {
-    const url = raw.trim();
-    if (!url) return;
-    
-    if (!validatePriorityUrl(url)) {
-      toast({
-        title: "Invalid URL",
-        description: "Please enter a valid URL starting with http:// or https://",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    if (priorityUrls.includes(url)) {
-      toast({
-        title: "URL already added",
-        description: "This URL is already in the priority list",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    setPriorityUrlsState([...priorityUrls, url]);
-  };
-
-  const addBulkUrls = () => {
-    const urls = priorityUrls.join('\n');
-    const newUrls = urls.split('\n').map(url => url.trim()).filter(url => url);
-    
-    const validUrls = newUrls.filter(url => validatePriorityUrl(url));
-    const invalidUrls = newUrls.filter(url => !validatePriorityUrl(url));
-    
-    if (invalidUrls.length > 0) {
-      toast({
-        title: "Invalid URLs found",
-        description: `${invalidUrls.length} URLs were invalid and skipped`,
-        variant: "destructive"
-      });
-    }
-    
-    if (validUrls.length > 0) {
-      setPriorityUrlsState([...new Set([...priorityUrls, ...validUrls])]);
-      toast({
-        title: "URLs added",
-        description: `Successfully added ${validUrls.length} URLs to priority list`
-      });
-    }
-  };
-
-  const removePriorityUrl = (url: string) => {
-    setPriorityUrlsState(priorityUrls.filter(u => u !== url));
-  };
-
-  const validatePriorityPath = (value: string) => {
-    return value.startsWith('/') && value.length > 1;
-  };
-
-  const addPriorityPath = (raw: string) => {
-    const path = raw.trim();
-    if (!path) return;
-    
-    let normalizedPath = path;
-    if (!path.startsWith('/')) {
-      normalizedPath = `/${path}`;
-    }
-    
-    if (customPaths.includes(normalizedPath)) {
-      toast({
-        title: "Path already added",
-        description: "This path is already in the custom paths list",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    setCustomPathsState([...customPaths, normalizedPath]);
-  };
-
-  const addBulkPaths = () => {
-    const paths = customPaths.join('\n');
-    const newPaths = paths.split('\n').map(path => path.trim()).filter(path => path);
-    
-    const validPaths = newPaths.map(path => path.startsWith('/') ? path : `/${path}`);
-    const uniquePaths = [...new Set([...customPaths, ...validPaths])];
-    
-    setCustomPathsState(uniquePaths);
-    toast({
-      title: "Paths added",
-      description: `Successfully added ${validPaths.length} paths to custom paths list`
-    });
-  };
-
-  const removePriorityPath = (path: string) => {
-    setCustomPathsState(customPaths.filter(p => p !== path));
+    if (value) validateDomain(value);
   };
 
   const checkDomain = async (): Promise<DomainCheckResult | null> => {
@@ -223,15 +186,10 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
     }
 
     if (!validateDomain(domain.trim())) {
-      toast({
-        title: "Invalid domain",
-        description: "Please enter a valid domain (not a full URL)",
-        variant: "destructive"
-      });
       return null;
     }
 
-    setIsLoading(true);
+    // Don't show loading state for domain check - it should be silent
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/domain/check/${encodeURIComponent(domain.trim())}`, {
         headers: {
@@ -241,18 +199,7 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
       });
       const result: DomainCheckResult = await response.json();
       
-      setDomainCheckResult(result);
-      
-      if (result.exists) {
-        setShowVersionDialog(true);
-      } else {
-        // Domain doesn't exist, show success message
-        toast({
-          title: "Domain Ready",
-          description: "New domain detected. Ready to start analysis.",
-        });
-      }
-      
+      // Don't show toast messages for domain check - they will be shown in handleSubmit
       return result;
     } catch (error) {
       console.error('Error checking domain:', error);
@@ -262,93 +209,377 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
         variant: "destructive"
       });
       return null;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleCreateNewVersion = async () => {
-    if (!domainCheckResult?.domainId) return;
-    
-    setIsCreatingVersion(true);
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/domain`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
-        body: JSON.stringify({
-          url: domain,
-          createNewVersion: true,
-          versionName: versionName || `Version ${(domainCheckResult.currentVersion || 0) + 1}`,
-          customPaths,
-          priorityUrls,
-          priorityPaths,
-          location // Pass location to backend
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create new version');
-      }
-
-      toast({
-        title: "New version created",
-        description: `Starting analysis for version: ${versionName || `Version ${(domainCheckResult.currentVersion || 0) + 1}`}`
-      });
-
-      setShowVersionDialog(false);
-      setVersionName('');
-      onNext();
-    } catch (error) {
-      console.error('Error creating new version:', error);
-      toast({
-        title: "Error",
-        description: "Failed to create new version",
-        variant: "destructive"
-      });
-    } finally {
-      setIsCreatingVersion(false);
-    }
-  };
-
-  const handleGoToDashboard = () => {
-    if (domainCheckResult?.domainId) {
-      window.location.href = `/dashboard/${domainCheckResult.domainId}`;
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!domain.trim()) {
+    if (!validateDomain(domain) || !selectedCountry) {
       toast({
-        title: "Domain required",
-        description: "Please enter a domain",
+        title: "Required fields missing",
+        description: "Please fill in all required fields",
         variant: "destructive"
       });
       return;
     }
 
-    if (!validateDomain(domain.trim())) {
-      toast({
-        title: "Invalid domain",
-        description: "Please enter a valid domain (not a full URL)",
-        variant: "destructive"
-      });
+    // Validate advanced filters if shown
+    if (showAdvanced) {
+      const keywords = customKeywords.split(',').map(k => k.trim()).filter(k => k);
+      const phrases = intentPhrases.split(',').map(p => p.trim()).filter(p => p);
+
+      if (keywords.length > 5 || phrases.length > 5) {
+        toast({
+          title: "Too many items",
+          description: "Maximum 5 items allowed for keywords and phrases",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
+    // Save custom keywords and phrases to localStorage before proceeding
+    if (customKeywords.trim()) {
+      localStorage.setItem('customKeywords', customKeywords.trim());
+    }
+    if (intentPhrases.trim()) {
+      localStorage.setItem('intentPhrases', intentPhrases.trim());
+    }
+    
+    // Save advanced keywords from advanced options to localStorage for processing in DomainExtraction
+    if (showAdvanced && customKeywords.trim()) {
+      localStorage.setItem('advancedKeywords', customKeywords.trim());
+    }
+
+    // Begin submitting state for silent domain check + fast paths
+    setIsSubmitting(true);
+
+    // First check if domain exists BEFORE showing any loading
+    console.log('Checking domain existence before proceeding...');
+    const domainCheck = await checkDomain();
+    if (!domainCheck) {
+      setIsSubmitting(false);
       return;
     }
-    // Optionally validate location (not required)
-    // Check if domain exists first
-    const result = await checkDomain();
-    
-    if (result) {
-      if (result.exists) {
-        return;
-      } else {
-        onNext();
+
+    // If domain already exists, proceed directly without any loading
+    if (domainCheck.exists && domainCheck.domainId) {
+      console.log('Existing domain found, proceeding directly');
+      
+      // Process custom keywords for existing domains before proceeding
+      if (customKeywords.trim()) {
+        console.log('Processing custom keywords for existing domain...');
+        try {
+          const keywords = customKeywords.split(',').map(k => k.trim()).filter(k => k);
+          
+          // Process each custom keyword with AI analysis
+          for (const keyword of keywords) {
+            try {
+              // First analyze the keyword using AI
+              const analyzeResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/keywords/analyze`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                },
+                body: JSON.stringify({
+                  keyword: keyword,
+                  domain: domain,
+                  location: location || 'Global',
+                  domainId: domainCheck.domainId
+                })
+              });
+
+              if (!analyzeResponse.ok) {
+                console.error(`Failed to analyze custom keyword "${keyword}"`);
+                continue;
+              }
+
+              const analysisResult = await analyzeResponse.json();
+              
+              if (!analysisResult.success) {
+                console.error(`Analysis failed for custom keyword "${keyword}":`, analysisResult.error);
+                continue;
+              }
+
+              // Save the analyzed keyword to the database
+              const saveResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/keywords/${domainCheck.domainId}/custom`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                },
+                body: JSON.stringify({
+                  keyword: analysisResult.keyword,
+                  volume: analysisResult.volume,
+                  kd: analysisResult.kd,
+                  competition: analysisResult.competition,
+                  cpc: analysisResult.cpc,
+                  intent: analysisResult.intent,
+                  organic: analysisResult.organic,
+                  paid: analysisResult.paid,
+                  trend: analysisResult.trend,
+                  position: analysisResult.position,
+                  url: analysisResult.url,
+                  analysis: analysisResult.analysis
+                })
+              });
+
+              if (!saveResponse.ok) {
+                console.error(`Failed to save custom keyword "${keyword}"`);
+                continue;
+              }
+
+              const saveResult = await saveResponse.json();
+              
+              if (!saveResult.success) {
+                console.error(`Save failed for custom keyword "${keyword}":`, saveResult.error);
+                continue;
+              }
+
+              console.log(`Successfully analyzed and saved custom keyword "${keyword}" to database`);
+            } catch (error) {
+              console.error(`Failed to process custom keyword "${keyword}":`, error);
+            }
+          }
+        } catch (error) {
+          console.error('Error processing custom keywords for existing domain:', error);
+        }
       }
+      
+      // Process custom phrases for existing domains before proceeding
+      if (intentPhrases.trim()) {
+        console.log('Processing custom phrases for existing domain...');
+        try {
+          const phrases = intentPhrases.split(',').map(p => p.trim()).filter(p => p);
+          
+          // Process each custom phrase with AI analysis
+          for (const phrase of phrases) {
+            try {
+              const response = await fetch(`${import.meta.env.VITE_API_URL}/api/enhanced-phrases/${domainCheck.domainId}/custom-phrase`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                },
+                body: JSON.stringify({
+                  phrase: phrase
+                })
+              });
+
+              if (response.ok) {
+                const result = await response.json();
+                if (result.success) {
+                  console.log(`Successfully analyzed custom phrase "${phrase}" with AI, extracted keyword, and saved to database`);
+                }
+              }
+            } catch (error) {
+              console.error(`Failed to process custom phrase "${phrase}":`, error);
+            }
+          }
+        } catch (error) {
+          console.error('Error processing custom phrases for existing domain:', error);
+        }
+      }
+      
+      // Show success message
+      toast({
+        title: "Domain Found",
+        description: "Continuing with existing domain analysis",
+      });
+      
+      setIsSubmitting(false);
+      // Proceed directly to next step with existing domain ID
+      onNext(domainCheck.domainId);
+      return;
+    }
+
+    // For new domains, show loading and run validation steps
+    console.log('New domain detected, starting validation process...');
+    setIsLoading(true);
+    setIsSubmitting(false);
+
+    // Run step-by-step validation for new domains only
+    const steps = [...loadingSteps];
+    let domainId: number | null = null;
+    
+    try {
+      // Step 1: Domain Validation
+      steps[0] = { ...steps[0], status: 'running' };
+      setLoadingSteps([...steps]);
+      
+      for (let progress = 0; progress <= 100; progress += 20) {
+        steps[0] = { ...steps[0], progress };
+        setLoadingSteps([...steps]);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      const validationResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/domain-validation/validate-domain`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ domain })
+      });
+      
+      const validationResult = await validationResponse.json();
+      
+      if (!validationResult.success) {
+        steps[0] = { ...steps[0], status: 'failed', progress: 100 };
+        setLoadingSteps([...steps]);
+        toast({
+          title: "Domain Validation Failed",
+          description: validationResult.error,
+          variant: "destructive"
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      steps[0] = { ...steps[0], status: 'completed', progress: 100 };
+      setLoadingSteps([...steps]);
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Step 2: SSL Certificate Check
+      steps[1] = { ...steps[1], status: 'running' };
+      setLoadingSteps([...steps]);
+      
+      for (let progress = 0; progress <= 100; progress += 20) {
+        steps[1] = { ...steps[1], progress };
+        setLoadingSteps([...steps]);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      const sslResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/domain-validation/check-ssl`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ domain })
+      });
+      
+      const sslResult = await sslResponse.json();
+      
+      if (!sslResult.success) {
+        steps[1] = { ...steps[1], status: 'failed', progress: 100 };
+        setLoadingSteps([...steps]);
+        toast({
+          title: "SSL Check Failed",
+          description: sslResult.error,
+          variant: "destructive"
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      steps[1] = { ...steps[1], status: 'completed', progress: 100 };
+      setLoadingSteps([...steps]);
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Step 3: Server Response Analysis
+      steps[2] = { ...steps[2], status: 'running' };
+      setLoadingSteps([...steps]);
+      
+      for (let progress = 0; progress <= 100; progress += 20) {
+        steps[2] = { ...steps[2], progress };
+        setLoadingSteps([...steps]);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      const serverResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/domain-validation/analyze-server`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ domain })
+      });
+      
+      const serverResult = await serverResponse.json();
+      
+      if (!serverResult.success) {
+        steps[2] = { ...steps[2], status: 'failed', progress: 100 };
+        setLoadingSteps([...steps]);
+        toast({
+          title: "Server Analysis Failed",
+          description: serverResult.error,
+          variant: "destructive"
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      steps[2] = { ...steps[2], status: 'completed', progress: 100 };
+      setLoadingSteps([...steps]);
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Step 4: Geo-location Configuration with AI Analysis (This creates the domain in DB)
+      steps[3] = { ...steps[3], status: 'running' };
+      setLoadingSteps([...steps]);
+      
+      for (let progress = 0; progress <= 100; progress += 20) {
+        steps[3] = { ...steps[3], progress };
+        setLoadingSteps([...steps]);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      const geoResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/domain-validation/configure-geo`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          domain, 
+          location, 
+          customKeywords, 
+          intentPhrases, 
+          chatModel, 
+          runAllModels 
+        })
+      });
+      
+      const geoResult = await geoResponse.json();
+      
+      if (!geoResult.success) {
+        steps[3] = { ...steps[3], status: 'failed', progress: 100 };
+        setLoadingSteps([...steps]);
+        toast({
+          title: "Geo-location Configuration Failed",
+          description: geoResult.error,
+          variant: "destructive"
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      const createdDomainId: number = geoResult.domainId;
+      domainId = createdDomainId;
+      steps[3] = { ...steps[3], status: 'completed', progress: 100 };
+      setLoadingSteps([...steps]);
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // All steps completed successfully
+      toast({
+        title: "Domain Setup Complete",
+        description: "All validation steps completed successfully",
+      });
+
+      // Proceed to next step with new domain ID
+      onNext(domainId);
+      
+    } catch (error) {
+      console.error('Error during domain validation:', error);
+      toast({
+        title: "Validation Error",
+        description: "An error occurred during domain validation",
+        variant: "destructive"
+      });
+      setIsLoading(false);
+      return;
     }
   };
 
@@ -365,389 +596,306 @@ const DomainSubmission: React.FC<DomainSubmissionProps> = ({
   const selectMenuPortalTarget = typeof window !== 'undefined' ? document.body : undefined;
   const selectStyles = {
     menuPortal: (base: CSSObjectWithLabel, _props: unknown): CSSObjectWithLabel => ({ ...base, zIndex: 9999 }),
+    control: (base: CSSObjectWithLabel) => ({ 
+      ...base, 
+      minHeight: '48px', 
+      fontSize: '14px',
+      borderColor: '#d1d5db',
+      '&:hover': {
+        borderColor: '#3b82f6'
+      },
+      '&:focus-within': {
+        borderColor: '#3b82f6',
+        boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.1)'
+      }
+    }),
+    option: (base: CSSObjectWithLabel, state: { isSelected?: boolean; isFocused?: boolean }) => ({
+      ...base,
+      backgroundColor: state.isSelected ? '#3b82f6' : state.isFocused ? '#eff6ff' : 'white',
+      color: state.isSelected ? 'white' : '#374151',
+      '&:hover': {
+        backgroundColor: state.isSelected ? '#3b82f6' : '#eff6ff'
+      }
+    }),
+    placeholder: (base: CSSObjectWithLabel) => ({
+      ...base,
+      color: '#9ca3af'
+    })
   };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <div className="max-w-2xl w-full">
+          <div className="text-center mb-12">
+            <div className="w-16 h-16 mx-auto mb-6 bg-gray-100 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-gray-600 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <h2 className="text-3xl font-semibold tracking-tight text-gray-900 mb-3">
+              Domain Setup in Progress
+            </h2>
+            <p className="text-lg text-gray-600 leading-relaxed">
+              Setting up your domain for analysis
+            </p>
+          </div>
+
+          {/* Domain Info */}
+          <div className="mb-8 p-6 bg-blue-50 rounded-2xl border border-blue-100">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-base font-medium text-blue-900">Target Domain: {domain}</span>
+              <span className="text-sm text-blue-700 font-medium">{selectedCountry?.label}</span>
+            </div>
+            {customKeywords && (
+              <div className="text-sm text-blue-800 font-medium">
+                Focus Keywords: {customKeywords}
+              </div>
+            )}
+          </div>
+
+          {/* Apple-style Carousel */}
+          <div className="relative h-24 mb-8 overflow-hidden">
+            <div 
+              className="flex transition-transform duration-1000 ease-out"
+              style={{ transform: `translateX(-${currentTaskIndex * 100}%)` }}
+            >
+              {loadingSteps.map((task, index) => (
+                <div key={index} className="w-full flex-shrink-0 text-center">
+                  <h3 className="text-xl font-medium text-gray-900 mb-2 transition-opacity duration-700">
+                    {task.name}
+                  </h3>
+                  <p className="text-base text-gray-600 transition-opacity duration-700">
+                    {task.status === 'completed' ? 'Completed successfully' : 
+                     task.status === 'running' ? 'In progress...' : 'Pending'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Apple-style Progress Dots */}
+          <div className="flex justify-center space-x-3 mb-8">
+            {loadingSteps.map((task, index) => (
+              <div
+                key={index}
+                className={`w-3 h-3 rounded-full transition-all duration-700 ease-out ${
+                  task.status === 'completed'
+                    ? 'bg-gray-800 scale-110 shadow-md'
+                    : index === currentTaskIndex
+                    ? 'bg-gray-600 scale-125 shadow-lg'
+                    : 'bg-gray-300'
+                }`}
+              ></div>
+            ))}
+          </div>
+
+          <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
+            <div className="flex items-center text-gray-600">
+              <svg className="w-6 h-6 mr-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              <span className="text-base font-medium">Your data is being securely processed and encrypted</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-8">
-      <div className="text-center space-y-4">
-        <h1 className="text-3xl font-bold text-slate-800">Domain Analysis Setup</h1>
-        <p className="text-slate-600 max-w-2xl mx-auto">
-          Enter your domain to start the AI-powered visibility analysis. We'll extract your brand context, 
-          discover relevant keywords, and analyze your content performance.
-        </p>
+    <div className="max-w-2xl mx-auto px-6 py-10">
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-light text-black mb-4 tracking-tight">Domain Analysis</h1>
+        <p className="text-base text-gray-600 font-light">Enter your domain and location to begin</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Domain Input */}
-        <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-slate-800 flex items-center gap-2">
-              <Globe className="h-5 w-5 text-blue-600" />
-              Domain or URL
-            </CardTitle>
-            <CardDescription>
-              Enter your website domain (e.g., example.com). Do NOT enter a full URL.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <Input
-                  type="text"
-                  placeholder="example.com"
-                  value={domain}
-                  onChange={(e) => handleDomainChange(e.target.value)}
-                  className="h-12 text-lg"
-                />
-              </div>
-              <Button 
-                type="button" 
-                onClick={checkDomain}
-                disabled={isLoading || !domain.trim()}
-                className="h-12 px-6"
-              >
-                {isLoading ? 'Checking...' : 'Check Domain'}
-              </Button>
+      <div className="bg-white rounded-3xl shadow-xl border-0 p-8 backdrop-blur-sm bg-opacity-95">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Domain Input */}
+          <div className="space-y-3">
+            <label className="block text-base font-light text-black">
+              Domain
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={domain}
+                onChange={(e) => handleDomainChange(e.target.value)}
+                placeholder="example.com"
+                className={`w-full px-4 py-3 text-base font-light border rounded-2xl focus:outline-none focus:ring-2 focus:ring-gray-900 transition-all duration-300 bg-gray-50 ${
+                  domainError ? 'border-red-300' : 'border-gray-300'
+                }`}
+                required
+              />
             </div>
-            {/* Location Input */}
-            <div className="flex gap-4 mt-4 text-sm text-gray-500">
-              <div className="flex-1">
-                <Label htmlFor="country" className="text-sm text-gray-500">Country</Label>
-                <Select
-                  id="country"
-                  options={countryOptions}
-                  value={selectedCountry}
-                  onChange={option => {
-                    setSelectedCountry(option);
-                    setSelectedCity(null); // Reset city when country changes
-                  }}
-                  placeholder="Select country..."
-                  classNamePrefix="react-select"
-                  menuPortalTarget={selectMenuPortalTarget}
-                  styles={selectStyles}
-                />
-              </div>
-              <div className="flex-1 text-sm text-gray-500">
-                <Label htmlFor="city" className="text-sm text-gray-500">State</Label>
-                <Select
-                  id="city"
-                  options={cityOptions}
-                  value={selectedCity}
-                  onChange={option => setSelectedCity(option)}
-                  placeholder={selectedCountry ? "Select city..." : "Select country first"}
-                  isDisabled={!selectedCountry}
-                  classNamePrefix="react-select"
-                  menuPortalTarget={selectMenuPortalTarget}
-                  styles={selectStyles}
-                />
-              </div>
-            </div>
-            
-            {domainCheckResult && (
-              <div className="mt-4 p-4 bg-slate-50 rounded-lg">
-                {domainCheckResult.exists ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-green-600">
-                      <CheckCircle className="h-4 w-4" />
-                      <span className="font-medium">Domain already analyzed</span>
-                    </div>
-                    <p className="text-sm text-slate-600">
-                      Found {domainCheckResult.versions?.length || 0} version(s) for {domainCheckResult.url}
-                    </p>
-                    {domainCheckResult.hasCurrentAnalysis && (
-                      <p className="text-sm text-slate-600">
-                        Last analyzed: {formatDate(domainCheckResult.lastAnalyzed || '')}
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 text-blue-600">
-                    <Globe className="h-4 w-4" />
-                    <span className="font-medium">New domain - ready to analyze</span>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Priority URLs */}
-        <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-slate-800 flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-green-600" />
-              Priority URLs (Optional)
-            </CardTitle>
-            <CardDescription>
-              Add specific URLs you want to prioritize in the analysis
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <Input
-                  type="url"
-                  placeholder="https://example.com/important-page"
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      addPriorityUrl((e.target as HTMLInputElement).value);
-                      (e.target as HTMLInputElement).value = '';
-                    }
-                  }}
-                />
-              </div>
-              <Button type="button" onClick={() => addPriorityUrl((document.querySelector('input[type="url"]') as HTMLInputElement)?.value || '')}>
-                Add URL
-              </Button>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button type="button" variant="outline">
-                    <Upload className="h-4 w-4 mr-2" />
-                    Bulk Add
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Bulk Add URLs</DialogTitle>
-                    <DialogDescription>
-                      Paste multiple URLs, separated by newlines or commas
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <Textarea
-                      placeholder="https://example.com/page1&#10;https://example.com/page2&#10;https://example.com/page3"
-                      rows={8}
-                      onChange={(e) => {
-                        const urls = e.target.value.split(/[\n,]/).map(url => url.trim()).filter(url => url);
-                        setPriorityUrlsState([...new Set([...priorityUrls, ...urls])]);
-                      }}
-                    />
-                    <div className="flex justify-end gap-2">
-                      <Button type="button" onClick={addBulkUrls}>
-                        Add All URLs
-                      </Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-            
-            {priorityUrls.length > 0 && (
-              <div className="space-y-2">
-                <h4 className="font-medium text-slate-700">Priority URLs ({priorityUrls.length})</h4>
-                <div className="flex flex-wrap gap-2">
-                  {priorityUrls.map((url, index) => (
-                    <Badge key={index} variant="secondary" className="flex items-center gap-1">
-                      {url}
-                      <button
-                        type="button"
-                        onClick={() => removePriorityUrl(url)}
-                        className="ml-1 hover:text-red-600"
-                      >
-                        ×
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Custom Paths */}
-        <Card className="bg-white/70 backdrop-blur-sm border-slate-200/60 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-slate-800 flex items-center gap-2">
-              <Shield className="h-5 w-5 text-purple-600" />
-              Custom Paths (Optional)
-            </CardTitle>
-            <CardDescription>
-              Add specific paths you want to include in the analysis
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <Input
-                  type="text"
-                  placeholder="/about, /services, /contact"
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      addPriorityPath((e.target as HTMLInputElement).value);
-                      (e.target as HTMLInputElement).value = '';
-                    }
-                  }}
-                />
-              </div>
-              <Button type="button" onClick={() => addPriorityPath((document.querySelector('input[placeholder*="/about"]') as HTMLInputElement)?.value || '')}>
-                Add Path
-              </Button>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button type="button" variant="outline">
-                    <Upload className="h-4 w-4 mr-2" />
-                    Bulk Add
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Bulk Add Paths</DialogTitle>
-                    <DialogDescription>
-                      Paste multiple paths, separated by newlines or commas
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <Textarea
-                      placeholder="/about&#10;/services&#10;/contact&#10;/blog"
-                      rows={8}
-                      onChange={(e) => {
-                        const paths = e.target.value.split(/[\n,]/).map(path => path.trim()).filter(path => path);
-                        const validPaths = paths.map(path => path.startsWith('/') ? path : `/${path}`);
-                        setCustomPathsState([...new Set([...customPaths, ...validPaths])]);
-                      }}
-                    />
-                    <div className="flex justify-end gap-2">
-                      <Button type="button" onClick={addBulkPaths}>
-                        Add All Paths
-                      </Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-            
-            {customPaths.length > 0 && (
-              <div className="space-y-2">
-                <h4 className="font-medium text-slate-700">Custom Paths ({customPaths.length})</h4>
-                <div className="flex flex-wrap gap-2">
-                  {customPaths.map((path, index) => (
-                    <Badge key={index} variant="secondary" className="flex items-center gap-1">
-                      {path}
-                      <button
-                        type="button"
-                        onClick={() => removePriorityPath(path)}
-                        className="ml-1 hover:text-red-600"
-                      >
-                        ×
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Submit Button */}
-        <div className="flex justify-center">
-          <Button 
-            type="submit" 
-            size="lg" 
-            className="px-8 py-3 text-lg"
-            disabled={isLoading || !domain.trim() || (domainCheckResult?.exists && !domainCheckResult?.versions?.some(v => v.hasAnalysis))}
-          >
-            {isLoading ? 'Checking Domain...' : 
-             domainCheckResult?.exists ? 'Domain Exists - Use Version Dialog' : 'Start Analysis'}
-          </Button>
-        </div>
-        
-        {/* Help text for existing domains */}
-        {domainCheckResult?.exists && (
-          <div className="text-center text-sm text-slate-600">
-            <p>This domain already exists. Use the "Check Domain" button above to see version options.</p>
+            {domainError && <p className="text-red-500 text-sm font-light mt-2">{domainError}</p>}
           </div>
-        )}
-      </form>
 
-      {/* Version Dialog */}
-      <Dialog open={showVersionDialog} onOpenChange={setShowVersionDialog}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <History className="h-5 w-5 text-blue-600" />
-              Domain Already Analyzed
-            </DialogTitle>
-            <DialogDescription>
-              We found existing analysis for {domainCheckResult?.url}. Choose what you'd like to do:
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-6">
-            {/* Existing Versions */}
-            {domainCheckResult?.versions && domainCheckResult.versions.length > 0 && (
-              <div className="space-y-3">
-                <h4 className="font-medium text-slate-700">Existing Versions</h4>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {domainCheckResult.versions.map((version) => (
-                    <div key={version.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2">
-                          <Badge variant={version.hasAnalysis ? "default" : "secondary"}>
-                            v{version.version}
-                          </Badge>
-                          <span className="font-medium">{version.name}</span>
-                        </div>
-                        <span className="text-sm text-slate-500">
-                          {formatDate(version.createdAt)}
-                        </span>
-                      </div>
-                      {version.hasAnalysis && (
-                        <Badge variant="outline" className="text-green-600">
-                          Complete
-                        </Badge>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+          {/* Location Input */}
+          <div className="space-y-3">
+            <label className="block text-base font-light text-black">
+              Target Location
+            </label>
+            <select
+              value={selectedCountry?.value || ''}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                const country = countryOptions.find(c => c.value === e.target.value);
+                setSelectedCountry(country || null);
+                setSelectedState(null);
+                setSelectedCity(null);
+              }}
+              className="w-full px-4 py-3 text-base font-light border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-0 appearance-none bg-gray-50 focus:bg-white transition-all duration-300"
+              required
+            >
+              <option value="">Select country</option>
+              {countryOptions.map(country => (
+                <option key={country.value} value={country.value}>{country.label}</option>
+              ))}
+            </select>
+          </div>
 
-            {/* Action Buttons */}
-            <div className="space-y-3">
-              <Button 
-                onClick={handleGoToDashboard}
-                className="w-full justify-between"
-                size="lg"
-              >
-                <span>Go to Dashboard</span>
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-              
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white px-2 text-slate-500">Or</span>
-                </div>
-              </div>
-              
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <Label htmlFor="versionName">Version Name (Optional)</Label>
-                  <Input
-                    id="versionName"
-                    placeholder={`Version ${(domainCheckResult?.currentVersion || 0) + 1}`}
-                    value={versionName}
-                    onChange={(e) => setVersionName(e.target.value)}
-                  />
-                </div>
-                <Button 
-                  onClick={handleCreateNewVersion}
-                  disabled={isCreatingVersion}
-                  variant="outline"
-                  className="w-full"
-                  size="lg"
+          {/* Optional State/City - Only show if country is selected */}
+          {selectedCountry && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="block text-sm font-light text-gray-700">
+                  State
+                </label>
+                <select
+                  value={selectedState?.value || ''}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                    const state = stateOptions.find(s => s.value === e.target.value);
+                    setSelectedState(state || null);
+                    setSelectedCity(null);
+                  }}
+                  className="w-full px-3 py-2 text-sm font-light border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-gray-900 appearance-none bg-gray-50 focus:bg-white transition-all duration-300"
                 >
-                  {isCreatingVersion ? 'Creating...' : 'Create New Version'}
-                </Button>
+                  <option value="">Optional</option>
+                  {stateOptions.map(state => (
+                    <option key={state.value} value={state.value}>{state.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-light text-gray-700">
+                  City
+                </label>
+                <select
+                  value={selectedCity?.value || ''}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                    const city = cityOptions.find(c => c.value === e.target.value);
+                    setSelectedCity(city || null);
+                  }}
+                  disabled={!selectedState}
+                  className="w-full px-3 py-2 text-sm font-light border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-gray-900 appearance-none bg-gray-50 focus:bg-white transition-all duration-300 disabled:opacity-40"
+                >
+                  <option value="">Optional</option>
+                  {cityOptions.map(city => (
+                    <option key={city.value} value={city.value}>{city.label}</option>
+                  ))}
+                </select>
               </div>
             </div>
+          )}
+
+          {/* Advanced Options - Simplified */}
+          <div className="border-t border-gray-100 pt-6">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="flex items-center text-gray-600 hover:text-gray-900 font-light text-base transition-colors duration-200"
+            >
+              Advanced Options
+              <ArrowRight className={`w-5 h-5 ml-3 transition-transform duration-300 ${showAdvanced ? 'rotate-90' : ''}`} />
+            </button>
+
+            {showAdvanced && (
+              <div className="mt-6 space-y-4 animate-fadeIn">
+                <div className="space-y-2">
+                  <label className="block text-sm font-light text-gray-700">
+                    Keywords
+                  </label>
+                  <input
+                    type="text"
+                    value={customKeywords}
+                    onChange={(e) => setCustomKeywords(e.target.value)}
+                    placeholder="keyword1, keyword2"
+                    className="w-full px-3 py-2 text-sm font-light border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-gray-900 bg-gray-50 focus:bg-white transition-all duration-300"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Enter keywords separated by commas. These will be analyzed with AI and added to your keyword analysis.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-light text-gray-700">
+                    Intent Phrases
+                  </label>
+                  <input
+                    type="text"
+                    value={intentPhrases}
+                    onChange={(e) => setIntentPhrases(e.target.value)}
+                    placeholder="how to, best way to"
+                    className="w-full px-3 py-2 text-sm font-light border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-gray-900 bg-gray-50 focus:bg-white transition-all duration-300"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Enter intent phrases separated by commas. These will be used to guide the AI analysis.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-light text-gray-700">
+                    Model
+                  </label>
+                  <select
+                    value={chatModel}
+                    onChange={(e) => setChatModel(e.target.value)}
+                    className="w-full px-3 py-2 text-sm font-light border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-gray-900 appearance-none bg-gray-50 focus:bg-white transition-all duration-300"
+                  >
+                    {chatModels.map(model => (
+                      <option key={model} value={model}>{model}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <label className="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={runAllModels}
+                    onChange={(e) => setRunAllModels(e.target.checked)}
+                    className="w-4 h-4 text-gray-900 border border-gray-300 rounded-md focus:ring-gray-900 focus:ring-2 transition-all duration-200"
+                  />
+                  <span className="text-sm font-light text-gray-700">Run all models</span>
+                </label>
+              </div>
+            )}
           </div>
-        </DialogContent>
-      </Dialog>
+
+          {/* Submit Button */}
+          <div className="pt-4">
+            <button
+              type="submit"
+              disabled={isSubmitting || isLoading}
+              className={`w-full py-3 px-5 bg-gray-900 text-white text-base font-medium rounded-2xl hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-gray-200 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 ${
+                isSubmitting || isLoading ? 'opacity-60 cursor-not-allowed hover:-translate-y-0' : ''
+              }`}
+            >
+              {isSubmitting && (
+                <span className="inline-flex items-center">
+                  <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                  </svg>
+                  Starting...
+                </span>
+              )}
+              {!isSubmitting && 'Start Analysis'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 };

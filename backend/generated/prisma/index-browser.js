@@ -133,33 +133,26 @@ exports.Prisma.DomainScalarFieldEnum = {
   id: 'id',
   url: 'url',
   context: 'context',
-  version: 'version',
-  userId: 'userId',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
-  location: 'location'
-};
-
-exports.Prisma.DomainVersionScalarFieldEnum = {
-  id: 'id',
-  domainId: 'domainId',
-  version: 'version',
-  name: 'name',
-  createdAt: 'createdAt',
-  updatedAt: 'updatedAt'
+  userId: 'userId',
+  location: 'location',
+  chatModel: 'chatModel',
+  customKeywords: 'customKeywords',
+  intentPhrases: 'intentPhrases',
+  runAllModels: 'runAllModels',
+  locationContext: 'locationContext',
+  currentStep: 'currentStep'
 };
 
 exports.Prisma.CrawlResultScalarFieldEnum = {
   id: 'id',
-  domainId: 'domainId',
-  domainVersionId: 'domainVersionId',
   pagesScanned: 'pagesScanned',
-  contentBlocks: 'contentBlocks',
-  keyEntities: 'keyEntities',
-  confidenceScore: 'confidenceScore',
   extractedContext: 'extractedContext',
+  createdAt: 'createdAt',
   tokenUsage: 'tokenUsage',
-  createdAt: 'createdAt'
+  domainId: 'domainId',
+  analyzedUrls: 'analyzedUrls'
 };
 
 exports.Prisma.KeywordScalarFieldEnum = {
@@ -168,11 +161,12 @@ exports.Prisma.KeywordScalarFieldEnum = {
   volume: 'volume',
   difficulty: 'difficulty',
   cpc: 'cpc',
-  domainId: 'domainId',
-  domainVersionId: 'domainVersionId',
   isSelected: 'isSelected',
   createdAt: 'createdAt',
-  updatedAt: 'updatedAt'
+  updatedAt: 'updatedAt',
+  domainId: 'domainId',
+  intent: 'intent',
+  isCustom: 'isCustom'
 };
 
 exports.Prisma.PhraseScalarFieldEnum = {
@@ -180,7 +174,13 @@ exports.Prisma.PhraseScalarFieldEnum = {
   text: 'text',
   keywordId: 'keywordId',
   createdAt: 'createdAt',
-  updatedAt: 'updatedAt'
+  updatedAt: 'updatedAt',
+  relevanceScore: 'relevanceScore',
+  sources: 'sources',
+  trend: 'trend',
+  isSelected: 'isSelected',
+  confidence: 'confidence',
+  intent: 'intent'
 };
 
 exports.Prisma.AIQueryResultScalarFieldEnum = {
@@ -195,54 +195,302 @@ exports.Prisma.AIQueryResultScalarFieldEnum = {
   accuracy: 'accuracy',
   sentiment: 'sentiment',
   overall: 'overall',
-  createdAt: 'createdAt'
+  createdAt: 'createdAt',
+  competitorMatchScore: 'competitorMatchScore',
+  competitorUrls: 'competitorUrls',
+  confidence: 'confidence',
+  domainRank: 'domainRank',
+  foundDomains: 'foundDomains',
+  sources: 'sources',
+  highlightContext: 'highlightContext',
+  detectionMethod: 'detectionMethod',
+  mentions: 'mentions',
+  context: 'context',
+  comprehensiveness: 'comprehensiveness',
+  aiConfidence: 'aiConfidence',
+  rankingFactors: 'rankingFactors',
+  domainSentiment: 'domainSentiment',
+  positionScore: 'positionScore',
+  prominenceScore: 'prominenceScore',
+  contextQualityScore: 'contextQualityScore',
+  mentionTypeScore: 'mentionTypeScore',
+  intelligentScore: 'intelligentScore',
+  competitorNames: 'competitorNames',
+  competitorMentions: 'competitorMentions',
+  competitorCount: 'competitorCount',
+  competitorDomains: 'competitorDomains'
 };
 
-exports.Prisma.DashboardAnalysisScalarFieldEnum = {
+exports.Prisma.AnalysisReportScalarFieldEnum = {
   id: 'id',
   domainId: 'domainId',
-  domainVersionId: 'domainVersionId',
-  metrics: 'metrics',
-  insights: 'insights',
-  industryAnalysis: 'industryAnalysis',
+  overallScore: 'overallScore',
+  scoreBreakdown: 'scoreBreakdown',
+  modelPerformance: 'modelPerformance',
+  competitorAnalysis: 'competitorAnalysis',
+  performanceInsights: 'performanceInsights',
+  recommendations: 'recommendations',
+  analysisMetadata: 'analysisMetadata',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
 
-exports.Prisma.CompetitorAnalysisScalarFieldEnum = {
+exports.Prisma.ModelPerformanceScalarFieldEnum = {
   id: 'id',
   domainId: 'domainId',
-  domainVersionId: 'domainVersionId',
+  model: 'model',
+  totalQueries: 'totalQueries',
+  rankedQueries: 'rankedQueries',
+  avgScore: 'avgScore',
+  avgLatency: 'avgLatency',
+  avgCost: 'avgCost',
+  presenceRate: 'presenceRate',
+  relevanceScore: 'relevanceScore',
+  accuracyScore: 'accuracyScore',
+  sentimentScore: 'sentimentScore',
+  overallScore: 'overallScore',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.CompetitorTrackingScalarFieldEnum = {
+  id: 'id',
+  domainId: 'domainId',
+  competitorDomain: 'competitorDomain',
+  frequency: 'frequency',
+  threatLevel: 'threatLevel',
+  marketShare: 'marketShare',
+  lastSeen: 'lastSeen',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.PerformanceInsightScalarFieldEnum = {
+  id: 'id',
+  domainId: 'domainId',
+  insightType: 'insightType',
+  area: 'area',
+  score: 'score',
+  description: 'description',
+  potential: 'potential',
+  action: 'action',
+  risk: 'risk',
+  mitigation: 'mitigation',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.DashboardAnalysisScalarFieldEnum = {
+  id: 'id',
+  metrics: 'metrics',
+  insights: 'insights',
+  industryAnalysis: 'industryAnalysis',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+  domainId: 'domainId'
+};
+
+exports.Prisma.CompetitorAnalysisScalarFieldEnum = {
+  id: 'id',
   competitors: 'competitors',
   marketInsights: 'marketInsights',
   strategicRecommendations: 'strategicRecommendations',
   competitiveAnalysis: 'competitiveAnalysis',
   competitorList: 'competitorList',
   createdAt: 'createdAt',
-  updatedAt: 'updatedAt'
+  updatedAt: 'updatedAt',
+  domainId: 'domainId'
 };
 
 exports.Prisma.SuggestedCompetitorScalarFieldEnum = {
   id: 'id',
-  domainId: 'domainId',
-  domainVersionId: 'domainVersionId',
   name: 'name',
   competitorDomain: 'competitorDomain',
   reason: 'reason',
   type: 'type',
+  createdAt: 'createdAt',
+  domainId: 'domainId'
+};
+
+exports.Prisma.AnalysisPhaseScalarFieldEnum = {
+  id: 'id',
+  domainId: 'domainId',
+  phase: 'phase',
+  status: 'status',
+  progress: 'progress',
+  startTime: 'startTime',
+  endTime: 'endTime',
+  result: 'result',
+  error: 'error',
+  tokenUsage: 'tokenUsage',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.SemanticAnalysisScalarFieldEnum = {
+  id: 'id',
+  domainId: 'domainId',
+  contentSummary: 'contentSummary',
+  keyThemes: 'keyThemes',
+  brandVoice: 'brandVoice',
+  targetAudience: 'targetAudience',
+  contentGaps: 'contentGaps',
+  tokenUsage: 'tokenUsage',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.KeywordAnalysisScalarFieldEnum = {
+  id: 'id',
+  domainId: 'domainId',
+  keywords: 'keywords',
+  searchVolumeData: 'searchVolumeData',
+  intentClassification: 'intentClassification',
+  competitiveAnalysis: 'competitiveAnalysis',
+  tokenUsage: 'tokenUsage',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.SearchVolumeClassificationScalarFieldEnum = {
+  id: 'id',
+  domainId: 'domainId',
+  highVolumeKeywords: 'highVolumeKeywords',
+  mediumVolumeKeywords: 'mediumVolumeKeywords',
+  lowVolumeKeywords: 'lowVolumeKeywords',
+  volumeTrends: 'volumeTrends',
+  seasonalPatterns: 'seasonalPatterns',
+  tokenUsage: 'tokenUsage',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.IntentClassificationScalarFieldEnum = {
+  id: 'id',
+  domainId: 'domainId',
+  informationalKeywords: 'informationalKeywords',
+  navigationalKeywords: 'navigationalKeywords',
+  transactionalKeywords: 'transactionalKeywords',
+  commercialKeywords: 'commercialKeywords',
+  intentDistribution: 'intentDistribution',
+  tokenUsage: 'tokenUsage',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.CommunityInsightScalarFieldEnum = {
+  id: 'id',
+  domainId: 'domainId',
+  keywordId: 'keywordId',
+  sources: 'sources',
+  summary: 'summary',
+  tokenUsage: 'tokenUsage',
   createdAt: 'createdAt'
 };
 
-exports.Prisma.OnboardingProgressScalarFieldEnum = {
+exports.Prisma.SearchPatternScalarFieldEnum = {
   id: 'id',
   domainId: 'domainId',
-  domainVersionId: 'domainVersionId',
-  currentStep: 'currentStep',
-  isCompleted: 'isCompleted',
-  stepData: 'stepData',
-  lastActivity: 'lastActivity',
+  keywordId: 'keywordId',
+  patterns: 'patterns',
+  summary: 'summary',
+  tokenUsage: 'tokenUsage',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.PhraseIntentClassificationScalarFieldEnum = {
+  id: 'id',
+  phraseId: 'phraseId',
+  intent: 'intent',
+  confidence: 'confidence',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.PhraseScoreScalarFieldEnum = {
+  id: 'id',
+  phraseId: 'phraseId',
+  score: 'score',
+  breakdown: 'breakdown',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.IntentPhraseGenerationScalarFieldEnum = {
+  id: 'id',
+  domainId: 'domainId',
+  status: 'status',
+  phase: 'phase',
+  progress: 'progress',
+  startTime: 'startTime',
+  endTime: 'endTime',
+  result: 'result',
+  error: 'error',
+  tokenUsage: 'tokenUsage',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
+};
+
+exports.Prisma.CommunityMiningResultScalarFieldEnum = {
+  id: 'id',
+  domainId: 'domainId',
+  keywordId: 'keywordId',
+  platform: 'platform',
+  insights: 'insights',
+  sentiment: 'sentiment',
+  frequency: 'frequency',
+  tokenUsage: 'tokenUsage',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.SearchPatternResultScalarFieldEnum = {
+  id: 'id',
+  domainId: 'domainId',
+  keywordId: 'keywordId',
+  patterns: 'patterns',
+  volume: 'volume',
+  seasonality: 'seasonality',
+  trends: 'trends',
+  tokenUsage: 'tokenUsage',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.IntentClassificationResultScalarFieldEnum = {
+  id: 'id',
+  domainId: 'domainId',
+  keywordId: 'keywordId',
+  intent: 'intent',
+  confidence: 'confidence',
+  patterns: 'patterns',
+  tokenUsage: 'tokenUsage',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.GeneratedIntentPhraseScalarFieldEnum = {
+  id: 'id',
+  domainId: 'domainId',
+  keywordId: 'keywordId',
+  phrase: 'phrase',
+  relevanceScore: 'relevanceScore',
+  sources: 'sources',
+  trend: 'trend',
+  intent: 'intent',
+  communityInsights: 'communityInsights',
+  searchPatterns: 'searchPatterns',
+  isSelected: 'isSelected',
+  tokenUsage: 'tokenUsage',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+  intentConfidence: 'intentConfidence'
+};
+
+exports.Prisma.RelevanceScoreResultScalarFieldEnum = {
+  id: 'id',
+  domainId: 'domainId',
+  phraseId: 'phraseId',
+  score: 'score',
+  breakdown: 'breakdown',
+  factors: 'factors',
+  tokenUsage: 'tokenUsage',
+  createdAt: 'createdAt'
 };
 
 exports.Prisma.SortOrder = {
@@ -250,12 +498,12 @@ exports.Prisma.SortOrder = {
   desc: 'desc'
 };
 
-exports.Prisma.JsonNullValueInput = {
+exports.Prisma.NullableJsonNullValueInput = {
+  DbNull: Prisma.DbNull,
   JsonNull: Prisma.JsonNull
 };
 
-exports.Prisma.NullableJsonNullValueInput = {
-  DbNull: Prisma.DbNull,
+exports.Prisma.JsonNullValueInput = {
   JsonNull: Prisma.JsonNull
 };
 
@@ -279,15 +527,32 @@ exports.Prisma.JsonNullValueFilter = {
 exports.Prisma.ModelName = {
   User: 'User',
   Domain: 'Domain',
-  DomainVersion: 'DomainVersion',
   CrawlResult: 'CrawlResult',
   Keyword: 'Keyword',
   Phrase: 'Phrase',
   AIQueryResult: 'AIQueryResult',
+  AnalysisReport: 'AnalysisReport',
+  ModelPerformance: 'ModelPerformance',
+  CompetitorTracking: 'CompetitorTracking',
+  PerformanceInsight: 'PerformanceInsight',
   DashboardAnalysis: 'DashboardAnalysis',
   CompetitorAnalysis: 'CompetitorAnalysis',
   SuggestedCompetitor: 'SuggestedCompetitor',
-  OnboardingProgress: 'OnboardingProgress'
+  AnalysisPhase: 'AnalysisPhase',
+  SemanticAnalysis: 'SemanticAnalysis',
+  KeywordAnalysis: 'KeywordAnalysis',
+  SearchVolumeClassification: 'SearchVolumeClassification',
+  IntentClassification: 'IntentClassification',
+  CommunityInsight: 'CommunityInsight',
+  SearchPattern: 'SearchPattern',
+  PhraseIntentClassification: 'PhraseIntentClassification',
+  PhraseScore: 'PhraseScore',
+  IntentPhraseGeneration: 'IntentPhraseGeneration',
+  CommunityMiningResult: 'CommunityMiningResult',
+  SearchPatternResult: 'SearchPatternResult',
+  IntentClassificationResult: 'IntentClassificationResult',
+  GeneratedIntentPhrase: 'GeneratedIntentPhrase',
+  RelevanceScoreResult: 'RelevanceScoreResult'
 };
 
 /**

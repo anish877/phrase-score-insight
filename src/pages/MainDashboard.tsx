@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Search, Plus, TrendingUp, Calendar, Globe, BarChart3, Sparkles, Target, Zap, ArrowUpRight, Filter, SortDesc, Clock, Play, User, LogOut } from 'lucide-react';
-import { onboardingService } from '@/services/onboardingService';
+// Onboarding service removed
 import { useAuth } from '@/contexts/AuthContext';
 
 interface DashboardDomain {
@@ -13,6 +13,7 @@ interface DashboardDomain {
   url: string;
   context?: string;
   lastAnalyzed: string;
+  currentStep?: number;
   metrics?: {
     visibilityScore: number;
   keywordCount: number;
@@ -20,6 +21,8 @@ interface DashboardDomain {
     totalQueries?: number;
     topPhrases?: { phrase: string; score: number }[];
     modelPerformance?: { model: string; score: number }[];
+    detectionMethod?: string;
+    confidence?: number;
   };
   industry?: string;
 }
@@ -33,7 +36,6 @@ interface ActiveOnboardingSession {
   };
   currentStep: number;
   lastActivity: string;
-  domainVersionId?: number | null;
 }
 
 const ProfessionalDashboard = () => {
@@ -44,6 +46,19 @@ const ProfessionalDashboard = () => {
   const [error, setError] = useState<string | null>(null);
   const { user, logout, loading: authLoading, token } = useAuth();
   const navigate = useNavigate();
+
+  // Function to handle domain card clicks
+  const handleDomainClick = (domain: DashboardDomain) => {
+    const currentStep = domain.currentStep ?? 0;
+    
+    // If analysis is completed (currentStep === 4), go to dashboard
+    if (currentStep === 4) {
+      navigate(`/dashboard/${domain.id}`);
+    } else {
+      // Otherwise, go to the analysis flow at the current step
+      navigate(`/analyze?domainId=${domain.id}`);
+    }
+  };
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -79,9 +94,8 @@ const ProfessionalDashboard = () => {
         const domainsData = await domainsResponse.json();
         setDomains(domainsData.domains || []);
 
-        // Fetch active onboarding sessions
-        const sessionsResponse = await onboardingService.getActiveSessions();
-        setActiveSessions(sessionsResponse.activeSessions);
+        // Onboarding sessions removed
+        setActiveSessions([]);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
       } finally {
@@ -134,10 +148,15 @@ const ProfessionalDashboard = () => {
   };
 
   const getStatusBadge = (domain: DashboardDomain) => {
-    if (domain.metrics) {
-      return <Badge className="bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 border-emerald-200 hover:from-emerald-100 hover:to-teal-100 transition-all duration-200">Analyzed</Badge>;
+    const currentStep = domain.currentStep ?? 0;
+    
+    if (currentStep === 4) {
+      return <Badge className="bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 border-emerald-200 hover:from-emerald-100 hover:to-teal-100 transition-all duration-200">Completed</Badge>;
+    } else if (currentStep > 0) {
+      return <Badge className="bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border-blue-200 animate-pulse">In Progress</Badge>;
+    } else {
+      return <Badge className="bg-gradient-to-r from-amber-50 to-orange-50 text-amber-700 border-amber-200">Not Started</Badge>;
     }
-    return <Badge className="bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border-blue-200 animate-pulse">Processing</Badge>;
   };
 
   const getStepName = (step: number) => {
@@ -396,8 +415,8 @@ const ProfessionalDashboard = () => {
                 className="group border-0 shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 bg-gradient-to-br from-white to-slate-50 overflow-hidden cursor-pointer"
                 role="button"
                 tabIndex={0}
-                onClick={() => navigate(`/analyze?domainId=${session.domain.id}${session.domainVersionId ? `&versionId=${session.domainVersionId}` : ''}`)}
-                onKeyPress={e => { if (e.key === 'Enter' || e.key === ' ') navigate(`/analyze?domainId=${session.domain.id}${session.domainVersionId ? `&versionId=${session.domainVersionId}` : ''}`); }}
+                onClick={() => handleDomainClick({ id: session.domain.id, url: session.domain.url, lastAnalyzed: session.lastActivity, currentStep: session.currentStep })}
+                onKeyPress={e => { if (e.key === 'Enter' || e.key === ' ') handleDomainClick({ id: session.domain.id, url: session.domain.url, lastAnalyzed: session.lastActivity, currentStep: session.currentStep }); }}
                 aria-label={`Resume analysis for ${domain.url}`}
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
@@ -491,9 +510,10 @@ const ProfessionalDashboard = () => {
             );
           })}
 
-          {/* Completed Domain Cards */}
+          {/* Domain Cards */}
           {filteredDomains.map((domain) => {
-            const status = domain.metrics ? 'completed' : 'analyzing';
+            const currentStep = domain.currentStep ?? 0;
+            const status = currentStep === 4 ? 'completed' : currentStep > 0 ? 'in-progress' : 'not-started';
             const visibilityScore = domain.metrics?.visibilityScore ?? 0;
             const keywordCount = domain.metrics?.keywordCount ?? 0;
             const phraseCount = domain.metrics?.phraseCount ?? 0;
@@ -508,8 +528,8 @@ const ProfessionalDashboard = () => {
                 className="group border-0 shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 bg-gradient-to-br from-white to-slate-50 overflow-hidden cursor-pointer min-h-[340px]"
                 role="button"
                 tabIndex={0}
-                onClick={() => navigate(`/dashboard/${domain.id}`)}
-                onKeyPress={e => { if (e.key === 'Enter' || e.key === ' ') navigate(`/dashboard/${domain.id}`); }}
+                onClick={() => handleDomainClick(domain)}
+                onKeyPress={e => { if (e.key === 'Enter' || e.key === ' ') handleDomainClick(domain); }}
                 aria-label={`View dashboard for ${domain.url}`}
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
@@ -534,7 +554,7 @@ const ProfessionalDashboard = () => {
                   </div>
                 </CardHeader>
                 <CardContent className="relative space-y-4 max-h-[420px] md:max-h-[380px] overflow-hidden p-4 md:p-6">
-                  {/* Visibility Score Display */}
+                  {/* Status Display */}
                   {status === 'completed' ? (
                     <div className="relative">
                       <div className="flex items-center justify-between mb-2">
@@ -553,11 +573,31 @@ const ProfessionalDashboard = () => {
                         </div>
                       </div>
                     </div>
+                  ) : status === 'in-progress' ? (
+                    <div className="relative">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold text-slate-700">Progress</span>
+                        <ArrowUpRight className="h-4 w-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
+                      </div>
+                      <div className="relative">
+                        <div className="text-4xl font-bold text-blue-700 mb-2">
+                          Step {currentStep + 1}/5
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                          <div 
+                            className="h-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-1000 ease-out"
+                            style={{ width: `${((currentStep + 1) / 5) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   ) : (
                     <div className="flex items-center justify-center py-8">
                       <div className="flex items-center space-x-3">
-                        <div className="animate-spin rounded-full h-8 w-8 border-3 border-slate-200 border-t-blue-600"></div>
-                        <span className="text-slate-600 font-medium">Analyzing domain...</span>
+                        <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center">
+                          <Play className="h-4 w-4 text-amber-600" />
+                        </div>
+                        <span className="text-slate-600 font-medium">Ready to start analysis</span>
                       </div>
                     </div>
                   )}
@@ -570,7 +610,9 @@ const ProfessionalDashboard = () => {
                         </div>
                         <span className="text-xs font-medium text-blue-700">Keywords</span>
                       </div>
-                      <p className="text-xl font-bold text-blue-900">{keywordCount.toLocaleString()}</p>
+                      <p className="text-xl font-bold text-blue-900">
+                        {status === 'completed' ? keywordCount.toLocaleString() : status === 'in-progress' ? 'Processing...' : '-'}
+                      </p>
                     </div>
                     <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-3 border border-emerald-100">
                       <div className="flex items-center space-x-2 mb-1">
@@ -579,7 +621,9 @@ const ProfessionalDashboard = () => {
                         </div>
                         <span className="text-xs font-medium text-emerald-700">Phrases</span>
                       </div>
-                      <p className="text-xl font-bold text-emerald-900">{phraseCount.toLocaleString()}</p>
+                      <p className="text-xl font-bold text-emerald-900">
+                        {status === 'completed' ? phraseCount.toLocaleString() : status === 'in-progress' ? 'Processing...' : '-'}
+                      </p>
                     </div>
                   </div>
                   {/* AI Query Result Summary */}
@@ -611,6 +655,16 @@ const ProfessionalDashboard = () => {
                             <span className="text-xs text-slate-500 ml-1">Score: {domain.metrics.modelPerformance[0].score ?? '-'}</span>
                           </div>
                         )}
+                        {/* Enhanced Domain Detection Summary */}
+                        {domain.metrics.detectionMethod && (
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs text-slate-600">Detection:</span>
+                            <span className="text-xs font-medium text-emerald-700 bg-emerald-100 px-2 py-1 rounded-full">
+                              {domain.metrics.detectionMethod}
+                            </span>
+
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -624,7 +678,7 @@ const ProfessionalDashboard = () => {
                       }) : 'N/A'}
                     </span>
                     <div className="flex items-center text-blue-600 text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      View Details
+                      {status === 'completed' ? 'View Details' : status === 'in-progress' ? 'Continue Analysis' : 'Start Analysis'}
                       <ArrowUpRight className="h-3 w-3 ml-1" />
                     </div>
                   </div>

@@ -2,14 +2,17 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import 'dotenv/config';
 import domainRouter from './routes/domain';
+import domainValidationRouter from './routes/domainValidation';
 import keywordsRouter from './routes/keywords';
-import phrasesRouter from './routes/phrases';
+import intentPhrasesRouter from './routes/intentPhrases';
+import enhancedPhrasesRouter from './routes/enhancedPhrasesUnified';
 import aiQueriesRouter from './routes/ai-queries';
 import competitorRouter from './routes/competitor';
 import dashboardRouter from './routes/dashboard';
-import onboardingRouter from './routes/onboarding';
+// Onboarding router removed
 import authRouter from './routes/auth';
 import { PrismaClient } from '../generated/prisma';
+import { authenticateToken, AuthenticatedRequest } from './middleware/auth';
 
 const app = express();
 const prisma = new PrismaClient();
@@ -44,9 +47,16 @@ const corsOptions: cors.CorsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '5mb' }));
 
-// Debug endpoint to list all domains
-app.get('/api/debug/domains', async (req: Request, res: Response) => {
+// Debug endpoint to list all domains (ADMIN ONLY - REMOVE IN PRODUCTION)
+app.get('/api/debug/domains', authenticateToken, async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
   try {
+    // Only allow admin users (you can add admin check here)
+    // For now, this endpoint should be removed in production
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'Debug endpoint not available in production' });
+    }
+    
     const domains = await prisma.domain.findMany({
       select: {
         id: true,
@@ -87,12 +97,14 @@ app.get('/api/debug/domains', async (req: Request, res: Response) => {
 // Routes
 app.use('/api/auth', authRouter);
 app.use('/api/domain', domainRouter);
+app.use('/api/domain-validation', domainValidationRouter);
 app.use('/api/keywords', keywordsRouter);
-app.use('/api/phrases', phrasesRouter);
+app.use('/api/intent-phrases', intentPhrasesRouter);
+app.use('/api/enhanced-phrases', enhancedPhrasesRouter);
 app.use('/api/ai-queries', aiQueriesRouter);
 app.use('/api/competitor', competitorRouter);
 app.use('/api/dashboard', dashboardRouter);
-app.use('/api/onboarding', onboardingRouter);
+// Onboarding routes removed
 
 // Health check endpoint
 app.get('/api/health', (req: Request, res: Response) => {

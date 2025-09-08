@@ -38,117 +38,118 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
   const displayError = formError || error;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4">
-      <Card className="w-full max-w-md shadow-xl border-0 bg-white/80 backdrop-blur-sm">
-        <CardHeader className="text-center space-y-2">
-          <div className="mx-auto w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
-            <Mail className="h-6 w-6 text-white" />
+    <div className="min-h-screen flex flex-col items-center justify-center bg-white px-6">
+      {/* Apple-style clean header */}
+      <div className="w-full max-w-sm text-center mb-8">
+        <div className="mb-6">
+          {/* Simple, clean logo area - replace with your logo */}
+          <div className="w-16 h-16 mx-auto bg-black rounded-2xl flex items-center justify-center mb-4">
+            <Mail className="h-8 w-8 text-white" />
           </div>
-          <CardTitle className="text-2xl font-bold text-slate-900">Welcome Back</CardTitle>
-          <CardDescription className="text-slate-600">
-            Sign in to your account to continue
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {displayError && (
-              <Alert variant="destructive">
-                <AlertDescription>{displayError}</AlertDescription>
-              </Alert>
-            )}
-            
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-medium text-slate-700">
-                Email Address
-              </Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
-                  disabled={loading}
-                />
-              </div>
+        </div>
+        
+        <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+          Sign In
+        </h1>
+        <p className="text-base text-gray-600">
+          Enter your credentials to continue
+        </p>
+      </div>
+  
+      {/* Apple-style form */}
+      <div className="w-full max-w-sm">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {displayError && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+              <p className="text-sm text-red-600">{displayError}</p>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium text-slate-700">
-                Password
-              </Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 pr-10 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
-                  disabled={loading}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  disabled={loading}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5"
+          )}
+          
+          {/* Email field with Apple's floating label style */}
+          <div className="relative">
+            <Input
+              id="email"
+              type="email"
+              placeholder=" "
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="peer w-full h-14 px-4 pt-6 pb-2 text-base border border-gray-300 rounded-xl focus:border-blue-500 focus:ring-0 focus:outline-none bg-white transition-colors"
+              disabled={loading}
+            />
+            <Label 
+              htmlFor="email" 
+              className="absolute left-4 top-4 text-gray-500 text-base transition-all duration-200 
+                         peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-500
+                         peer-focus:top-2 peer-focus:text-xs peer-focus:text-blue-500
+                         peer-[:not(:placeholder-shown)]:top-2 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-gray-700"
+            >
+              Email Address
+            </Label>
+          </div>
+  
+          {/* Password field with Apple's floating label style */}
+          <div className="relative">
+            <Input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              placeholder=" "
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="peer w-full h-14 px-4 pt-6 pb-2 pr-12 text-base border border-gray-300 rounded-xl focus:border-blue-500 focus:ring-0 focus:outline-none bg-white transition-colors"
+              disabled={loading}
+            />
+            <Label 
+              htmlFor="password" 
+              className="absolute left-4 top-4 text-gray-500 text-base transition-all duration-200
+                         peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-placeholder-shown:text-gray-500
+                         peer-focus:top-2 peer-focus:text-xs peer-focus:text-blue-500
+                         peer-[:not(:placeholder-shown)]:top-2 peer-[:not(:placeholder-shown)]:text-xs peer-[:not(:placeholder-shown)]:text-gray-700"
+            >
+              Password
+            </Label>
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
               disabled={loading}
             >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Signing In...
-                </>
-              ) : (
-                'Sign In'
-              )}
-            </Button>
-          </form>
-
-          <div className="text-center">
-            <p className="text-sm text-slate-600">
-              Don't have an account?{' '}
-              <button
-                onClick={onSwitchToRegister}
-                className="text-blue-600 hover:text-blue-700 font-medium"
-                disabled={loading}
-              >
-                Sign up
-              </button>
-            </p>
+              {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+            </button>
           </div>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-slate-200" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-slate-500">Or</span>
-            </div>
-          </div>
-
+  
+          {/* Apple-style primary button */}
+          <Button
+            type="submit"
+            className="w-full h-14 bg-black hover:bg-gray-800 text-white font-medium text-base rounded-xl transition-colors duration-200 shadow-sm"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Signing In...
+              </>
+            ) : (
+              'Sign In'
+            )}
+          </Button>
+        </form>
+  
+        {/* Apple-style secondary actions */}
+        <div className="mt-8 space-y-4">
           <div className="text-center">
-            <Link
-              to="/"
-              className="text-sm text-slate-600 hover:text-slate-800 font-medium"
+            <button
+              onClick={onSwitchToRegister}
+              className="text-blue-600 hover:text-blue-800 font-medium text-base transition-colors"
+              disabled={loading}
             >
-              Continue without account
-            </Link>
+              Sign Up
+            </button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+
+      {/* Apple-style footer */}
+      
     </div>
   );
 };

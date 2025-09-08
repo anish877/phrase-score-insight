@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '../../generated/prisma';
-import { crawlAndExtractWithGpt4o, ProgressCallback } from '../services/geminiService';
+import { crawlAndExtractWithGpt4o, ProgressCallback, generateKeywordsForDomain } from '../services/geminiService';
+import { generateSeedKeywords } from '../services/googleAdsService';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
@@ -13,7 +14,7 @@ function asyncHandler(fn: (req: Request, res: Response, next: any) => Promise<an
   };
 }
 
-// GET /domain/check/:url - Check if domain exists and return version info
+// GET /domain/check/:url - Check if domain exists
 router.get('/check/:url', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
   try {
     const { url } = req.params;
@@ -29,18 +30,14 @@ router.get('/check/:url', authenticateToken, asyncHandler(async (req: Request, r
     
     let domain: any = null;
     
-    // Try to find the domain with any of the possible URL formats
+    // Try to find the domain with any of the possible URL formats for this user
     for (const possibleUrl of possibleUrls) {
-      domain = await prisma.domain.findUnique({
-        where: { url: possibleUrl },
+      domain = await prisma.domain.findFirst({
+        where: { 
+          url: possibleUrl,
+          userId: authReq.user.userId
+        },
         include: {
-          versions: {
-            orderBy: { version: 'desc' },
-            include: {
-              dashboardAnalyses: true,
-              crawlResults: { orderBy: { createdAt: 'desc' }, take: 1 }
-            }
-          },
           dashboardAnalyses: true,
           crawlResults: { orderBy: { createdAt: 'desc' }, take: 1 }
         }
@@ -51,36 +48,16 @@ router.get('/check/:url', authenticateToken, asyncHandler(async (req: Request, r
       }
     }
 
-    if (!domain || domain.userId !== authReq.user.userId) {
+    if (!domain) {
       return res.json({ exists: false });
     }
-
-    // Return domain info with versions
-    const versions = domain.versions.map((v: any) => ({
-      id: v.id,
-      version: v.version,
-      name: v.name || `Version ${v.version}`,
-      createdAt: v.createdAt,
-      hasAnalysis: !!v.dashboardAnalyses[0],
-      lastCrawl: v.crawlResults[0]?.createdAt
-    }));
-
-    // Find the latest version
-    const latestVersion = domain.versions[0]; // Versions are ordered by desc
 
     return res.json({
       exists: true,
       domainId: domain.id,
       url: domain.url,
-      currentVersion: domain.version,
-      versions,
-      latestVersion: latestVersion ? {
-        id: latestVersion.id,
-        version: latestVersion.version,
-        name: latestVersion.name,
-        hasAnalysis: !!latestVersion.dashboardAnalyses[0]
-      } : null,
-      lastAnalyzed: latestVersion?.dashboardAnalyses[0]?.updatedAt || domain.updatedAt
+      hasAnalysis: !!domain.dashboardAnalyses[0],
+      lastAnalyzed: domain.dashboardAnalyses[0]?.updatedAt || domain.updatedAt
     });
   } catch (error) {
     console.error('Domain check error:', error);
@@ -88,10 +65,10 @@ router.get('/check/:url', authenticateToken, asyncHandler(async (req: Request, r
   }
 }));
 
-// POST /domain - create/find domain, run extraction, and stream progress
+// POST /domain - create/find domain, run multi-phase analysis, and stream progress
 router.post('/', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthenticatedRequest;
-  const { url, subdomains, customPaths, priorityUrls, createNewVersion = false, versionName, location } = req.body;
+  const { url, subdomains, customPaths, priorityUrls, location } = req.body;
   
   // Validate input before setting SSE headers
   if (!url) {
@@ -99,20 +76,7 @@ router.post('/', authenticateToken, asyncHandler(async (req: Request, res: Respo
     return;
   }
 
-  // Enforce that url is a domain, not a full URL
-  const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}$/;
-  if (!domainRegex.test(url)) {
-    res.status(400).json({ error: 'Please provide a valid domain (not a full URL) in the first input.' });
-    return;
-  }
-
-  // If subdomains provided, pass array to extraction logic
-  // Otherwise, use main domain only
-  const domainsToExtract = Array.isArray(subdomains) && subdomains.length > 0
-    ? subdomains.map((sub: string) => `${sub}.${url}`)
-    : [url];
-
-  // Set headers for SSE
+  // Set up SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -122,93 +86,85 @@ router.post('/', authenticateToken, asyncHandler(async (req: Request, res: Respo
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
-  // Helper function for consistent error handling in SSE
   const sendErrorAndEnd = (error: string, details?: string) => {
-    sendEvent({ type: 'error', error, details: details || error });
+    sendEvent({ type: 'error', error, details });
     res.end();
   };
 
-  try {
-    // 1. Check if domain exists
-    sendEvent({ type: 'progress', message: 'Checking domain status and versioning...', progress: 5 });
-    
-    let domain = await prisma.domain.findUnique({ 
-      where: { url: domainsToExtract[0] },
-      include: { versions: { orderBy: { version: 'desc' } } }
-    });
-    
-    let domainVersion = null;
-    let isNewVersion = false;
-
-    if (domain) {
-      if (domain.userId !== authReq.user.userId) {
-        sendErrorAndEnd('Access denied', 'You do not have permission to access this domain');
-        return;
-      }
-      // Update location if provided and different
-      if (location && location !== domain.location) {
-        await prisma.domain.update({
-          where: { id: domain.id },
-          data: { location }
-        });
-        domain.location = location;
-      }
-      if (createNewVersion) {
-        // Create new version
-        const nextVersion = domain.version + 1;
-        domainVersion = await prisma.domainVersion.create({
-          data: {
-            domainId: domain.id,
-            version: nextVersion,
-            name: versionName || `Version ${nextVersion}`
-          }
-        });
-        
-        // Update domain's current version
-        await prisma.domain.update({
-          where: { id: domain.id },
-          data: { version: nextVersion }
-        });
-        
-        isNewVersion = true;
-        sendEvent({ type: 'version_created', version: nextVersion, versionName: domainVersion.name });
-      } else {
-        // Use existing domain
-        domainVersion = domain?.versions.find(v => v.version === domain?.version) || null;
-      }
-    } else {
-      // Create new domain
-      domain = await prisma.domain.create({ 
-        data: { 
-          url: domainsToExtract[0],
-          version: 1,
-          userId: authReq.user.userId,
-          location: location || null
+  // Helper function to update analysis phase
+  const updateAnalysisPhase = async (domainId: number, phase: string, status: string, progress: number, result?: any, error?: string) => {
+    try {
+      await prisma.analysisPhase.upsert({
+        where: { domainId_phase: { domainId, phase } },
+        update: {
+          status,
+          progress,
+          result: result ? JSON.stringify(result) : undefined,
+          error,
+          endTime: status === 'completed' || status === 'failed' ? new Date() : undefined,
         },
-        include: {
-          versions: true
-        }
+        create: {
+          domainId,
+          phase,
+          status,
+          progress,
+          startTime: new Date(),
+          result: result ? JSON.stringify(result) : undefined,
+          error,
+        },
       });
-      
-      // Create initial version
-      domainVersion = await prisma.domainVersion.create({
-        data: {
-          domainId: domain.id,
-          version: 1,
-          name: 'Initial Analysis'
-        }
-      });
+    } catch (err) {
+      console.error(`Error updating analysis phase ${phase}:`, err);
+    }
+  };
+
+  try {
+    // 1. Normalize URL and find/create domain
+    let normalizedUrl = url;
+    if (!url.startsWith('http')) {
+      normalizedUrl = `https://${url}`;
     }
 
-    if (!domain || !domainVersion) {
-      throw new Error('Failed to create domain or version');
+    sendEvent({ type: 'progress', phase: 'domain_extraction', step: 'Validating domain and checking existing analysis...', progress: 5 });
+
+    // Check if domain already exists for this user
+    let domain = await prisma.domain.findFirst({
+      where: { 
+        url: normalizedUrl,
+        userId: authReq.user.userId
+      }
+    });
+
+    let isNewDomain = false;
+    if (!domain) {
+      // Create new domain for this user
+      domain = await prisma.domain.create({
+        data: {
+          url: normalizedUrl,
+          userId: authReq.user.userId,
+          location: location || null,
+          currentStep: 0
+        }
+      });
+      isNewDomain = true;
     }
     
-    sendEvent({ type: 'domain_created', domainId: domain.id, versionId: domainVersion.id, isNewVersion });
+    sendEvent({ type: 'domain_created', domainId: domain.id, isNewDomain });
 
-    // 2. Define progress callback for the crawler
+    // Initialize only domain extraction and keyword generation phases
+    const phases = ['domain_extraction', 'keyword_generation'];
+    for (const phase of phases) {
+      await updateAnalysisPhase(domain.id, phase, 'pending', 0);
+    }
+
+    let totalTokenUsage = 0;
+    let keywordResult: any = null;
+
+    // PHASE 1: Domain Extraction (Existing functionality)
+    sendEvent({ type: 'progress', phase: 'domain_extraction', step: 'Starting domain extraction and content crawling...', progress: 10 });
+    await updateAnalysisPhase(domain.id, 'domain_extraction', 'running', 10);
+
     const onProgress: ProgressCallback = (progressData) => {
-      // Enhance progress messages to be more realistic
       let enhancedMessage = progressData.step;
       
       if (progressData.phase === 'discovery') {
@@ -243,343 +199,231 @@ router.post('/', authenticateToken, asyncHandler(async (req: Request, res: Respo
         }
       }
       
-      sendEvent({ type: 'progress', ...progressData, step: enhancedMessage });
+      const phaseProgress = Math.min(90, 10 + (progressData.progress * 0.8)); // Domain extraction gets 10-90%
+      sendEvent({ type: 'progress', phase: 'domain_extraction', step: enhancedMessage, progress: phaseProgress, stats: progressData.stats });
     };
 
     // Determine crawl mode
     const hasPriorityUrls = Array.isArray(priorityUrls) && priorityUrls.length > 0;
     const hasCustomPaths = Array.isArray(customPaths) && customPaths.length > 0;
     let extraction;
-    let totalTokenUsage = 0;
+    
+    const domainName = domain.url.replace(/^https?:\/\//, '').replace(/^www\./, '');
     
     try {
       if (!hasPriorityUrls && !hasCustomPaths) {
-        extraction = await crawlAndExtractWithGpt4o(domainsToExtract, onProgress);
+        extraction = await crawlAndExtractWithGpt4o(domainName, onProgress, undefined, undefined, location);
       } else {
-        extraction = await crawlAndExtractWithGpt4o(domainsToExtract, onProgress, customPaths, priorityUrls);
+        extraction = await crawlAndExtractWithGpt4o(domainName, onProgress, customPaths, priorityUrls, location);
       }
       totalTokenUsage += extraction.tokenUsage || 0;
     } catch (extractionError) {
       console.error('Extraction error:', extractionError);
+      await updateAnalysisPhase(domain.id, 'domain_extraction', 'failed', 0, null, extractionError instanceof Error ? extractionError.message : 'Unknown extraction error');
       sendErrorAndEnd('Extraction failed', extractionError instanceof Error ? extractionError.message : 'Unknown extraction error');
       return;
     }
     
-    // 4. Fix keyEntities: sum if object, else use as is
-    let keyEntitiesValue = extraction.keyEntities;
-    if (typeof keyEntitiesValue === 'object' && keyEntitiesValue !== null) {
-      keyEntitiesValue = Object.values(keyEntitiesValue).reduce((sum: number, v: unknown) => sum + (typeof v === 'number' ? v : 0), 0);
-    }
+    // Save crawl result
+    sendEvent({ type: 'progress', phase: 'domain_extraction', step: 'Saving domain extraction results...', progress: 95 });
     
-    // 5. Save final crawl result to version
-    sendEvent({ type: 'progress', message: 'Saving analysis results...', progress: 98 });
-    
-    try {
-      const crawlResult = await prisma.crawlResult.create({
-        data: {
-          domainVersion: {
-            connect: { id: domainVersion.id }
-          },
-          pagesScanned: extraction.pagesScanned,
-          contentBlocks: extraction.contentBlocks,
-          keyEntities: keyEntitiesValue,
-          confidenceScore: extraction.confidenceScore,
-          extractedContext: extraction.extractedContext,
-          tokenUsage: extraction.tokenUsage || 0,
-        },
-      });
-
-      // 6. Update domain context
-      await prisma.domain.update({
-        where: { id: domain.id },
-        data: { context: extraction.extractedContext },
-      });
-
-      // 7. Send final result and close connection
-      sendEvent({ 
-        type: 'complete', 
-        result: { 
-          domain, 
-          domainVersion,
-          extraction: crawlResult,
-          isNewVersion,
-          tokenUsage: totalTokenUsage
-        } 
-      });
-      res.end();
-    } catch (dbError) {
-      console.error('Database error:', dbError);
-      sendErrorAndEnd('Failed to save results', 'Database operation failed');
-      return;
-    }
-
-  } catch (err: any) {
-    console.error('Domain extraction streaming error:', err);
-    sendErrorAndEnd('Failed to process domain', err.message);
-  }
-}));
-
-// GET /domain/search - search domain by URL
-router.get('/search', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
-  const authReq = req as AuthenticatedRequest;
-  const { url } = req.query;
-  if (!url) { 
-    res.status(400).json({ error: 'URL parameter is required' }); 
-    return; 
-  }
-  
-  try {
-    const domain = await prisma.domain.findUnique({ 
-      where: { url: url as string },
-      include: {
-        versions: {
-          orderBy: { version: 'desc' },
-          include: {
-            dashboardAnalyses: true,
-            crawlResults: { orderBy: { createdAt: 'desc' }, take: 1 }
-          }
-        }
-      }
+    const crawlResult = await prisma.crawlResult.create({
+      data: {
+        domainId: domain.id,
+        pagesScanned: extraction.pagesScanned,
+        analyzedUrls: JSON.stringify(extraction.analyzedUrls),
+        extractedContext: extraction.extractedContext,
+        tokenUsage: extraction.tokenUsage || 0,
+      },
     });
-    
-    if (!domain || domain.userId !== authReq.user.userId) { 
-      res.status(404).json({ error: 'Domain not found' }); 
-      return; 
-    }
-    
-    res.json({ domain });
-  } catch (err: any) {
-    console.error('Domain search error:', err);
-    res.status(500).json({ error: 'Failed to search domain', details: err.message });
-  }
-}));
 
-// GET /domain/:id - get domain and extraction data
-router.get('/:id', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
-  const authReq = req as AuthenticatedRequest;
-  const id = Number(req.params.id);
-  if (!id) { res.status(400).json({ error: 'Domain id is required' }); return; }
-  
-  try {
-    const domain = await prisma.domain.findUnique({ 
-      where: { id }, 
-      include: { 
-        versions: {
-          orderBy: { version: 'desc' },
-          include: {
-            crawlResults: { orderBy: { createdAt: 'desc' }, take: 1 },
-            dashboardAnalyses: true
-          }
+    await updateAnalysisPhase(domain.id, 'domain_extraction', 'completed', 100, crawlResult, undefined);
+    sendEvent({ type: 'progress', phase: 'domain_extraction', step: 'Domain extraction completed successfully!', progress: 100 });
+
+    // Update domain context
+    await prisma.domain.update({
+      where: { id: domain.id },
+      data: { context: extraction.extractedContext },
+    });
+
+    // PHASE 2: Enhanced AI Keyword Generation
+    sendEvent({ type: 'progress', phase: 'keyword_generation', step: 'Starting enhanced AI keyword generation...', progress: 10 });
+    await updateAnalysisPhase(domain.id, 'keyword_generation', 'running', 10);
+
+    try {
+      sendEvent({ type: 'progress', phase: 'keyword_generation', step: 'Analyzing domain context for keyword generation...', progress: 30 });
+      
+      // Use enhanced AI keyword generation with location context
+      let keywords = [];
+      try {
+        const aiKeywordResult = await generateKeywordsForDomain(domain.url, extraction.extractedContext, location);
+        keywords = aiKeywordResult.keywords.map((kw: any) => ({
+          term: kw.term,
+          volume: kw.volume,
+          difficulty: kw.difficulty,
+          cpc: kw.cpc,
+          intent: kw.intent || 'Commercial',
+        }));
+        totalTokenUsage += aiKeywordResult.tokenUsage || 0;
+        
+        console.log(`✅ AI generated ${keywords.length} keywords with intent classification`);
+      } catch (aiError) {
+        console.error('AI keyword generation failed:', aiError);
+        throw new Error('Failed to generate keywords using AI. Please try again.');
+      }
+
+      sendEvent({ type: 'progress', phase: 'keyword_generation', step: 'Saving keywords to database...', progress: 70 });
+
+      // Save keywords to database
+      const keywordData = keywords.map((keyword: any) => ({
+        term: keyword.term,
+        volume: keyword.volume,
+        difficulty: keyword.difficulty,
+        cpc: keyword.cpc,
+        intent: keyword.intent || 'Commercial',
+        domainId: domain.id,
+        isSelected: false,
+      }));
+
+      await prisma.keyword.createMany({
+        data: keywordData,
+        skipDuplicates: true,
+      });
+
+      const keywordAnalysis = await prisma.keywordAnalysis.create({
+        data: {
+          domainId: domain.id,
+          keywords: keywords,
+          searchVolumeData: {},
+          intentClassification: {},
+          competitiveAnalysis: {},
+          tokenUsage: 0, // Google API doesn't use tokens
         },
-        crawlResults: { orderBy: { createdAt: 'desc' }, take: 1 } 
+      });
+
+      await updateAnalysisPhase(domain.id, 'keyword_generation', 'completed', 100, keywordAnalysis, undefined);
+      sendEvent({ type: 'progress', phase: 'keyword_generation', step: 'Google API keyword generation completed successfully!', progress: 100 });
+
+    } catch (keywordError) {
+      console.error('Keyword generation error:', keywordError);
+      await updateAnalysisPhase(domain.id, 'keyword_generation', 'failed', 0, null, keywordError instanceof Error ? keywordError.message : 'Unknown keyword generation error');
+      sendEvent({ type: 'progress', phase: 'keyword_generation', step: 'Keyword generation failed, finalizing analysis...', progress: 0 });
+    }
+
+    // Final completion
+    sendEvent({ type: 'progress', step: 'Finalizing comprehensive analysis...', progress: 98 });
+    
+    // Send final result and close connection
+    sendEvent({ 
+      type: 'complete', 
+      result: { 
+        domain, 
+        extraction: crawlResult,
+        isNewDomain,
+        tokenUsage: totalTokenUsage,
+        phases: {
+          domain_extraction: 'completed',
+          keyword_generation: keywordResult ? 'completed' : 'failed'
+        }
       } 
     });
-    
-    if (!domain || domain.userId !== authReq.user.userId) { res.status(404).json({ error: 'Domain not found' }); return; }
-    
-    // Find the latest version
-    const latestVersion = domain.versions[0]; // Versions are ordered by desc
-    const crawlResult = latestVersion?.crawlResults[0];
-    
-    res.json({
-      domain,
-      latestVersion,
-      versions: domain.versions,
-      extraction: crawlResult ? {
-        pagesScanned: crawlResult.pagesScanned,
-        contentBlocks: crawlResult.contentBlocks,
-        keyEntities: crawlResult.keyEntities,
-        confidenceScore: crawlResult.confidenceScore,
-        extractedContext: crawlResult.extractedContext
-      } : null
-    });
-  } catch (err: any) {
-    console.error('Domain fetch error:', err);
-    res.status(500).json({ error: 'Failed to fetch domain', details: err.message });
+    res.end();
+
+  } catch (error) {
+    console.error('Domain processing error:', error);
+    sendErrorAndEnd('Processing failed', error instanceof Error ? error.message : 'Unknown error');
   }
 }));
 
-// GET /domain/:id/versions - get all versions for a domain
-router.get('/:id/versions', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
+// GET /api/domain/:id - Get domain information
+router.get('/:id', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
   const authReq = req as AuthenticatedRequest;
   const domainId = Number(req.params.id);
-  
+
   if (!domainId) {
-    return res.status(400).json({ error: 'Domain ID is required' });
-  }
-
-  // Fetch domain to check ownership
-  const domain = await prisma.domain.findUnique({ where: { id: domainId } });
-  if (!domain || domain.userId !== authReq.user.userId) {
-    return res.status(403).json({ error: 'Access denied' });
+    return res.status(400).json({ error: 'Invalid domain ID' });
   }
 
   try {
-    const versions = await prisma.domainVersion.findMany({
-      where: { domainId },
-      orderBy: { version: 'desc' },
+    const domain = await prisma.domain.findFirst({
+      where: {
+        id: domainId,
+        userId: authReq.user.userId
+      },
       include: {
-        keywords: {
-          include: {
-            phrases: {
-              include: {
-                aiQueryResults: true
-              }
-            }
-          }
-        }
-      }
-    });
-
-    // Calculate metrics for each version
-    const versionsWithMetrics = versions.map((version: any) => {
-      // Flatten AI query results from keywords -> phrases -> aiQueryResults
-      const aiResults = version.keywords.flatMap((k: any) => k.phrases.flatMap((p: any) => p.aiQueryResults));
-      const totalQueries = aiResults.length;
-      
-      if (totalQueries === 0) {
-        return {
-          ...version,
-          metrics: {
-            visibilityScore: 0,
-            mentionRate: 0,
-            avgRelevance: 0,
-            avgAccuracy: 0,
-            avgSentiment: 0,
-            avgOverall: 0,
-            totalQueries: 0,
-            keywordCount: (version.keywords || []).length,
-            phraseCount: (version.keywords || []).reduce((sum: number, k: any) => sum + (k.phrases || []).length, 0)
-          }
-        };
-      }
-
-      const mentions = aiResults.filter((r: any) => r.presence === 1).length;
-      const mentionRate = (mentions / totalQueries) * 100;
-      
-      const avgRelevance = aiResults.reduce((sum: number, r: any) => sum + (r.relevance || 0), 0) / totalQueries;
-      const avgAccuracy = aiResults.reduce((sum: number, r: any) => sum + (r.accuracy || 0), 0) / totalQueries;
-      const avgSentiment = aiResults.reduce((sum: number, r: any) => sum + (r.sentiment || 0), 0) / totalQueries;
-      const avgOverall = aiResults.reduce((sum: number, r: any) => sum + (r.overall || 0), 0) / totalQueries;
-      
-      // Calculate visibility score based on mention rate and average scores
-      const visibilityScore = Math.min(100, Math.max(0, 
-        (mentionRate * 0.6) + 
-        (avgRelevance * 10) + 
-        (avgAccuracy * 5) + 
-        (avgSentiment * 5) + 
-        (avgOverall * 10)
-      ));
-
-      return {
-        ...version,
-        metrics: {
-          visibilityScore: Math.round(visibilityScore),
-          mentionRate: Math.round(mentionRate * 10) / 10,
-          avgRelevance: Math.round(avgRelevance * 10) / 10,
-          avgAccuracy: Math.round(avgAccuracy * 10) / 10,
-          avgSentiment: Math.round(avgSentiment * 10) / 10,
-          avgOverall: Math.round(avgOverall * 10) / 10,
-          totalQueries,
-          keywordCount: (version.keywords || []).length,
-          phraseCount: (version.keywords || []).reduce((sum: number, k: any) => sum + (k.phrases || []).length, 0)
-        }
-      };
-    });
-
-    res.json({ versions: versionsWithMetrics });
-
-  } catch (error: any) {
-    console.error('Domain versions fetch error:', error);
-    res.status(500).json({ 
-      error: 'Failed to fetch domain versions', 
-      details: error.message 
-    });
-  }
-}));
-
-// GET /domain/:domainId/versions - Get all versions for a domain
-router.get('/:domainId/versions', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
-  const authReq = req as AuthenticatedRequest;
-  try {
-    const { domainId } = req.params;
-    const id = Number(domainId);
-    
-    if (isNaN(id)) {
-      return res.status(400).json({ error: 'Invalid domain ID' });
-    }
-
-    // Fetch domain to check ownership
-    const domain = await prisma.domain.findUnique({ where: { id } });
-    if (!domain || domain.userId !== authReq.user.userId) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const versions = await prisma.domainVersion.findMany({
-      where: { domainId: id },
-      include: {
-        dashboardAnalyses: {
+        crawlResults: {
           orderBy: { createdAt: 'desc' },
           take: 1
         },
-        keywords: {
-          include: {
-            phrases: {
-              include: { aiQueryResults: true }
-            }
-          }
+        keywordAnalyses: {
+          orderBy: { createdAt: 'desc' },
+          take: 1
         }
-      },
-      orderBy: { version: 'desc' }
+      }
     });
 
-    // For each version, include metrics (from dashboardAnalyses[0] or calculated)
-    const result = await Promise.all(versions.map(async (v) => {
-      let metrics = null;
-      if (v.dashboardAnalyses && v.dashboardAnalyses.length > 0) {
-        metrics = v.dashboardAnalyses[0].metrics;
-      } else {
-        // Calculate metrics on the fly if not present
-        const aiQueryResults = v.keywords.flatMap((k: any) => k.phrases.flatMap((p: any) => p.aiQueryResults));
-        const totalQueries = aiQueryResults.length;
-        const mentions = aiQueryResults.filter((r: any) => r.presence === 1).length;
-        const mentionRate = totalQueries > 0 ? (mentions / totalQueries) * 100 : 0;
-        const avgRelevance = totalQueries > 0 ? aiQueryResults.reduce((sum: number, r: any) => sum + r.relevance, 0) / totalQueries : 0;
-        const avgAccuracy = totalQueries > 0 ? aiQueryResults.reduce((sum: number, r: any) => sum + r.accuracy, 0) / totalQueries : 0;
-        const avgSentiment = totalQueries > 0 ? aiQueryResults.reduce((sum: number, r: any) => sum + r.sentiment, 0) / totalQueries : 0;
-        const avgOverall = totalQueries > 0 ? aiQueryResults.reduce((sum: number, r: any) => sum + r.overall, 0) / totalQueries : 0;
-        const visibilityScore = Math.round(
-          Math.min(
-            100,
-            Math.max(
-              0,
-              (mentionRate * 0.25) + (avgRelevance * 10) + (avgSentiment * 5)
-            )
-          )
-        );
-        metrics = {
-          visibilityScore,
-          mentionRate,
-          avgRelevance,
-          avgAccuracy,
-          avgSentiment,
-          avgOverall,
-          totalQueries
-        };
-      }
-      return {
-        id: v.id,
-        version: v.version,
-        name: v.name,
-        createdAt: v.createdAt,
-        metrics
-      };
-    }));
+    if (!domain) {
+      return res.status(404).json({ error: 'Domain not found' });
+    }
 
-    res.json({ versions: result });
+    res.json({
+      success: true,
+      ...domain
+    });
+
   } catch (error) {
-    console.error('Error fetching domain versions:', error);
-    res.status(500).json({ error: 'Failed to fetch domain versions' });
+    console.error('Error fetching domain:', error);
+    res.status(500).json({ error: 'Failed to fetch domain information' });
+  }
+}));
+
+// PUT /api/domain/:id/current-step - Update domain current step
+router.put('/:id/current-step', authenticateToken, asyncHandler(async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
+  const domainId = Number(req.params.id);
+  const { currentStep } = req.body;
+
+  if (!domainId || isNaN(domainId)) {
+    return res.status(400).json({ error: 'Invalid domain ID' });
+  }
+
+  if (currentStep === undefined || currentStep === null || currentStep < 0 || currentStep > 4) {
+    return res.status(400).json({ error: 'Current step must be between 0 and 4' });
+  }
+
+  try {
+    // Verify domain access
+    const domain = await prisma.domain.findFirst({
+      where: {
+        id: domainId,
+        userId: authReq.user.userId
+      }
+    });
+
+    if (!domain) {
+      return res.status(404).json({ error: 'Domain not found' });
+    }
+
+    // Update the current step
+    const updatedDomain = await prisma.domain.update({
+      where: { id: domainId },
+      data: { currentStep },
+      select: {
+        id: true,
+        url: true,
+        currentStep: true,
+        updatedAt: true
+      }
+    });
+
+    res.json({
+      success: true,
+      domain: updatedDomain
+    });
+
+  } catch (error) {
+    console.error('Error updating domain current step:', error);
+    res.status(500).json({ error: 'Failed to update domain current step' });
   }
 }));
 

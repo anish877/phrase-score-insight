@@ -6,9 +6,11 @@ import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { Loader2, TrendingUp, TrendingDown, Target, Users, Globe, AlertCircle } from 'lucide-react';
+import { Loader2, TrendingUp, TrendingDown, Target, Users, Globe, AlertCircle, Crown, ChevronRight, Star, BarChart3, Activity, Lightbulb, FileText, MessageSquare, LayoutDashboard, History, CreditCard, RefreshCw, Eye, Cpu } from 'lucide-react';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { useToast } from '@/components/ui/use-toast';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { TooltipContent } from '@/components/ui/tooltip';
 
 interface DashboardProps {
   domain: string;
@@ -37,9 +39,7 @@ interface DomainData {
   context: string;
   crawlResults: Array<{
     pagesScanned: number;
-    contentBlocks: number;
-    keyEntities: number;
-    confidenceScore: number;
+    analyzedUrls: string[];
     extractedContext: string;
   }>;
   keywords: Array<{
@@ -114,6 +114,10 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [competitorAnalysis, setCompetitorAnalysis] = useState<CompetitorAnalysis | null>(null);
   const [competitorError, setCompetitorError] = useState<string | null>(null);
   const { toast } = useToast();
+  const [lockedFeature, setLockedFeature] = useState<string | null>(null);
+  const [paymentPopupOpen, setPaymentPopupOpen] = useState(false);
+  const [allUnlocked, setAllUnlocked] = useState(false); // Placeholder for actual unlock logic
+  const [reanalyzingPhrases, setReanalyzingPhrases] = useState<Set<number>>(new Set());
 
   // Fetch domain data from database
   useEffect(() => {
@@ -169,7 +173,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     if (!domainData?.aiQueryResults?.length) return 0;
     
     const totalResponses = domainData.aiQueryResults.length;
-    const mentionedResponses = domainData.aiQueryResults.filter(r => r.presence === 1).length;
+    const mentionedResponses = domainData.aiQueryResults.filter(r => r.presence > 0).length;
     const avgQuality = domainData.aiQueryResults.reduce((sum, r) => sum + r.overall, 0) / totalResponses;
     
     return Math.round(((mentionedResponses / totalResponses) * 100 * (avgQuality / 5)) * 10) / 10;
@@ -185,7 +189,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           acc[result.model] = { responses: 0, mentions: 0, totalScore: 0 };
         }
         acc[result.model].responses++;
-        if (result.presence === 1) acc[result.model].mentions++;
+        if (result.presence > 0) acc[result.model].mentions++;
         acc[result.model].totalScore += result.overall;
         return acc;
       }, {} as Record<string, { responses: number; mentions: number; totalScore: number }>)
@@ -204,14 +208,14 @@ const Dashboard: React.FC<DashboardProps> = ({
     }) || [];
     
     const visibility = keywordResults.length > 0 ? 
-      (keywordResults.filter(r => r.presence === 1).length / keywordResults.length) * 100 : 0;
+      (keywordResults.filter(r => r.presence > 0).length / keywordResults.length) * 100 : 0;
     const avgSentiment = keywordResults.length > 0 ? 
       keywordResults.reduce((sum, r) => sum + r.sentiment, 0) / keywordResults.length : 0;
     
     return {
       keyword: keyword.term.length > 15 ? keyword.term.substring(0, 15) + '...' : keyword.term,
       visibility: Math.round(visibility),
-      mentions: keywordResults.filter(r => r.presence === 1).length,
+      mentions: keywordResults.filter(r => r.presence > 0).length,
       sentiment: Math.round(avgSentiment * 10) / 10,
       volume: keyword.volume,
       difficulty: keyword.difficulty
@@ -221,7 +225,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const pieData = domainData?.aiQueryResults ? [
     { 
       name: 'Domain Present', 
-      value: domainData.aiQueryResults.filter(r => r.presence === 1).length,
+      value: domainData.aiQueryResults.filter(r => r.presence > 0).length,
       color: '#10b981' 
     },
     { 
@@ -241,7 +245,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   ];
 
   const topPhrases = domainData?.aiQueryResults
-    ?.filter(r => r.presence === 1)
+    ?.filter(r => r.presence > 0)
     ?.sort((a, b) => b.overall - a.overall)
     ?.slice(0, 5)
     ?.map(result => {
@@ -249,7 +253,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       return {
         phrase: phrase?.text || 'Unknown phrase',
         score: Math.round(result.overall * 20), // Convert 1-5 to 0-100
-        mentions: result.presence === 1 ? 1 : 0,
+        mentions: result.presence > 0 ? 1 : 0,
         model: result.model,
         relevance: result.relevance,
         accuracy: result.accuracy
@@ -265,11 +269,71 @@ const Dashboard: React.FC<DashboardProps> = ({
       return {
         phrase: phrase?.text || 'Unknown phrase',
         score: Math.round(result.overall * 20),
-        mentions: result.presence === 1 ? 1 : 0,
+        mentions: result.presence > 0 ? 1 : 0,
         model: result.model,
         issue: result.presence === 0 ? 'Domain not found' : 'Low quality response'
       };
     }) || [];
+
+  // Reanalyze individual phrase function
+  const reanalyzePhrase = async (phraseId: number, model: string) => {
+    try {
+      setReanalyzingPhrases(prev => new Set(prev).add(phraseId));
+      
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/ai-queries/reanalyze-phrase`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+        },
+        body: JSON.stringify({
+          phraseId: phraseId,
+          model: model,
+          domain: domain,
+          context: brandContext
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to reanalyze phrase');
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Update the domain data with the new result
+        setDomainData(prevData => {
+          if (!prevData) return prevData;
+          
+          const updatedResults = prevData.aiQueryResults.map(r => 
+            r.phraseId === phraseId && r.model === model 
+              ? { ...r, ...result.result }
+              : r
+          );
+          
+          return { ...prevData, aiQueryResults: updatedResults };
+        });
+
+        toast({
+          title: "Phrase Reanalyzed",
+          description: `Successfully reanalyzed phrase with ${model}`,
+        });
+      }
+    } catch (error) {
+      console.error('Error reanalyzing phrase:', error);
+      toast({
+        title: "Reanalysis Failed",
+        description: "Failed to reanalyze phrase. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setReanalyzingPhrases(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(phraseId);
+        return newSet;
+      });
+    }
+  };
 
   // Competitor analysis function
   const analyzeCompetitor = async () => {
@@ -329,6 +393,143 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
+  // Payment Popup Component
+const PaymentPopup: React.FC<{ isOpen: boolean; onClose: () => void; featureName: string; onUnlockAll?: () => void }> = ({ isOpen, onClose, featureName, onUnlockAll }) => {
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md z-[9999] p-6 bg-white border border-slate-200 shadow-xl">
+        {/* Header */}
+        <div className="text-center mb-6">
+          <div className="w-12 h-12 bg-black rounded-full flex items-center justify-center mx-auto mb-4">
+            <Crown className="h-6 w-6 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Upgrade to Pro</h2>
+          <p className="text-slate-600">Unlock {featureName} and access premium analytics</p>
+        </div>
+
+        {/* Features */}
+        <div className="space-y-3 mb-6">
+          <div className="flex items-center space-x-3">
+            <div className="w-2 h-2 bg-black rounded-full"></div>
+            <span className="text-slate-700">Advanced Analytics</span>
+          </div>
+          <div className="flex items-center space-x-3">
+            <div className="w-2 h-2 bg-black rounded-full"></div>
+            <span className="text-slate-700">Competitor Analysis</span>
+          </div>
+          <div className="flex items-center space-x-3">
+            <div className="w-2 h-2 bg-black rounded-full"></div>
+            <span className="text-slate-700">AI Insights</span>
+          </div>
+        </div>
+
+        {/* Pricing */}
+        <div className="text-center mb-6 p-4 bg-slate-50 rounded-lg">
+          <div className="text-3xl font-bold text-slate-900">$29</div>
+          <div className="text-slate-600">per month</div>
+        </div>
+
+        {/* Buttons */}
+        <div className="space-y-3">
+          <Button 
+            className="w-full bg-black text-white hover:bg-slate-800"
+            onClick={() => {
+              if (onUnlockAll) {
+                onUnlockAll();
+              }
+              onClose();
+            }}
+          >
+            <CreditCard className="h-4 w-4 mr-2" />
+            Test: Unlock All Features
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={onClose}
+            className="w-full border-slate-200 text-slate-700 hover:bg-slate-50"
+          >
+            Maybe Later
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+  // Navigation items for sidebar
+  const navigationItems = [
+    {
+      id: 'overview',
+      label: 'Overview',
+      icon: LayoutDashboard,
+      description: 'Key metrics and insights',
+      locked: false
+    },
+    {
+      id: 'airesults',
+      label: 'AI Results',
+      icon: Globe,
+      description: 'Raw AI query results',
+      locked: false
+    },
+    {
+      id: 'competitors',
+      label: 'Competitors',
+      icon: Users,
+      description: 'Competitive analysis',
+      locked: false
+    },
+    {
+      id: 'performance',
+      label: 'Performance',
+      icon: TrendingUp,
+      description: 'Performance analytics',
+      locked: !allUnlocked
+    },
+    {
+      id: 'keywords',
+      label: 'Keywords',
+      icon: Target,
+      description: 'Keyword analysis',
+      locked: !allUnlocked
+    },
+    {
+      id: 'content',
+      label: 'Content',
+      icon: FileText,
+      description: 'Content performance',
+      locked: !allUnlocked
+    },
+    {
+      id: 'models',
+      label: 'AI Models',
+      icon: Activity,
+      description: 'AI model performance',
+      locked: !allUnlocked
+    },
+    {
+      id: 'phrases',
+      label: 'Top Phrases',
+      icon: MessageSquare,
+      description: 'Best performing phrases',
+      locked: !allUnlocked
+    },
+    {
+      id: 'insights',
+      label: 'Insights',
+      icon: Lightbulb,
+      description: 'AI-generated insights',
+      locked: !allUnlocked
+    },
+    {
+      id: 'history',
+      label: 'Version History',
+      icon: History,
+      description: 'Version comparison',
+      locked: !allUnlocked
+    }
+  ];
+
   if (isLoading) {
     return (
       <div className="max-w-7xl mx-auto flex items-center justify-center min-h-[600px]">
@@ -352,71 +553,263 @@ const Dashboard: React.FC<DashboardProps> = ({
         </p>
       </div>
 
-      {/* Main Visibility Score */}
-      <Card className="shadow-lg border-0 bg-gradient-to-r from-purple-600 to-blue-600 text-white mb-8">
-        <CardContent className="p-8">
-          <div className="text-center">
-            <div className="text-6xl font-bold mb-4">{visibilityScore}</div>
-            <div className="text-xl opacity-90 mb-2">AI Visibility Score</div>
-            <div className="text-sm opacity-75">
-              Based on analysis of {domainData?.aiQueryResults?.length || 0} AI responses across {domainData?.keywords?.length || 0} keywords
-            </div>
-            <div className="flex justify-center mt-6">
-              <div className="w-64">
-                <Progress 
-                  value={visibilityScore} 
-                  className="h-3 bg-white/20"
-                />
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="models">AI Models</TabsTrigger>
-          <TabsTrigger value="keywords">Keywords</TabsTrigger>
-          <TabsTrigger value="phrases">Phrases</TabsTrigger>
+          <TabsTrigger value="airesults">AI Results</TabsTrigger>
           <TabsTrigger value="competitor">Competitor</TabsTrigger>
         </TabsList>
+        
+        {/* Pro Features Button */}
+        <div className="flex justify-center mt-4">
+          <Button 
+            variant="outline" 
+            onClick={() => {
+              setLockedFeature('Premium Features');
+              setPaymentPopupOpen(true);
+            }}
+            className="bg-gradient-to-r from-slate-900 to-slate-800 text-white hover:from-slate-800 hover:to-slate-700 border-slate-700"
+          >
+            <Crown className="h-4 w-4 mr-2" />
+            Unlock Premium Features
+          </Button>
+        </div>
 
         <TabsContent value="overview" className="space-y-6">
+          {/* Welcome Section */}
+          <div className="text-center space-y-4 mb-8">
+            <h2 className="text-3xl font-bold text-slate-800">Your AI Visibility Dashboard</h2>
+            <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+              Track how your domain performs in AI responses and discover insights to improve your visibility
+            </p>
+          </div>
+
           {/* Key Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="bg-white/70 backdrop-blur-sm">
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-green-600">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <Card className="bg-gradient-to-br from-green-50 to-green-100 border-0 shadow-lg">
+              <CardContent className="p-6 text-center">
+                <div className="w-12 h-12 bg-green-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Eye className="h-6 w-6 text-white" />
+                </div>
+                <div className="text-3xl font-bold text-slate-900 mb-1">
                   {domainData?.aiQueryResults ? 
-                    Math.round((domainData.aiQueryResults.filter(r => r.presence === 1).length / domainData.aiQueryResults.length) * 100) : 0}%
+                    Math.round((domainData.aiQueryResults.filter(r => r.presence > 0).length / domainData.aiQueryResults.length) * 100) : 0}%
                 </div>
                 <div className="text-sm text-slate-600">Domain Presence Rate</div>
+                <div className="text-xs text-slate-500 mt-2">How often you appear in AI responses</div>
               </CardContent>
             </Card>
-            <Card className="bg-white/70 backdrop-blur-sm">
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-blue-600">
+            <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-0 shadow-lg">
+              <CardContent className="p-6 text-center">
+                <div className="w-12 h-12 bg-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Target className="h-6 w-6 text-white" />
+                </div>
+                <div className="text-3xl font-bold text-slate-900 mb-1">
                   {domainData?.aiQueryResults ? 
                     Math.round((domainData.aiQueryResults.reduce((sum, r) => sum + r.relevance, 0) / domainData.aiQueryResults.length) * 10) / 10 : 0}/5
                 </div>
                 <div className="text-sm text-slate-600">Avg Search Relevance</div>
+                <div className="text-xs text-slate-500 mt-2">Quality of AI responses</div>
               </CardContent>
             </Card>
-            <Card className="bg-white/70 backdrop-blur-sm">
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-purple-600">
-                  {domainData?.phrases?.length || 0}
+            <Card className={`bg-gradient-to-br from-purple-50 to-purple-100 border-0 shadow-lg relative ${!allUnlocked ? 'opacity-60' : ''}`}>
+              <CardContent className="p-6 text-center">
+                {!allUnlocked && (
+                  <div className="absolute top-2 right-2">
+                    <Crown className="h-5 w-5 text-purple-600" />
+                  </div>
+                )}
+                <div className="w-12 h-12 bg-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <MessageSquare className="h-6 w-6 text-white" />
+                </div>
+                <div className="text-3xl font-bold text-slate-900 mb-1">
+                  {allUnlocked ? (domainData?.phrases?.length || 0) : '—'}
                 </div>
                 <div className="text-sm text-slate-600">Total Phrases Analyzed</div>
+                <div className="text-xs text-slate-500 mt-2">
+                  {allUnlocked ? 'Keywords being tracked' : 'Unlock to track phrases'}
+                </div>
+                {!allUnlocked && (
+                  <div className="mt-3">
+                    <Button 
+                      size="sm" 
+                      className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1 rounded-lg text-xs"
+                      onClick={() => {
+                        setLockedFeature('Phrase Analysis');
+                        setPaymentPopupOpen(true);
+                      }}
+                    >
+                      <Crown className="h-3 w-3 mr-1" />
+                      Unlock
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
-            <Card className="bg-white/70 backdrop-blur-sm">
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-orange-600">
-                  {domainData?.keywords?.filter(k => k.isSelected).length || 0}
+            <Card className={`bg-gradient-to-br from-orange-50 to-orange-100 border-0 shadow-lg relative ${!allUnlocked ? 'opacity-60' : ''}`}>
+              <CardContent className="p-6 text-center">
+                {!allUnlocked && (
+                  <div className="absolute top-2 right-2">
+                    <Crown className="h-5 w-5 text-orange-600" />
+                  </div>
+                )}
+                <div className="w-12 h-12 bg-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Users className="h-6 w-6 text-white" />
+                </div>
+                <div className="text-3xl font-bold text-slate-900 mb-1">
+                  {allUnlocked ? (domainData?.keywords?.filter(k => k.isSelected).length || 0) : '—'}
                 </div>
                 <div className="text-sm text-slate-600">Selected Keywords</div>
+                <div className="text-xs text-slate-500 mt-2">
+                  {allUnlocked ? 'Active monitoring' : 'Unlock to select keywords'}
+                </div>
+                {!allUnlocked && (
+                  <div className="mt-3">
+                    <Button 
+                      size="sm" 
+                      className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-1 rounded-lg text-xs"
+                      onClick={() => {
+                        setLockedFeature('Keyword Selection');
+                        setPaymentPopupOpen(true);
+                      }}
+                    >
+                      <Crown className="h-3 w-3 mr-1" />
+                      Unlock
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Main Action Cards */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            {/* AI Results Card */}
+            <Card className="bg-white/80 backdrop-blur-xl border-0 shadow-2xl shadow-slate-900/10 rounded-3xl overflow-hidden hover:shadow-3xl hover:shadow-slate-900/20 transition-all duration-300 cursor-pointer group"
+                  onClick={() => {
+                    const airesultsTab = document.querySelector('[value="airesults"]') as HTMLElement;
+                    if (airesultsTab) airesultsTab.click();
+                  }}>
+              <CardContent className="p-8">
+                <div className="flex items-start justify-between mb-6">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                      <Cpu className="h-8 w-8 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-semibold text-slate-900 mb-2">AI Query Results</h3>
+                      <p className="text-slate-600">Analyze how AI models respond to your keywords</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-6 w-6 text-slate-400 group-hover:text-slate-600 group-hover:translate-x-1 transition-all duration-300" />
+                </div>
+
+                <div className="space-y-4 mb-6">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">Total Responses</span>
+                    <span className="font-semibold text-slate-900">{domainData?.aiQueryResults?.length || 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">AI Models Tested</span>
+                    <span className="font-semibold text-slate-900">
+                      {domainData?.aiQueryResults ? 
+                        new Set(domainData.aiQueryResults.map(r => r.model)).size : 0}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">Avg Response Quality</span>
+                    <span className="font-semibold text-slate-900">
+                      {domainData?.aiQueryResults ? 
+                        Math.round((domainData.aiQueryResults.reduce((sum, r) => sum + r.overall, 0) / domainData.aiQueryResults.length) * 10) / 10 : 0}/5
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 rounded-2xl p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Lightbulb className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-900">What you'll discover:</span>
+                  </div>
+                  <ul className="text-sm text-blue-800 space-y-1">
+                    <li>• How often your domain is mentioned</li>
+                    <li>• Response quality and sentiment analysis</li>
+                    <li>• Performance across different AI models</li>
+                    <li>• Detailed query-by-query breakdowns</li>
+                  </ul>
+                </div>
+
+                <div className="mt-6 flex items-center justify-between">
+                  <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+                    {domainData?.aiQueryResults?.length || 0} Results Available
+                  </Badge>
+                  <Button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl">
+                    View Results
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Competitor Analysis Card */}
+            <Card className="bg-white/80 backdrop-blur-xl border-0 shadow-2xl shadow-slate-900/10 rounded-3xl overflow-hidden hover:shadow-3xl hover:shadow-slate-900/20 transition-all duration-300 cursor-pointer group"
+                  onClick={() => {
+                    const competitorTab = document.querySelector('[value="competitor"]') as HTMLElement;
+                    if (competitorTab) competitorTab.click();
+                  }}>
+              <CardContent className="p-8">
+                <div className="flex items-start justify-between mb-6">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                      <Users className="h-8 w-8 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-semibold text-slate-900 mb-2">Competitor Analysis</h3>
+                      <p className="text-slate-600">Understand your competitive landscape</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-6 w-6 text-slate-400 group-hover:text-slate-600 group-hover:translate-x-1 transition-all duration-300" />
+                </div>
+
+                <div className="space-y-4 mb-6">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">Competitors Analyzed</span>
+                    <span className="font-semibold text-slate-900">{competitorAnalysis ? '1' : '0'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">Market Position</span>
+                    <span className="font-semibold text-slate-900 capitalize">
+                      {competitorAnalysis?.comparison?.better?.length > 0 ? 'Strong' : 'Developing'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">Analysis Status</span>
+                    <span className="font-semibold text-slate-900">
+                      {competitorAnalysis ? 'Complete' : 'Ready to Start'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-emerald-50 rounded-2xl p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Target className="h-4 w-4 text-emerald-600" />
+                    <span className="text-sm font-medium text-emerald-900">What you'll discover:</span>
+                  </div>
+                  <ul className="text-sm text-emerald-800 space-y-1">
+                    <li>• Direct and indirect competitors</li>
+                    <li>• Market share and positioning</li>
+                    <li>• Competitive strengths and weaknesses</li>
+                    <li>• Strategic recommendations</li>
+                  </ul>
+                </div>
+
+                <div className="mt-6 flex items-center justify-between">
+                  <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
+                    {competitorAnalysis ? 'Analysis Complete' : 'Ready to Analyze'}
+                  </Badge>
+                  <Button className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-xl">
+                    {competitorAnalysis ? 'View Analysis' : 'Start Analysis'}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -482,6 +875,74 @@ const Dashboard: React.FC<DashboardProps> = ({
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="airesults" className="space-y-6">
+          <Card className="shadow-lg border-0 bg-white/70 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle>AI Query Results</CardTitle>
+              <CardDescription>Raw results from all AI model queries for this domain</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {domainData?.aiQueryResults && domainData.aiQueryResults.length > 0 ? (
+                <div className="space-y-4">
+                  {domainData.aiQueryResults.slice(0, 10).map((result, index) => {
+                    const phrase = domainData.phrases?.find(p => p.id === result.phraseId);
+                    const isReanalyzing = reanalyzingPhrases.has(result.phraseId);
+                    
+                    return (
+                      <div key={index} className="border border-slate-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <Badge className="bg-blue-100 text-blue-800">{result.model}</Badge>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => reanalyzePhrase(result.phraseId, result.model)}
+                              disabled={isReanalyzing}
+                              className="h-6 px-2 text-xs"
+                            >
+                              {isReanalyzing ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-3 w-3" />
+                              )}
+                              {isReanalyzing ? 'Reanalyzing...' : 'Reanalyze'}
+                            </Button>
+                          </div>
+                          <div className="text-sm text-slate-600">
+                            Latency: {result.latency.toFixed(2)}s • Cost: ${result.cost.toFixed(4)}
+                          </div>
+                        </div>
+                        <div className="text-sm text-slate-700 mb-2">
+                          <div className="font-medium mb-1">Phrase: {phrase?.text || 'Unknown phrase'}</div>
+                          <div>{result.response.length > 200 ? result.response.substring(0, 200) + '...' : result.response}</div>
+                        </div>
+                        <div className="flex items-center space-x-4 text-xs">
+                          <span className={result.presence > 0 ? 'text-green-600' : 'text-red-600'}>
+                            {result.presence > 0 ? '✓ Domain Found' : '✗ Domain Not Found'}
+                          </span>
+                          <span>Relevance: {result.relevance}/5</span>
+                          <span>Accuracy: {result.accuracy}/5</span>
+                          <span>Sentiment: {result.sentiment}/5</span>
+                          <span>Overall: {result.overall}/5</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {domainData.aiQueryResults.length > 10 && (
+                    <div className="text-center text-slate-600">
+                      Showing 10 of {domainData.aiQueryResults.length} results
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center text-slate-500 py-12">
+                  <p>No AI query results available for this domain.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="models" className="space-y-6">
@@ -805,6 +1266,16 @@ const Dashboard: React.FC<DashboardProps> = ({
           Export Report
         </Button>
       </div>
+
+      <PaymentPopup 
+        isOpen={paymentPopupOpen} 
+        onClose={() => setPaymentPopupOpen(false)} 
+        featureName={lockedFeature || 'Premium Features'} 
+        onUnlockAll={() => {
+          setAllUnlocked(true);
+          setPaymentPopupOpen(false);
+        }} 
+      />
     </div>
   );
 };

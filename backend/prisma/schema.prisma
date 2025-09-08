@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
   output   = "../generated/prisma"
@@ -25,170 +19,493 @@ model User {
 }
 
 model Domain {
-  id        Int      @id @default(autoincrement())
-  url       String   @unique
-  context   String?  @db.Text
-  version   Int      @default(1) // Track current version number
-  userId    Int?
-  user      User?    @relation(fields: [userId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  crawlResults CrawlResult[]
-  keywords     Keyword[]
-  dashboardAnalyses DashboardAnalysis[]
-  competitorAnalyses CompetitorAnalysis[]
-  suggestedCompetitors SuggestedCompetitor[]
-  onboardingProgresses OnboardingProgress[]
-  versions    DomainVersion[] // Link to all versions
-  location    String? // User's location (city/country)
-}
+  id                          Int                          @id @default(autoincrement())
+  url                         String
+  context                     String?
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
+  userId                      Int?
+  location                    String?
+  chatModel                   String?
+  customKeywords              String?
+  intentPhrases               String?
+  runAllModels                Boolean                      @default(false)
+  locationContext             String?
+  currentStep                 Int                          @default(0)
+  analysisPhases              AnalysisPhase[]
+  analysisReports             AnalysisReport[]
+  communityInsights           CommunityInsight[]
+  communityMiningResults      CommunityMiningResult[]
+  competitorAnalyses          CompetitorAnalysis[]
+  competitorTrackings         CompetitorTracking[]
+  crawlResults                CrawlResult[]
+  dashboardAnalyses           DashboardAnalysis[]
+  user                        User?                        @relation(fields: [userId], references: [id])
+  generatedIntentPhrases      GeneratedIntentPhrase[]
+  intentClassifications       IntentClassification[]
+  intentClassificationResults IntentClassificationResult[]
+  intentPhraseGenerations     IntentPhraseGeneration[]
+  keywords                    Keyword[]
+  keywordAnalyses             KeywordAnalysis[]
+  modelPerformances           ModelPerformance[]
+  performanceInsights         PerformanceInsight[]
+  relevanceScoreResults       RelevanceScoreResult[]
+  searchPatterns              SearchPattern[]
+  searchPatternResults        SearchPatternResult[]
+  searchVolumeClassifications SearchVolumeClassification[]
+  semanticAnalyses            SemanticAnalysis[]
+  suggestedCompetitors        SuggestedCompetitor[]
 
-// New model to track different versions of domain analysis
-model DomainVersion {
-  id        Int      @id @default(autoincrement())
-  domain    Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
-  domainId  Int
-  version   Int      // Version number
-  name      String?  // Optional version name/description
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  // Analysis data for this version
-  crawlResults CrawlResult[]
-  keywords     Keyword[]
-  dashboardAnalyses DashboardAnalysis[]
-  competitorAnalyses CompetitorAnalysis[]
-  suggestedCompetitors SuggestedCompetitor[]
-  onboardingProgresses OnboardingProgress[]
-
-  @@unique([domainId, version])
-  @@index([domainId, version])
+  @@unique([url, userId])
+  @@index([userId])
 }
 
 model CrawlResult {
-  id        Int      @id @default(autoincrement())
-  domain    Domain?  @relation(fields: [domainId], references: [id])
-  domainId  Int?
-  domainVersion DomainVersion? @relation(fields: [domainVersionId], references: [id])
-  domainVersionId Int?
-  pagesScanned Int
-  contentBlocks Int
-  keyEntities Int
-  confidenceScore Float
-  extractedContext String  @db.Text
-  tokenUsage     Int?     // Add this line to persist GPT token usage
-  createdAt DateTime @default(now())
+  id               Int      @id @default(autoincrement())
+  pagesScanned     Int
+  extractedContext String
+  createdAt        DateTime @default(now())
+  tokenUsage       Int?
+  domainId         Int?
+  analyzedUrls     String
+  domain           Domain?  @relation(fields: [domainId], references: [id])
 }
 
-// New models for keywords with versioning support
 model Keyword {
-  id           Int      @id @default(autoincrement())
-  term         String
-  volume       Int
-  difficulty   String
-  cpc          Float
-  domainId     Int?
-  domain       Domain?  @relation(fields: [domainId], references: [id])
-  domainVersionId Int?
-  domainVersion DomainVersion? @relation(fields: [domainVersionId], references: [id])
-  isSelected   Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  phrases      Phrase[]
+  id                          Int                          @id @default(autoincrement())
+  term                        String
+  volume                      Int
+  difficulty                  String
+  cpc                         Float
+  isSelected                  Boolean                      @default(false)
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
+  domainId                    Int?
+  intent                      String?
+  isCustom                    Boolean                      @default(false)
+  communityInsights           CommunityInsight[]
+  communityMiningResults      CommunityMiningResult[]
+  generatedIntentPhrases      GeneratedIntentPhrase[]
+  intentClassificationResults IntentClassificationResult[]
+  domain                      Domain?                      @relation(fields: [domainId], references: [id])
+  phrases                     Phrase[]
+  searchPatterns              SearchPattern[]
+  searchPatternResults        SearchPatternResult[]
 
-  @@unique([term, domainId, domainVersionId])
-  @@index([domainId, domainVersionId])
+  @@unique([term, domainId])
+  @@index([domainId])
 }
 
 model Phrase {
-  id        Int      @id @default(autoincrement())
-  text      String
-  keyword   Keyword  @relation(fields: [keywordId], references: [id])
-  keywordId Int
-  aiQueryResults AIQueryResult[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                          Int                          @id @default(autoincrement())
+  text                        String
+  keywordId                   Int
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
+  relevanceScore              Int?
+  sources                     Json?
+  trend                       String?
+  isSelected                  Boolean                      @default(false)
+  confidence                  Int?
+  intent                      String?
+  keyword                     Keyword                      @relation(fields: [keywordId], references: [id])
+  phraseIntentClassifications PhraseIntentClassification[]
+  phraseScores                PhraseScore[]
 }
 
 model AIQueryResult {
-  id        Int      @id @default(autoincrement())
-  phrase    Phrase   @relation(fields: [phraseId], references: [id])
-  phraseId  Int
-  model     String
-  response  String   @db.Text
-  latency   Float
-  cost      Float
-  presence  Int
-  relevance Int
-  accuracy  Int
-  sentiment Int
-  overall   Float
-  createdAt DateTime @default(now())
+  id                   Int                   @id @default(autoincrement())
+  phraseId             Int
+  model                String
+  response             String
+  latency              Float
+  cost                 Float
+  presence             Int
+  relevance            Int
+  accuracy             Int
+  sentiment            Int
+  overall              Float
+  createdAt            DateTime              @default(now())
+  competitorMatchScore Float?
+  competitorUrls       Json?
+  confidence           Float?
+  domainRank           Int?
+  foundDomains         Json?
+  sources              Json?
+  highlightContext     String?
+  detectionMethod      String?
+  mentions             Int?
+  context              String?
+  comprehensiveness    Float?
+  aiConfidence         Float?
+  rankingFactors       Json?
+  domainSentiment      String?
+  positionScore        Float?
+  prominenceScore      Float?
+  contextQualityScore  Float?
+  mentionTypeScore     Float?
+  intelligentScore     Float?
+  competitorNames      Json?
+  competitorMentions   Json?
+  competitorCount      Int?
+  competitorDomains    Json?
+  phrase               GeneratedIntentPhrase @relation(fields: [phraseId], references: [id])
 }
 
-// New models for storing AI analysis results with versioning support
-model DashboardAnalysis {
-  id        Int      @id @default(autoincrement())
-  domain    Domain?  @relation(fields: [domainId], references: [id])
-  domainId  Int?
-  domainVersion DomainVersion? @relation(fields: [domainVersionId], references: [id])
-  domainVersionId Int?
-  metrics   Json     // Store all metrics as JSON
-  insights  Json     // Store insights as JSON
-  industryAnalysis Json // Store industry analysis as JSON
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model AnalysisReport {
+  id                  Int      @id @default(autoincrement())
+  domainId            Int?
+  overallScore        Float
+  scoreBreakdown      Json
+  modelPerformance    Json
+  competitorAnalysis  Json
+  performanceInsights Json
+  recommendations     Json
+  analysisMetadata    Json
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  domain              Domain?  @relation(fields: [domainId], references: [id])
 
-  @@index([domainId, domainVersionId])
+  @@index([domainId])
+}
+
+model ModelPerformance {
+  id             Int      @id @default(autoincrement())
+  domainId       Int?
+  model          String
+  totalQueries   Int
+  rankedQueries  Int
+  avgScore       Float
+  avgLatency     Float
+  avgCost        Float
+  presenceRate   Float
+  relevanceScore Float
+  accuracyScore  Float
+  sentimentScore Float
+  overallScore   Float
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  domain         Domain?  @relation(fields: [domainId], references: [id])
+
+  @@unique([domainId, model])
+  @@index([domainId])
+}
+
+model CompetitorTracking {
+  id               Int      @id @default(autoincrement())
+  domainId         Int?
+  competitorDomain String
+  frequency        Int
+  threatLevel      String
+  marketShare      Float
+  lastSeen         DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  domain           Domain?  @relation(fields: [domainId], references: [id])
+
+  @@unique([domainId, competitorDomain])
+  @@index([domainId])
+}
+
+model PerformanceInsight {
+  id          Int      @id @default(autoincrement())
+  domainId    Int?
+  insightType String
+  area        String
+  score       Float?
+  description String
+  potential   String?
+  action      String?
+  risk        String?
+  mitigation  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  domain      Domain?  @relation(fields: [domainId], references: [id])
+
+  @@index([domainId, insightType])
+}
+
+model DashboardAnalysis {
+  id               Int      @id @default(autoincrement())
+  metrics          Json
+  insights         Json
+  industryAnalysis Json
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  domainId         Int?
+  domain           Domain?  @relation(fields: [domainId], references: [id])
+
+  @@index([domainId])
 }
 
 model CompetitorAnalysis {
-  id        Int      @id @default(autoincrement())
-  domain    Domain?  @relation(fields: [domainId], references: [id])
-  domainId  Int?
-  domainVersion DomainVersion? @relation(fields: [domainVersionId], references: [id])
-  domainVersionId Int?
-  competitors Json   // Store competitors array as JSON
-  marketInsights Json // Store market insights as JSON
-  strategicRecommendations Json // Store recommendations as JSON
-  competitiveAnalysis Json // Store competitive analysis as JSON
-  competitorList String @db.Text // Store the list of competitors analyzed
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                       Int      @id @default(autoincrement())
+  competitors              Json
+  marketInsights           Json
+  strategicRecommendations Json
+  competitiveAnalysis      Json
+  competitorList           String
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  domainId                 Int?
+  domain                   Domain?  @relation(fields: [domainId], references: [id])
 
-  @@index([domainId, domainVersionId])
+  @@index([domainId])
 }
 
 model SuggestedCompetitor {
-  id        Int      @id @default(autoincrement())
-  domain    Domain?  @relation(fields: [domainId], references: [id])
-  domainId  Int?
-  domainVersion DomainVersion? @relation(fields: [domainVersionId], references: [id])
-  domainVersionId Int?
-  name      String
+  id               Int      @id @default(autoincrement())
+  name             String
   competitorDomain String
-  reason    String   @db.Text
-  type      String   // 'direct' or 'indirect'
-  createdAt DateTime @default(now())
+  reason           String
+  type             String
+  createdAt        DateTime @default(now())
+  domainId         Int?
+  domain           Domain?  @relation(fields: [domainId], references: [id])
 
-  @@index([domainId, domainVersionId])
+  @@index([domainId])
 }
 
-// Onboarding Progress Tracking with versioning support
-model OnboardingProgress {
-  id            Int      @id @default(autoincrement())
-  domainId      Int?
-  domain        Domain?  @relation(fields: [domainId], references: [id], onDelete: Cascade)
-  domainVersionId Int?
-  domainVersion DomainVersion? @relation(fields: [domainVersionId], references: [id], onDelete: Cascade)
-  currentStep   Int      @default(0) // 0-5 for the 6 steps
-  isCompleted   Boolean  @default(false)
-  stepData      Json?    // Store step-specific data
-  lastActivity  DateTime @default(now())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+model AnalysisPhase {
+  id         Int       @id @default(autoincrement())
+  domainId   Int?
+  phase      String
+  status     String
+  progress   Int       @default(0)
+  startTime  DateTime?
+  endTime    DateTime?
+  result     Json?
+  error      String?
+  tokenUsage Int?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  domain     Domain?   @relation(fields: [domainId], references: [id])
 
-  @@unique([domainId, domainVersionId]) // Ensure one progress record per domain OR version
-  @@index([isCompleted])
-  @@index([lastActivity])
+  @@unique([domainId, phase])
+  @@index([domainId])
+}
+
+model SemanticAnalysis {
+  id             Int      @id @default(autoincrement())
+  domainId       Int?
+  contentSummary String
+  keyThemes      Json
+  brandVoice     String
+  targetAudience Json
+  contentGaps    Json
+  tokenUsage     Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  domain         Domain?  @relation(fields: [domainId], references: [id])
+
+  @@index([domainId])
+}
+
+model KeywordAnalysis {
+  id                   Int      @id @default(autoincrement())
+  domainId             Int?
+  keywords             Json
+  searchVolumeData     Json
+  intentClassification Json
+  competitiveAnalysis  Json
+  tokenUsage           Int?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  domain               Domain?  @relation(fields: [domainId], references: [id])
+
+  @@index([domainId])
+}
+
+model SearchVolumeClassification {
+  id                   Int      @id @default(autoincrement())
+  domainId             Int?
+  highVolumeKeywords   Json
+  mediumVolumeKeywords Json
+  lowVolumeKeywords    Json
+  volumeTrends         Json
+  seasonalPatterns     Json
+  tokenUsage           Int?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  domain               Domain?  @relation(fields: [domainId], references: [id])
+
+  @@index([domainId])
+}
+
+model IntentClassification {
+  id                    Int      @id @default(autoincrement())
+  domainId              Int?
+  informationalKeywords Json
+  navigationalKeywords  Json
+  transactionalKeywords Json
+  commercialKeywords    Json
+  intentDistribution    Json
+  tokenUsage            Int?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  domain                Domain?  @relation(fields: [domainId], references: [id])
+
+  @@index([domainId])
+}
+
+model CommunityInsight {
+  id         Int      @id @default(autoincrement())
+  domainId   Int?
+  keywordId  Int?
+  sources    Json
+  summary    String
+  tokenUsage Int?
+  createdAt  DateTime @default(now())
+  domain     Domain?  @relation(fields: [domainId], references: [id])
+  keyword    Keyword? @relation(fields: [keywordId], references: [id])
+
+  @@index([domainId])
+  @@index([keywordId])
+}
+
+model SearchPattern {
+  id         Int      @id @default(autoincrement())
+  domainId   Int?
+  keywordId  Int?
+  patterns   Json
+  summary    String
+  tokenUsage Int?
+  createdAt  DateTime @default(now())
+  domain     Domain?  @relation(fields: [domainId], references: [id])
+  keyword    Keyword? @relation(fields: [keywordId], references: [id])
+
+  @@index([domainId])
+  @@index([keywordId])
+}
+
+model PhraseIntentClassification {
+  id         Int      @id @default(autoincrement())
+  phraseId   Int
+  intent     String
+  confidence Int?
+  createdAt  DateTime @default(now())
+  phrase     Phrase   @relation(fields: [phraseId], references: [id])
+
+  @@index([phraseId])
+}
+
+model PhraseScore {
+  id        Int      @id @default(autoincrement())
+  phraseId  Int
+  score     Int
+  breakdown Json?
+  createdAt DateTime @default(now())
+  phrase    Phrase   @relation(fields: [phraseId], references: [id])
+
+  @@index([phraseId])
+}
+
+model IntentPhraseGeneration {
+  id         Int       @id @default(autoincrement())
+  domainId   Int
+  status     String    @default("pending")
+  phase      String
+  progress   Int       @default(0)
+  startTime  DateTime  @default(now())
+  endTime    DateTime?
+  result     Json?
+  error      String?
+  tokenUsage Int?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  domain     Domain    @relation(fields: [domainId], references: [id])
+
+  @@index([domainId, phase])
+  @@index([domainId])
+}
+
+model CommunityMiningResult {
+  id         Int      @id @default(autoincrement())
+  domainId   Int
+  keywordId  Int?
+  platform   String
+  insights   Json
+  sentiment  String?
+  frequency  Int?
+  tokenUsage Int?
+  createdAt  DateTime @default(now())
+  domain     Domain   @relation(fields: [domainId], references: [id])
+  keyword    Keyword? @relation(fields: [keywordId], references: [id])
+
+  @@index([domainId])
+  @@index([keywordId])
+}
+
+model SearchPatternResult {
+  id          Int      @id @default(autoincrement())
+  domainId    Int
+  keywordId   Int?
+  patterns    Json
+  volume      Int?
+  seasonality Json?
+  trends      Json?
+  tokenUsage  Int?
+  createdAt   DateTime @default(now())
+  domain      Domain   @relation(fields: [domainId], references: [id])
+  keyword     Keyword? @relation(fields: [keywordId], references: [id])
+
+  @@index([domainId])
+  @@index([keywordId])
+}
+
+model IntentClassificationResult {
+  id         Int      @id @default(autoincrement())
+  domainId   Int
+  keywordId  Int?
+  intent     String
+  confidence Int?
+  patterns   Json?
+  tokenUsage Int?
+  createdAt  DateTime @default(now())
+  domain     Domain   @relation(fields: [domainId], references: [id])
+  keyword    Keyword? @relation(fields: [keywordId], references: [id])
+
+  @@index([domainId])
+  @@index([keywordId])
+}
+
+model GeneratedIntentPhrase {
+  id                    Int                    @id @default(autoincrement())
+  domainId              Int
+  keywordId             Int?
+  phrase                String
+  relevanceScore        Int?
+  sources               Json?
+  trend                 String?
+  intent                String?
+  communityInsights     Json?
+  searchPatterns        Json?
+  isSelected            Boolean                @default(false)
+  tokenUsage            Int?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  intentConfidence      Int?
+  aiQueryResults        AIQueryResult[]
+  domain                Domain                 @relation(fields: [domainId], references: [id])
+  keyword               Keyword?               @relation(fields: [keywordId], references: [id])
+  relevanceScoreResults RelevanceScoreResult[]
+
+  @@index([domainId])
+  @@index([keywordId])
+}
+
+model RelevanceScoreResult {
+  id         Int                    @id @default(autoincrement())
+  domainId   Int
+  phraseId   Int?
+  score      Int
+  breakdown  Json?
+  factors    Json?
+  tokenUsage Int?
+  createdAt  DateTime               @default(now())
+  domain     Domain                 @relation(fields: [domainId], references: [id])
+  phrase     GeneratedIntentPhrase? @relation(fields: [phraseId], references: [id])
+
+  @@index([domainId])
+  @@index([phraseId])
 }
